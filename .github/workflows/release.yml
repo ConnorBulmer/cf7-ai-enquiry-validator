@@ -71,6 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dist
           php tools/build-release.php \
             --tag="$RELEASE_TAG" \
             --output-dir=dist \
