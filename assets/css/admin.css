@@ -1,0 +1,73 @@
+.cf7aiv-admin .card {
+	max-width: 1100px;
+	margin-top: 16px;
+	padding: 16px 20px;
+}
+
+.cf7aiv-admin label,
+.cf7aiv-admin legend {
+	display: block;
+	font-weight: 600;
+	margin-top: 10px;
+}
+
+.cf7aiv-admin textarea,
+.cf7aiv-admin select,
+.cf7aiv-admin input:not([type="checkbox"]):not([type="hidden"]) {
+	max-width: 100%;
+}
+
+.cf7aiv-stage-list,
+.cf7aiv-decision-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	list-style: none;
+	margin: 12px 0;
+	padding: 0;
+}
+
+.cf7aiv-status-badge {
+	display: inline-block;
+	border: 1px solid #8c8f94;
+	border-radius: 999px;
+	padding: 3px 9px;
+	background: #f6f7f7;
+	color: #1d2327;
+	font-weight: 600;
+}
+
+.cf7aiv-status-badge.is-current,
+.cf7aiv-status-badge.is-strong {
+	border-color: #008a20;
+	background: #edfaef;
+	color: #005c12;
+}
+
+.cf7aiv-status-badge.is-review {
+	border-color: #996800;
+	background: #fcf9e8;
+	color: #6e4b00;
+}
+
+.cf7aiv-status-badge.is-ineligible {
+	border-color: #a7aaad;
+	background: #f0f0f1;
+	color: #3c434a;
+}
+
+.cf7aiv-suggestion {
+	border-top: 1px solid #dcdcde;
+	margin-top: 16px;
+	padding-top: 12px;
+}
+
+.cf7aiv-admin .widefat {
+	margin-top: 12px;
+}
+
+@media (forced-colors: active) {
+	.cf7aiv-status-badge {
+		border: 1px solid ButtonText;
+	}
+}

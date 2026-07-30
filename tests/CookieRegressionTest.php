@@ -1,0 +1,99 @@
+<?php
+
+declare(strict_types=1);
+
+namespace CF7AIV\Intake {
+	function headers_sent(): bool { return false; }
+	function setcookie(string $name, string $value, array $options = []): bool {
+		$GLOBALS['cookie_write'] = compact('name', 'value', 'options');
+		return true;
+	}
+}
+
+namespace {
+	define('ABSPATH', __DIR__ . '/');
+	define('DAY_IN_SECONDS', 86400);
+	function get_option(string $name, mixed $default = false): mixed { return ['attribution' => ['retention_days' => 90]]; }
+	function is_ssl(): bool { return true; }
+	require_once dirname(__DIR__) . '/cf7-ai-enquiry-validator.php';
+
+	function cookie_assert(bool $condition, string $message): void {
+		if (! $condition) { throw new RuntimeException($message); }
+	}
+
+	$_COOKIE[CF7AIV\Intake\AttributionCookie::NAME] = json_encode([
+		'gclid' => 'persisted_GOOGLE-456',
+		'msclkid' => '0123456789abcdef0123456789abcdef',
+		'utm_source' => 'persisted-source',
+		'first_landing_page' => 'https://example.test/original-landing',
+	]);
+	$_GET = [
+		'gclid' => 'fresh_GOOGLE-123',
+		'msclkid' => 'invalid',
+		'utm_source' => 'fresh-source',
+		'utm_campaign' => 'summer-care',
+	];
+	$_SERVER['HTTP_HOST'] = 'example.test';
+	$_SERVER['REQUEST_URI'] = '/contact/?gclid=fresh_GOOGLE-123&utm_source=fresh-source';
+	$_SERVER['HTTPS'] = 'on';
+	$_SERVER['HTTP_REFERER'] = 'https://search.example/results';
+
+	$purePayload = CF7AIV\Intake\AttributionCookie::buildServerValues($_GET, $_COOKIE, $_SERVER);
+	cookie_assert($purePayload['gclid'] === 'fresh_GOOGLE-123' && $purePayload['utm_source'] === 'fresh-source', 'The pure fallback helper must merge validated fresh attribution over stored values.');
+	cookie_assert($purePayload['current_page'] === 'https://example.test/contact/?gclid=fresh_GOOGLE-123&utm_source=fresh-source', 'The pure fallback helper must derive the current URL.');
+	$pureJson = CF7AIV\Intake\AttributionCookie::rawCookieJson($purePayload);
+	cookie_assert(str_starts_with($pureJson, '{') && json_decode($pureJson, true) === $purePayload, 'The raw cookie helper must return directly parseable, unencoded JSON.');
+
+	CF7AIV\Intake\AttributionCookie::serverFallback();
+	$write = $GLOBALS['cookie_write'] ?? null;
+	cookie_assert(is_array($write), 'Valid attribution or UTM input must write the server fallback cookie.');
+	cookie_assert(str_starts_with($write['value'], '{'), 'setcookie must receive raw JSON rather than pre-encoded JSON.');
+	$payload = json_decode($write['value'], true);
+	cookie_assert(is_array($payload), 'The cookie must parse after a single browser decode.');
+	cookie_assert($payload['gclid'] === 'fresh_GOOGLE-123', 'Fresh valid click IDs must override persisted values.');
+	cookie_assert($payload['msclkid'] === '0123456789abcdef0123456789abcdef', 'Invalid fresh click IDs must not erase valid persisted values.');
+	cookie_assert($payload['utm_source'] === 'fresh-source' && $payload['utm_campaign'] === 'summer-care', 'Fresh UTMs must override and extend persisted UTMs.');
+	cookie_assert($payload['first_landing_page'] === 'https://example.test/original-landing', 'The first landing page must remain stable once captured.');
+	cookie_assert($payload['current_page'] === 'https://example.test/contact/?gclid=fresh_GOOGLE-123&utm_source=fresh-source', 'The fallback must capture the current server URL.');
+	cookie_assert($payload['referrer'] === 'https://search.example/results', 'The fallback must capture the HTTP referrer.');
+
+	unset($GLOBALS['cookie_write']);
+	$_COOKIE = [];
+	$_GET = ['utm_medium' => 'organic'];
+	CF7AIV\Intake\AttributionCookie::serverFallback();
+	cookie_assert(isset($GLOBALS['cookie_write']), 'UTM-only visits must still create a server fallback cookie.');
+
+	$paidLandingCookie = $GLOBALS['cookie_write']['value'];
+	unset($GLOBALS['cookie_write']);
+	$_COOKIE[CF7AIV\Intake\AttributionCookie::NAME] = $paidLandingCookie;
+	$_GET = [];
+	$_SERVER = [
+		'REQUEST_METHOD' => 'GET',
+		'HTTP_HOST' => 'example.test',
+		'REQUEST_URI' => '/wp-content/uploads/2026/07/site-icon.webp',
+		'HTTP_ACCEPT' => 'image/avif,image/webp,image/png,*/*;q=0.8',
+		'HTTP_SEC_FETCH_MODE' => 'no-cors',
+		'HTTP_SEC_FETCH_DEST' => 'image',
+		'HTTP_REFERER' => 'https://example.test/contact/?gclid=fresh_GOOGLE-123&utm_source=fresh-source',
+		'HTTPS' => 'on',
+	];
+	cookie_assert(! CF7AIV\Intake\AttributionCookie::isNavigationRequest($_SERVER), 'Static image requests must never be treated as HTML navigation.');
+	CF7AIV\Intake\AttributionCookie::serverFallback();
+	cookie_assert(! isset($GLOBALS['cookie_write']), 'A parallel static asset request must not overwrite the paid landing attribution cookie.');
+	cookie_assert($_COOKIE[CF7AIV\Intake\AttributionCookie::NAME] === $paidLandingCookie, 'Rejected asset requests must preserve the fresh landing cookie unchanged.');
+
+	foreach ([
+		['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/contact/', 'HTTP_ACCEPT' => 'text/html'],
+		['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/wp-json/wp/v2/pages', 'HTTP_ACCEPT' => 'application/json'],
+		['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/feed/', 'HTTP_ACCEPT' => 'application/rss+xml'],
+		['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/contact/', 'HTTP_ACCEPT' => 'application/json', 'HTTP_SEC_FETCH_MODE' => 'cors'],
+	] as $nonNavigation) {
+		cookie_assert(! CF7AIV\Intake\AttributionCookie::isNavigationRequest($nonNavigation), 'POST, REST, feed, and non-navigation fetch requests must be rejected.');
+	}
+	cookie_assert(CF7AIV\Intake\AttributionCookie::isNavigationRequest([
+		'REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/care-home/?utm_source=test',
+		'HTTP_ACCEPT' => 'text/html,application/xhtml+xml', 'HTTP_SEC_FETCH_MODE' => 'navigate', 'HTTP_SEC_FETCH_DEST' => 'document',
+	]), 'A real HTML document navigation must remain eligible for server fallback attribution.');
+
+	echo "PASS CookieRegressionTest\n";
+}

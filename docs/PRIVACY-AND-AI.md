@@ -1,0 +1,35 @@
+# Privacy and AI data flow
+
+## Separation of responsibilities
+
+Contact Form 7 and the selected source plugin own the raw enquiry. CF7 AI Enquiry Validator stores a fingerprint and source type/reference, not a second copy of the raw message, name, email, phone, address, IP, or files. Attribution and consent snapshots are encrypted at rest. Optional normalized email/phone hashes are stored only when enhanced matching is enabled and `ad_user_data` was explicitly granted.
+
+## AI request boundary
+
+At classification time the worker reloads the source record. The policy whitelist is deny-by-default and can include only non-identity business fields. Policy import recursively rejects privacy-sensitive keys and values throughout business text, audiences, tier identifiers/descriptions, exclusions, ambiguity rules, terminology, examples, field mappings, and the whitelist. The runtime also excludes identity-looking field names, file/upload fields, hashes, secrets, click ID fields, attribution, consent, and the entire case-insensitive `cf7aiv_` namespace. Free text redaction removes email addresses, phone-like values, URLs where reasonable, IP addresses, and obvious click IDs. Free text may still contain self-disclosed personal details or sensitive care information that cannot be detected reliably, so administrators must assess provider suitability, notices and legal basis before production use.
+
+Neither DeepSeek nor OpenAI receives:
+
+- dedicated raw name, email, phone, postal-address, or IP fields;
+- gclid, msclkid, other click IDs, campaign attribution, landing/referrer data, or consent;
+- files, file names, raw or hashed identity, cookies, tokens, provider secrets, or request logs.
+
+The optional Setup scanner creates a bounded profile from public page copy and safe form structure; it never includes submission values. Using the scan sends that public profile to the selected capable provider. Every resulting suggestion remains pending with provenance until an administrator accepts, edits, or rejects it.
+
+The fixed classification response contains only policy outcome/tier identifiers, stable reason and evidence codes, grounded excerpts used transiently for validation, exclusions, ambiguity, confidence, and token usage. Grounding validates an excerpt against the already-redacted request context, but excerpts and provider-authored prose are never persisted. The stored summary is generated deterministically from the validated reason code, so personal details disclosed in free text cannot enter AI result metadata. Model confidence is persisted only as an Advanced-mode diagnostic and never acts as an automation threshold.
+
+Optional deeper verification makes a second provider call for an otherwise automatic candidate and therefore uses more tokens and may cost more. It is off by default and available only for providers implementing the verification capability. Disagreement or failure is held for review.
+
+Provider request bodies and secrets are never written to plugin logs. Operators remain responsible for assessing the selected provider's contractual terms, processing location, retention, training/store settings, notices, consent or other legal basis, and suitability for the potentially sensitive free text their forms collect.
+
+## Advertising boundary
+
+AI classification cannot dispatch directly. Version 2 eligibility is determined from grounded policy evidence and universal outcomes, not model confidence. Version 1 policies remain readable for shadow/review compatibility but always produce **Needs review** because they do not contain the grounded v2 evidence contract. Policy upgrade creates a draft only. Reviews can create draft suggestions, but no result is used for automatic learning or policy publication.
+
+Classification uses the current published/enabled mapping table only to determine whether any delivery path exists; it does not globally pre-judge consent or attribution. The delivery worker independently evaluates each mapped destination's identifier/identity readiness, configuration, applicable consent keys, shadow/calibration/history state, an auditable manual approval where used, and its idempotency lease. Actual consent remains immutable in the delivery audit data; legal-basis override does not rewrite it and each saved override appends administrator/date/reason to a dedicated audit history.
+
+Historical calibration requires explicit administrator opt-in and bounded source/form/date/sample criteria (25 suggested). Setup previews the actual safe-field union from currently published policies and binds its fingerprint plus normalized snapshot to every queued stratum. The worker intersects that snapshot with the current policy, so later policy widening cannot disclose a field absent from the authorized preview. Historical items are always marked calibration, historical, and shadow and can never dispatch. Publishing or upgrading a policy does not reanalyse them. Calibration-run row locking serializes cancellation with queued writes; review revisions prevent a classifier from overwriting a concurrent human decision; unique approval IDs link manual dispatch to an accepted audit record; and unique delivery idempotency keys plus lease tokens make stale delivery workers fail closed.
+
+## Retention, export, erasure, and uninstall
+
+Default plugin-record retention is 90 days and is configurable. WordPress privacy export/erasure associates records through optional normalized hashes and removes dependent review suggestions and deliveries before plugin items; it never deletes Flamingo or CFDB7 enquiries. Routine cleanup removes expired calibration-run control records after their plugin items. Uninstall keeps data unless **Delete on uninstall** was explicitly enabled; when enabled it also removes calibration runs, mappings, review suggestions, paused-destination state, secrets, and consent-override audit history. Site operators remain responsible for their source-form, provider, destination, and legal retention policies.
