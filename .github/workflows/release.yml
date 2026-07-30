@@ -1,0 +1,94 @@
+name: Build WordPress release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag in vMAJOR.MINOR.PATCH format
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Validate, package and publish
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run PHP tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in tests/*Test.php; do
+            php "$test_file"
+          done
+
+      - name: Lint non-vendor PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -path './vendor' -prune -o -name '*.php' -print0 \
+            | sort -z \
+            | xargs -0 -n1 php -l
+
+      - name: Test attribution JavaScript
+        run: node tests/AttributionJsTest.js
+
+      - name: Check attribution JavaScript syntax
+        run: node --check assets/js/attribution.js
+
+      - name: Build verified WordPress ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tools/build-release.php \
+            --tag="$RELEASE_TAG" \
+            --output-dir=dist \
+            | tee dist/release.json
+
+      - name: Publish release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          zip="dist/cf7-ai-enquiry-validator-${version}.zip"
+          checksum="${zip}.sha256"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$zip" "$checksum" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$zip" "$checksum" \
+              --verify-tag \
+              --generate-notes \
+              --title "CF7 AI Enquiry Validator ${version}"
+          fi
