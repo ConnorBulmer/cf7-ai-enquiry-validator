@@ -52,6 +52,17 @@ namespace {
 			return (bool) ($GLOBALS['consent_categories'][$category] ?? false);
 		}
 	}
+	if (! function_exists('wp_get_consent_type')) {
+		function wp_get_consent_type(): mixed {
+			return $GLOBALS['consent_type'] ?? false;
+		}
+	}
+	$GLOBALS['consent_type'] = false;
+	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => true];
+	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source']);
+	consent_assert(! isset($GLOBALS['cookie_write']), 'A permissive WordPress Consent API with no known consent type must not write the server fallback cookie.');
+
+	$GLOBALS['consent_type'] = 'optin';
 	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => true];
 
 	$_COOKIE[CF7AIV\Intake\AttributionCookie::NAME] = json_encode([

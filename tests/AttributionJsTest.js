@@ -29,6 +29,8 @@ function makeHarness(options = {}) {
 		dataLayer: options.dataLayer || [],
 		crypto: global.crypto,
 	};
+	if (typeof options.wpHasConsent === 'function') window.wp_has_consent = options.wpHasConsent;
+	if (Object.prototype.hasOwnProperty.call(options, 'wpConsentType')) window.wp_get_consent_type = () => options.wpConsentType;
 	global.location = {
 		search: options.search || '?gclid=TESTCLICK123&gbraid=GBRAID123&wbraid=WBRAID123&msclkid=0123456789abcdef0123456789abcdef&utm_source=paid-search&utm_campaign=care',
 		href: options.href || 'https://example.test/landing/?gclid=TESTCLICK123&gbraid=GBRAID123&wbraid=WBRAID123&msclkid=0123456789abcdef0123456789abcdef&utm_source=paid-search&utm_campaign=care',
@@ -80,6 +82,10 @@ const fields = {
 	cf7aiv_submission_id: 'submission_id',
 	cf7aiv_gclid: 'gclid',
 	cf7aiv_utm_source: 'utm_source',
+	cf7aiv_ad_storage: 'ad_storage',
+	cf7aiv_analytics_storage: 'analytics_storage',
+	cf7aiv_ad_user_data: 'ad_user_data',
+	cf7aiv_ad_personalization: 'ad_personalization',
 };
 
 // A collector that writes before a granted consent branch must fail this case.
@@ -88,6 +94,17 @@ const fields = {
 	page.emit('DOMContentLoaded');
 	check(page.payload() === null && !page.hasCookie(), 'no consent signal must not persist attribution in localStorage or the plugin cookie');
 	check(Object.values(page.inputs).every((input) => input.value === ''), 'no consent signal must leave injected attribution fields empty');
+}
+
+// wp_has_consent is permissive when the Consent API has no configured type;
+// function presence alone must not authorize attribution storage.
+{
+	const page = makeHarness({
+		wpHasConsent: () => true,
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(page.payload() === null && !page.hasCookie(), 'an installed WordPress Consent API with no known consent type must not persist attribution');
 }
 
 // A collector that reuses stale storage after a denied branch must fail this case.
@@ -129,6 +146,29 @@ const fields = {
 	const payload = page.payload() || {};
 	check(page.hasCookie() && payload.gclid === 'TESTCLICK123' && payload.gbraid === 'GBRAID123' && payload.utm_source === 'paid-search', 'marketing plus statistics consent must persist valid attribution');
 	check(page.inputs.cf7aiv_gclid.value === 'TESTCLICK123' && page.inputs.cf7aiv_utm_source.value === 'paid-search' && page.inputs.cf7aiv_submission_id.value === payload.submission_id, 'granted attribution must populate injected fields');
+}
+
+// When the configured WordPress Consent API is authoritative, stale Google
+// Consent Mode values must not replace the effective consent injected into CF7.
+{
+	const page = makeHarness({
+		wpConsentType: 'optin',
+		wpHasConsent: () => true,
+		dataLayer: consent(false, false),
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(
+		payload.ad_storage === 'granted' && payload.analytics_storage === 'granted'
+			&& payload.ad_user_data === 'granted' && payload.ad_personalization === 'granted',
+		'configured WordPress consent grants must be the effective stored consent when Google Consent Mode is stale'
+	);
+	check(
+		page.inputs.cf7aiv_ad_storage.value === 'granted' && page.inputs.cf7aiv_analytics_storage.value === 'granted'
+			&& page.inputs.cf7aiv_ad_user_data.value === 'granted' && page.inputs.cf7aiv_ad_personalization.value === 'granted',
+		'configured WordPress consent grants must be injected into CF7 instead of stale Google denial'
+	);
 }
 
 {

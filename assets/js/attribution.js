@@ -47,15 +47,12 @@
 		document.cookie = storageName + '=;path=/;Max-Age=0;SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
 		clearAllFields();
 	}
-	function consentState() {
-		if (typeof window.wp_has_consent === 'function') {
-			try {
-				return {
-					statistics: window.wp_has_consent('statistics') === true,
-					marketing: window.wp_has_consent('marketing') === true,
-				};
-			} catch (e) { return { statistics: false, marketing: false }; }
-		}
+	function knownConsentType(value) {
+		if (typeof value !== 'string') return false;
+		value = value.toLowerCase().replace(/[-_\s]/g, '');
+		return value === 'optin' || value === 'optout';
+	}
+	function googleConsentMode() {
 		var mode = {};
 		(window.dataLayer || []).forEach(function (entry) {
 			var row = Array.prototype.slice.call(entry || []);
@@ -64,9 +61,27 @@
 				if (row[2][key] === 'granted' || row[2][key] === 'denied') mode[key] = row[2][key];
 			});
 		});
+		return mode;
+	}
+	function consentState() {
+		if (typeof window.wp_has_consent === 'function') {
+			try {
+				if (typeof window.wp_get_consent_type !== 'function' || !knownConsentType(window.wp_get_consent_type())) {
+					return { statistics: false, marketing: false, source: 'wordpress' };
+				}
+				return {
+					statistics: window.wp_has_consent('statistics') === true,
+					marketing: window.wp_has_consent('marketing') === true,
+					source: 'wordpress',
+				};
+			} catch (e) { return { statistics: false, marketing: false, source: 'wordpress' }; }
+		}
+		var mode = googleConsentMode();
 		return {
 			statistics: mode.analytics_storage === 'granted',
 			marketing: mode.ad_storage === 'granted',
+			source: 'google',
+			mode: mode,
 		};
 	}
 	function hasClickParameter(value) {
@@ -107,12 +122,16 @@
 		});
 		return result;
 	}
-	function captureConsent(target) {
-		(window.dataLayer || []).forEach(function (entry) {
-			var row = Array.prototype.slice.call(entry || []);
-			if (row[0] === 'consent' && (row[1] === 'default' || row[1] === 'update') && row[2]) {
-				consentKeys.forEach(function (key) { if (row[2][key] === 'granted' || row[2][key] === 'denied') target[key] = row[2][key]; });
-			}
+	function captureConsent(target, consent) {
+		if (consent.source === 'wordpress') {
+			target.analytics_storage = consent.statistics ? 'granted' : 'denied';
+			target.ad_storage = consent.marketing ? 'granted' : 'denied';
+			target.ad_user_data = consent.marketing ? 'granted' : 'denied';
+			target.ad_personalization = consent.marketing ? 'granted' : 'denied';
+			return;
+		}
+		consentKeys.forEach(function (key) {
+			if (consent.mode[key] === 'granted' || consent.mode[key] === 'denied') target[key] = consent.mode[key];
 		});
 	}
 	function collect() {
@@ -141,7 +160,7 @@
 			if (!stored.referrer && document.referrer) stored.referrer = withoutClickParameters(document.referrer).slice(0, 2048);
 			Object.assign(stored, gaIdentity());
 		}
-		captureConsent(stored);
+		captureConsent(stored, consent);
 		if (stored.submission_id) submissionId = stored.submission_id;
 		stored.submission_id = submissionId;
 		writeStored(stored);

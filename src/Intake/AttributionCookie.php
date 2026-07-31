@@ -16,6 +16,7 @@ final class AttributionCookie {
 			|| (function_exists('wp_doing_ajax') && wp_doing_ajax())
 			|| (function_exists('is_feed') && is_feed())) { return; }
 		$consent = self::resolveConsentState(
+			function_exists('wp_get_consent_type') ? wp_get_consent_type() : null,
 			function_exists('wp_has_consent') ? (bool) wp_has_consent('statistics') : null,
 			function_exists('wp_has_consent') ? (bool) wp_has_consent('marketing') : null
 		);
@@ -31,7 +32,12 @@ final class AttributionCookie {
 	}
 
 	/** @return array{statistics: bool, marketing: bool} */
-	public static function resolveConsentState(?bool $statistics, ?bool $marketing): array {
+	public static function resolveConsentState(mixed $consentType, ?bool $statistics, ?bool $marketing): array {
+		if (! is_string($consentType)) { return ['statistics' => false, 'marketing' => false]; }
+		$normalized = preg_replace('/[-_\s]/', '', strtolower(trim($consentType))) ?? '';
+		if (! in_array($normalized, ['optin', 'optout'], true)) {
+			return ['statistics' => false, 'marketing' => false];
+		}
 		return ['statistics' => $statistics === true, 'marketing' => $marketing === true];
 	}
 
