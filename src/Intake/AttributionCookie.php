@@ -15,7 +15,12 @@ final class AttributionCookie {
 			|| (defined('DOING_AJAX') && DOING_AJAX)
 			|| (function_exists('wp_doing_ajax') && wp_doing_ajax())
 			|| (function_exists('is_feed') && is_feed())) { return; }
-		$values = self::buildServerValues($_GET, $_COOKIE, $_SERVER);
+		$consent = self::resolveConsentState(
+			function_exists('wp_has_consent') ? (bool) wp_has_consent('statistics') : null,
+			function_exists('wp_has_consent') ? (bool) wp_has_consent('marketing') : null
+		);
+		if (! $consent['statistics'] && ! $consent['marketing']) { return; }
+		$values = self::filterByConsent(self::buildServerValues($_GET, $_COOKIE, $_SERVER), $consent);
 		if ($values === []) { return; }
 		$settings = function_exists('get_option') ? (array) get_option(Settings::OPTION, []) : [];
 		$days = max(1, min(365, (int) ($settings['attribution']['retention_days'] ?? 90)));
@@ -23,6 +28,11 @@ final class AttributionCookie {
 			'expires' => time() + ($days * DAY_IN_SECONDS), 'path' => '/',
 			'secure' => function_exists('is_ssl') && is_ssl(), 'httponly' => false, 'samesite' => 'Lax',
 		]);
+	}
+
+	/** @return array{statistics: bool, marketing: bool} */
+	public static function resolveConsentState(?bool $statistics, ?bool $marketing): array {
+		return ['statistics' => $statistics === true, 'marketing' => $marketing === true];
 	}
 
 	/** @param array<string, mixed> $server */
@@ -126,6 +136,58 @@ final class AttributionCookie {
 		$uri = str_replace(["\r", "\n"], '', $uri);
 		$secure = ! empty($server['HTTPS']) && strtolower((string) $server['HTTPS']) !== 'off';
 		return self::limit(($secure ? 'https://' : 'http://') . $host . ($uri !== '' ? $uri : '/'), 2048);
+	}
+
+	/**
+	 * @param array<string, string> $values
+	 * @param array{statistics: bool, marketing: bool} $consent
+	 * @return array<string, string>
+	 */
+	private static function filterByConsent(array $values, array $consent): array {
+		if (! $consent['marketing']) {
+			foreach (IdentifierValidator::CLICK_KEYS as $key) { unset($values[$key]); }
+			if (isset($values['first_landing_page']) && self::hasClickParameter($values['first_landing_page'])) {
+				unset($values['first_landing_page']);
+			}
+			foreach (['current_page', 'referrer'] as $key) {
+				if (isset($values[$key])) { $values[$key] = self::withoutClickParameters($values[$key]); }
+			}
+			if (! isset($values['first_landing_page']) && isset($values['current_page'])) {
+				$values['first_landing_page'] = $values['current_page'];
+			}
+		}
+		if (! $consent['statistics']) {
+			foreach (array_merge(
+				['ga_client_id', 'ga_session_id', 'first_landing_page', 'current_page', 'referrer'],
+				['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id']
+			) as $key) { unset($values[$key]); }
+		}
+		return $values;
+	}
+
+	private static function hasClickParameter(string $value): bool {
+		$query = parse_url($value, PHP_URL_QUERY);
+		if (! is_string($query) || $query === '') { return false; }
+		parse_str($query, $parameters);
+		return array_intersect(array_merge(IdentifierValidator::CLICK_KEYS, ['zc_gad']), array_keys($parameters)) !== [];
+	}
+
+	private static function withoutClickParameters(string $value): string {
+		$parts = parse_url($value);
+		if (! is_array($parts)) { return $value; }
+		$parameters = [];
+		if (isset($parts['query'])) { parse_str((string) $parts['query'], $parameters); }
+		foreach (array_merge(IdentifierValidator::CLICK_KEYS, ['zc_gad']) as $key) { unset($parameters[$key]); }
+		$scheme = isset($parts['scheme']) ? $parts['scheme'] . '://' : '';
+		$user = $parts['user'] ?? '';
+		$pass = isset($parts['pass']) ? ':' . $parts['pass'] : '';
+		$auth = $user !== '' ? $user . $pass . '@' : '';
+		$host = $parts['host'] ?? '';
+		$port = isset($parts['port']) ? ':' . $parts['port'] : '';
+		$path = $parts['path'] ?? '';
+		$query = $parameters !== [] ? '?' . http_build_query($parameters) : '';
+		$fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+		return self::limit($scheme . $auth . $host . $port . $path . $query . $fragment, 2048);
 	}
 
 	private static function isUrlKey(string $key): bool {

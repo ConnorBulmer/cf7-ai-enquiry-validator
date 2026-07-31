@@ -16,7 +16,8 @@ mapping, lifecycle and idempotency rules decide whether anything can be sent.
 - Grounded evidence outcomes: **Strong match**, **Needs review**, and
   **Not eligible**.
 - Google click IDs, Microsoft click IDs, GA client/session data, UTMs, landing
-  page, referrer and consent capture.
+  page, referrer and consent capture, stored only under the applicable explicit
+  statistics or marketing consent category.
 - Direct GA4 Measurement Protocol, existing server-side GTM, Microsoft UET CAPI
   and signed webhook destinations.
 - Shadow mode, destination dry-runs, review queues, policy versioning,
@@ -134,6 +135,8 @@ Version 2 policies use the universal outcomes `primary_opportunity`, `secondary_
 - No real credential is included in this repository.
 
 ## Data flow and privacy
+
+Public-page attribution storage is denied by default. The browser uses the WordPress Consent API when available and otherwise the latest Google Consent Mode state in `dataLayer`; unknown consent never grants storage. Statistics permits GA/UTM/navigation attribution, marketing permits click IDs, and partial consent removes data outside the granted category. Consent changes are handled through `wp_listen_for_consent_change`; withdrawal deletes the plugin localStorage entry and cookie and clears its hidden CF7 fields. Complianz is compatible through its standard WordPress Consent API bridge. A CF7 enquiry checkbox is not treated as statistics or marketing consent.
 
 The capture hook persists a fingerprint, source reference, encrypted attribution/consent snapshots, and optional consent-gated normalized identity hashes. The asynchronous worker loads the original enquiry from Flamingo or CFDB7 on demand. Only explicitly whitelisted, non-identity fields are redacted and sent to AI. Dedicated name, email, phone, IP, click-ID, attribution, consent, file, hash, secret, and every case-insensitive `cf7aiv_` field is blocked. Free text can still contain self-disclosed sensitive information, so provider suitability remains an administrator responsibility; provider-authored prose is never stored as the result summary.
 
