@@ -24,9 +24,9 @@ namespace {
 	function consent_assert(bool $condition, string $message): void {
 		if (! $condition) { $GLOBALS['consentFailures'][] = $message; }
 	}
-	function consent_navigation(array $query): void {
+	function consent_navigation(array $query, array $cookies = []): void {
 		unset($GLOBALS['cookie_write']);
-		$_COOKIE = [];
+		$_COOKIE = $cookies;
 		$_GET = $query;
 		$_SERVER = [
 			'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test',
@@ -133,14 +133,15 @@ namespace {
 	consent_assert(! isset($GLOBALS['cookie_write']), 'Denied consent must not write the server fallback attribution cookie.');
 
 	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => false];
-	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'gbraid' => 'GBRAID123', 'utm_source' => 'fresh-source', 'utm_campaign' => 'summer-care']);
+	$staleFullConsent = json_encode(['gclid' => 'persisted_GOOGLE-456', 'gbraid' => 'PERSISTEDGBRAID123', 'wbraid' => 'PERSISTEDWBRAID123', 'msclkid' => 'fedcba9876543210fedcba9876543210', 'utm_source' => 'persisted-source', 'first_landing_page' => 'https://example.test/?gclid=persisted_GOOGLE-456', 'current_page' => 'https://example.test/?gbraid=PERSISTEDGBRAID123', 'referrer' => 'https://search.example/results']);
+	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'gbraid' => 'GBRAID123', 'wbraid' => 'WBRAID123', 'msclkid' => '0123456789abcdef0123456789abcdef', 'utm_source' => 'fresh-source', 'utm_campaign' => 'summer-care'], [CF7AIV\Intake\AttributionCookie::NAME => $staleFullConsent]);
 	$statisticsPayload = consent_payload();
 	consent_assert(($statisticsPayload['utm_source'] ?? '') === 'fresh-source', 'Statistics consent must retain UTM attribution.');
-	consent_assert(($statisticsPayload['first_landing_page'] ?? '') === 'https://example.test/contact/?gclid=fresh_GOOGLE-123&gbraid=GBRAID123&utm_source=fresh-source&utm_campaign=summer-care', 'Statistics consent must retain the landing page.');
+	consent_assert(($statisticsPayload['first_landing_page'] ?? '') === 'https://example.test/contact/?utm_source=fresh-source&utm_campaign=summer-care' && ($statisticsPayload['current_page'] ?? '') === 'https://example.test/contact/?utm_source=fresh-source&utm_campaign=summer-care', 'Statistics consent must retain click-ID-sanitized landing and current URLs.');
 	consent_assert(! isset($statisticsPayload['gclid']) && ! isset($statisticsPayload['gbraid']) && ! isset($statisticsPayload['wbraid']) && ! isset($statisticsPayload['msclkid']), 'Statistics-only consent must strip advertising click identifiers.');
 
 	$GLOBALS['consent_categories'] = ['statistics' => false, 'marketing' => true];
-	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source', 'utm_campaign' => 'summer-care']);
+	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source', 'utm_campaign' => 'summer-care'], [CF7AIV\Intake\AttributionCookie::NAME => $staleFullConsent]);
 	$marketingPayload = consent_payload();
 	consent_assert(($marketingPayload['gclid'] ?? '') === 'fresh_GOOGLE-123', 'Marketing consent must retain valid advertising click identifiers.');
 	consent_assert(! isset($marketingPayload['utm_source'], $marketingPayload['utm_campaign'], $marketingPayload['first_landing_page'], $marketingPayload['current_page'], $marketingPayload['referrer']), 'Marketing-only consent must strip analytics and navigation attribution.');

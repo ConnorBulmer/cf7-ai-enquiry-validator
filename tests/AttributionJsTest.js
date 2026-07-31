@@ -30,8 +30,8 @@ function makeHarness(options = {}) {
 		crypto: global.crypto,
 	};
 	global.location = {
-		search: options.search || '?gclid=TESTCLICK123&gbraid=GBRAID123&utm_source=paid-search&utm_campaign=care',
-		href: options.href || 'https://example.test/landing/?gclid=TESTCLICK123&gbraid=GBRAID123&utm_source=paid-search&utm_campaign=care',
+		search: options.search || '?gclid=TESTCLICK123&gbraid=GBRAID123&wbraid=WBRAID123&msclkid=0123456789abcdef0123456789abcdef&utm_source=paid-search&utm_campaign=care',
+		href: options.href || 'https://example.test/landing/?gclid=TESTCLICK123&gbraid=GBRAID123&wbraid=WBRAID123&msclkid=0123456789abcdef0123456789abcdef&utm_source=paid-search&utm_campaign=care',
 		protocol: 'https:',
 	};
 	global.localStorage = {
@@ -104,13 +104,23 @@ const fields = {
 	const page = makeHarness({
 		dataLayer: consent(true, false),
 		cookies: { _ga: 'GA1.1.123456789.1234567890', _ga_CONTAINER: 'GS1.1.s1234567890.o1' },
+		storage: { cf7aiv_attribution: JSON.stringify({ gclid: 'STALECLICK123', gbraid: 'STALEGBRAID123', wbraid: 'STALEWBRAID123', msclkid: 'fedcba9876543210fedcba9876543210', utm_source: 'stale-source', first_landing_page: 'https://example.test/?gclid=STALECLICK123', current_page: 'https://example.test/?gbraid=STALEGBRAID123', referrer: 'https://search.example/results' }) },
 		fields,
 	});
 	page.emit('DOMContentLoaded');
 	const payload = page.payload() || {};
-	check(payload.utm_source === 'paid-search' && payload.first_landing_page === global.location.href && payload.referrer === 'https://search.example/results', 'statistics consent must retain UTM, landing, and referrer attribution');
+	check(payload.utm_source === 'paid-search' && payload.first_landing_page === 'https://example.test/landing/?utm_source=paid-search&utm_campaign=care' && payload.current_page === 'https://example.test/landing/?utm_source=paid-search&utm_campaign=care' && payload.referrer === 'https://search.example/results', 'statistics consent must retain UTM, referrer, and click-ID-sanitized landing URLs');
 	check(payload.ga_client_id === '123456789.1234567890' && payload.ga_session_id === '1234567890', 'statistics consent must retain GA client and session identifiers');
 	check(!('gclid' in payload) && !('gbraid' in payload) && !('wbraid' in payload) && !('msclkid' in payload), 'statistics-only consent must exclude advertising click identifiers');
+}
+
+{
+	const stale = JSON.stringify({ gclid: 'STALECLICK123', utm_source: 'stale-source', ga_client_id: '123456789.1234567890', first_landing_page: 'https://example.test/?utm_source=stale-source', current_page: 'https://example.test/?utm_source=stale-source', referrer: 'https://search.example/results' });
+	const page = makeHarness({ dataLayer: consent(false, true), storage: { cf7aiv_attribution: stale }, cookies: { cf7aiv_attribution: encodeURIComponent(stale) }, fields });
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.gclid === 'TESTCLICK123', 'marketing consent must retain valid advertising click identifiers.');
+	check(!('utm_source' in payload) && !('utm_campaign' in payload) && !('ga_client_id' in payload) && !('first_landing_page' in payload) && !('current_page' in payload) && !('referrer' in payload), 'marketing-only consent must remove stale analytics and navigation attribution.');
 }
 
 {
