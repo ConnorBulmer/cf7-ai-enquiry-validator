@@ -1,4 +1,26 @@
-# Release verification — 0.2.6
+# Release verification — 0.2.7
+
+The 0.2.7 assisted-setup response correction was verified locally on 2026-08-02.
+
+## 0.2.7 assisted-setup response verification
+
+- Release identities: plugin header, `CF7AIV\VERSION`, and `readme.txt`
+  `Stable tag` are all `0.2.7`; release tag is `v0.2.7`.
+- Production reproduction: a safe 27,153-character Mosaic public-site profile
+  returned HTTP 200 but stopped at the prior 1,500-token output limit, leaving
+  truncated invalid JSON that correctly failed closed.
+- Corrected probe: the shared 20-suggestion bound and 4,000-token DeepSeek
+  output limit completed with `finish_reason: stop`, valid JSON, and exactly 20
+  suggestions.
+- Complete sorted PHP suite: **24/24 PASS**.
+- JavaScript checks: **PASS**.
+- Tracked non-vendor PHP lint: **145/145 PASS**.
+- Build command: `php tools/build-release.php --tag=v0.2.7 --output-dir=dist`
+  — **PASS**; JSON reports **228** entries.
+- Local release archive SHA-256:
+  `1949ef80c1316041382c58959d227ba025f50451c1bde923040a44d5fefa4c88`.
+- The MT rollout verifier reports `valid: true`, version `0.2.7`, the same
+  SHA-256, one safe plugin root, no credential-like text, and safe extraction.
 
 The 0.2.6 WordPress admin-input correction was verified locally on 2026-08-02.
 

@@ -274,6 +274,7 @@ setup_assert(! in_array($omittedRef, $twentyPageRequest->allowedSourceRefs(), tr
 $schemaJson = json_encode(PolicySuggestionResult::jsonSchema(), JSON_THROW_ON_ERROR);
 setup_assert(! str_contains($schemaJson, 'oneOf'), 'OpenAI strict suggestion schema must not use unsupported oneOf.');
 setup_assert(str_contains($schemaJson, 'anyOf'), 'Suggestion schema must retain explicit string-or-field-mapping composition.');
+setup_assert((PolicySuggestionResult::jsonSchema()['properties']['suggestions']['maxItems'] ?? null) === 20, 'Assisted setup must bound model output to 20 compact suggestions so large public profiles do not truncate JSON.');
 
 final class SetupCaptureTransport implements HttpTransportInterface {
 	/** @var list<array{url:string,arguments:array<string,mixed>}> */
@@ -306,6 +307,11 @@ foreach (['openai', 'deepseek'] as $providerKey) {
 	}
 	setup_assert(str_contains($wire, 'store') === ($providerKey === 'openai'), 'OpenAI must explicitly disable response storage.');
 	setup_assert(str_contains($wire, 'json_schema') || str_contains($wire, 'Required JSON Schema'), ucfirst($providerKey) . ' must request the fixed suggestion schema.');
+	if ($providerKey === 'deepseek') {
+		$deepSeekWire = json_decode($wire, true, 64, JSON_THROW_ON_ERROR);
+		setup_assert(($deepSeekWire['max_tokens'] ?? null) === 4000, 'DeepSeek assisted setup must reserve enough output headroom for a complete bounded JSON response.');
+		setup_assert(str_contains((string) ($deepSeekWire['messages'][0]['content'] ?? ''), 'no more than 20 compact'), 'DeepSeek assisted setup must explicitly request the bounded compact suggestion count.');
+	}
 	setup_assert(strlen(json_encode($taintedRequest->providerProfile(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) <= 40000, ucfirst($providerKey) . ' provider profile must remain within the final serialized boundary.');
 }
 
