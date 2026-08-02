@@ -14,9 +14,12 @@ The 0.2.5 archive-safety correction was verified locally on 2026-08-02.
 - RED: the focused release-package regression failed because the archive
   verifier accepted `cf7-ai-enquiry-validator/NUL`.
 - GREEN: the same test passes after the shared source/archive path policy began
-  rejecting Windows device names (including extensions), trailing dots/spaces,
-  alternate data stream colons, and other Windows-unsafe characters. Safe names
-  including `console.md` and `com10.php` remain accepted.
+  rejecting Windows device names (including extensions and the reserved
+  `COM¹`–`COM³` / `LPT¹`–`LPT³` forms), trailing dots/spaces, alternate data
+  stream colons, and other Windows-unsafe characters. Safe names including
+  `console.md` and `com10.php` remain accepted. Independent review found the
+  superscript-device bypass; its focused regression was observed RED before the
+  matcher fix and GREEN afterward.
 - `MigrationV9Test.php` now uses `NUL` only on Windows and `/dev/null` elsewhere,
   preventing Linux test runs from creating repository artifacts.
 - Complete sorted PHP suite command:

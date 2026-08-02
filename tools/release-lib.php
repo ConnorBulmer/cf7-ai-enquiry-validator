@@ -207,7 +207,7 @@ final class ReleasePackager {
 				throw new RuntimeException("Release archive path contains a Windows-unsafe component: {$path}");
 			}
 			$deviceBase = strtoupper(rtrim(explode('.', $component, 2)[0], '. '));
-			if (preg_match('/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/D', $deviceBase) === 1) {
+			if (preg_match('/^(?:CON|PRN|AUX|NUL|(?:COM|LPT)(?:[1-9]|\x{00B9}|\x{00B2}|\x{00B3}))$/uD', $deviceBase) === 1) {
 				throw new RuntimeException("Release archive path contains a Windows-unsafe component: {$path}");
 			}
 		}
