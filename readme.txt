@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.2.5
+Stable tag: 0.2.6
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,11 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.6 =
+* Normalizes WordPress admin form input before processing settings, guided policies, advanced policy JSON, mappings, lifecycle controls, and setup actions.
+* Fixes advanced policy JSON imports that WordPress had escaped with request slashes before the plugin decoded them.
+* Adds a regression that submits recursively slashed Training and Education policy JSON through the real admin handler.
 
 = 0.2.5 =
 * Prevents test logging from creating repository artifacts on Linux release runners.

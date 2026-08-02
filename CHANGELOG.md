@@ -2,6 +2,15 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.6 — 2026-08-02
+
+- Normalized WordPress admin form input before settings, policy, mapping,
+  lifecycle, setup and review handlers process it.
+- Fixed advanced policy JSON imports that failed because WordPress recursively
+  slashes request values before dispatching `admin-post.php` actions.
+- Added a full-handler regression using recursively slashed Training and
+  Education policy JSON, a form-specific policy key and the guarded nonce path.
+
 ## 0.2.5 — 2026-08-02
 
 - Corrected the release test log sink so Linux runners cannot create a
