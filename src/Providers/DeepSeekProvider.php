@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CF7AIV\Providers;
 
+use CF7AIV\Classification\PolicyValidator;
 use CF7AIV\Classification\ResultValidator;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Contracts\PolicySuggestionProviderInterface;
@@ -55,10 +56,11 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 
 	protected function send(ClassificationRequest $request, bool $reasoning): HttpResponse {
 		$schema = json_encode(ResultValidator::jsonSchema($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		$guidance = $this->v2JsonGuidance($request);
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
-				['role' => 'system', 'content' => $request->systemPrompt . "\nRequired JSON Schema: " . $schema . "\nReturn one valid JSON object matching this schema and no other text."],
+				['role' => 'system', 'content' => $request->systemPrompt . "\nRequired JSON Schema: " . $schema . $guidance . "\nReturn one valid JSON object matching this schema and no other text."],
 				['role' => 'user', 'content' => json_encode($this->userInput($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)],
 			],
 			'response_format' => ['type' => 'json_object'],
@@ -71,6 +73,50 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 			'timeout' => max(5, min(120, $this->timeout)),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
+	}
+
+	private function v2JsonGuidance(ClassificationRequest $request): string {
+		if ($request->policySchema !== PolicyValidator::SCHEMA_V2) { return ''; }
+		$mapping = json_encode($request->allowedEvidence, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		$outcome = $request->allowedOutcomeIds[0] ?? '';
+		$tier = $request->allowedTierIds[0] ?? '';
+		$fieldKey = array_key_first($request->context);
+		$evidence = [];
+		$code = array_key_first($request->allowedEvidence);
+		if (is_string($fieldKey) && is_string($code)) {
+			$value = $request->context[$fieldKey] ?? '';
+			if (is_array($value)) {
+				$value = current(array_filter($value, static fn (mixed $item): bool => is_scalar($item)));
+			}
+			$excerpt = trim((string) (is_scalar($value) ? $value : ''));
+			$excerpt = preg_replace('/\s+/u', ' ', $excerpt) ?? $excerpt;
+			if (strlen($excerpt) > 160) {
+				$excerpt = substr($excerpt, 0, 160);
+				while ($excerpt !== '' && preg_match('//u', $excerpt) !== 1) { $excerpt = substr($excerpt, 0, -1); }
+			}
+			if (strlen($excerpt) >= 2) {
+				$evidence[] = [
+					'dimension' => $request->allowedEvidence[$code],
+					'code' => $code,
+					'field_key' => $fieldKey,
+					'excerpt' => $excerpt,
+				];
+			}
+		}
+		$example = [
+			'outcome_id' => $outcome,
+			'tier_id' => $tier,
+			'reason_code' => 'qualified',
+			'model_confidence' => 0.5,
+			'evidence' => $evidence,
+			'missing_evidence' => [],
+			'exclusion_codes' => [],
+			'ambiguity_flags' => [],
+			'summary' => 'Classify using only grounded request evidence.',
+		];
+		return "\nEvidence code-to-dimension mapping: " . $mapping
+			. "\nEach evidence dimension must equal the value mapped from its code exactly."
+			. "\nExample JSON output: " . json_encode($example, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 	}
 
 	protected function extractText(array $body): string {

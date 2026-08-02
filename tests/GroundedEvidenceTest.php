@@ -256,8 +256,40 @@ $deepTransport = new CF7AIVGroundedTransport([new CF7AIV\Infrastructure\HttpResp
 ], JSON_THROW_ON_ERROR))]);
 $deepResult = (new CF7AIV\Providers\DeepSeekProvider($deepTransport, 'deep-secret'))->classify($request);
 $deepPayload = json_decode((string) $deepTransport->requests[0]['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
+$deepSystemPrompt = (string) ($deepPayload['messages'][0]['content'] ?? '');
+grounded_assert(
+	str_contains($deepSystemPrompt, 'Evidence code-to-dimension mapping: {"service_fit":"service_fit","readiness_signal":"readiness"}'),
+	'DeepSeek must receive the exact published evidence code-to-dimension mapping so independently valid enum values cannot be paired incorrectly.',
+);
+grounded_assert(
+	str_contains($deepSystemPrompt, 'Example JSON output:')
+		&& str_contains($deepSystemPrompt, '"dimension":"service_fit","code":"service_fit","field_key":"message","excerpt":"We need a website rebuild before October."'),
+	'DeepSeek JSON mode must receive a concrete schema-valid grounded example, as required by the provider guidance.',
+);
 grounded_assert(($deepPayload['max_tokens'] ?? null) === 900, 'DeepSeek v2 output must allow 900 tokens for grounded evidence.');
 grounded_assert($deepResult->providerUsage === ['input_tokens' => 101, 'output_tokens' => 52, 'reasoning_tokens' => 7, 'calls' => 1], 'DeepSeek usage must be normalized onto the result.');
+
+$multibyteRequest = new CF7AIV\Domain\ClassificationRequest(
+	'multibyte-item',
+	'agency-v2',
+	'message: safe',
+	['message' => str_repeat('a', 159) . 'é'],
+	'Classify the redacted enquiry.',
+	['website_rebuild'],
+	['primary_opportunity', 'insufficient_information'],
+	['service_fit' => 'service_fit'],
+	CF7AIV\Classification\PolicyValidator::SCHEMA_V2,
+	[],
+	[],
+);
+$multibyteValid = $valid;
+$multibyteValid['evidence'] = [];
+$multibyteTransport = new CF7AIVGroundedTransport([new CF7AIV\Infrastructure\HttpResponse(200, json_encode([
+	'choices' => [['message' => ['content' => json_encode($multibyteValid, JSON_THROW_ON_ERROR)]]],
+], JSON_THROW_ON_ERROR))]);
+(new CF7AIV\Providers\DeepSeekProvider($multibyteTransport, 'deep-secret'))->classify($multibyteRequest);
+$multibytePayload = json_decode((string) $multibyteTransport->requests[0]['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
+grounded_assert(is_array($multibytePayload), 'DeepSeek guidance must remain valid JSON when a 160-byte excerpt boundary intersects a multibyte character.');
 
 $deepRetryTransport = new CF7AIVGroundedTransport([
 	new CF7AIV\Infrastructure\HttpResponse(200, json_encode([
