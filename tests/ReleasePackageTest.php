@@ -43,6 +43,19 @@ function cf7aiv_release_remove(string $path): void {
 	rmdir($path);
 }
 
+/** @param list<string> $entries */
+function cf7aiv_release_write_zip(string $path, array $entries): void {
+	$zip = new ZipArchive();
+	cf7aiv_release_assert($zip->open($path, ZipArchive::CREATE | ZipArchive::EXCL) === true, 'A release-test ZIP must be creatable.');
+	try {
+		foreach ($entries as $entry) {
+			cf7aiv_release_assert($zip->addFromString($entry, "fixture\n"), "The release-test ZIP entry {$entry} must be writable.");
+		}
+	} finally {
+		$zip->close();
+	}
+}
+
 $library = dirname(__DIR__) . '/tools/release-lib.php';
 require_once $library;
 
@@ -142,6 +155,48 @@ try {
 		$checksum === $expectedHash . '  ' . basename($result['zip']),
 		'The checksum asset must identify the exact release ZIP bytes.',
 	);
+
+	$safeArchive = $fixtureOutput . '/safe-paths.zip';
+	cf7aiv_release_write_zip(
+		$safeArchive,
+		[
+			'cf7-ai-enquiry-validator/cf7-ai-enquiry-validator.php',
+			'cf7-ai-enquiry-validator/docs/console.md',
+			'cf7-ai-enquiry-validator/src/com10.php',
+		],
+	);
+	ReleasePackager::verifyArchive($safeArchive, 3);
+
+	$unsafePaths = [
+		'cf7-ai-enquiry-validator/NUL',
+		'cf7-ai-enquiry-validator/docs/con.txt',
+		'cf7-ai-enquiry-validator/PRN.md',
+		'cf7-ai-enquiry-validator/AUX',
+		'cf7-ai-enquiry-validator/bin/COM1.exe',
+		'cf7-ai-enquiry-validator/bin/com9',
+		'cf7-ai-enquiry-validator/log/LPT1.txt',
+		'cf7-ai-enquiry-validator/log/lpt9',
+		'cf7-ai-enquiry-validator/docs/trailing.',
+		'cf7-ai-enquiry-validator/docs/trailing ',
+		'cf7-ai-enquiry-validator/docs/readme.txt:stream',
+	];
+	foreach ($unsafePaths as $index => $unsafePath) {
+		$unsafeArchive = $fixtureOutput . "/unsafe-path-{$index}.zip";
+		cf7aiv_release_write_zip(
+			$unsafeArchive,
+			[
+				'cf7-ai-enquiry-validator/cf7-ai-enquiry-validator.php',
+				$unsafePath,
+			],
+		);
+		$unsafePathRejected = false;
+		try {
+			ReleasePackager::verifyArchive($unsafeArchive, 2);
+		} catch (RuntimeException $error) {
+			$unsafePathRejected = str_contains($error->getMessage(), 'unsafe');
+		}
+		cf7aiv_release_assert($unsafePathRejected, "The release archive must reject Windows-unsafe path {$unsafePath}.");
+	}
 
 	cf7aiv_release_write($fixtureRoot, 'src/secret.txt', 'sk-' . str_repeat('A', 32));
 	$secretRejected = false;

@@ -77,6 +77,25 @@ jobs:
             --output-dir=dist \
             | tee dist/release.json
 
+      - name: Verify one safe root and no Windows-reserved entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          zip="dist/cf7-ai-enquiry-validator-${version}.zip"
+          php -r '
+            require "tools/release-lib.php";
+            $zip = $argv[1];
+            $archive = new ZipArchive();
+            if ($archive->open($zip) !== true) {
+                throw new RuntimeException("Release ZIP could not be reopened.");
+            }
+            $entries = $archive->numFiles;
+            $archive->close();
+            CF7AIVRelease\ReleasePackager::verifyArchive($zip, $entries);
+            echo "PASS one canonical plugin root; no Windows-unsafe or reserved archive paths.\n";
+          ' "$zip"
+
       - name: Publish release assets
         shell: bash
         run: |

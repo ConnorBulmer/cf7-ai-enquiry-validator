@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 function migration_v9_assert(bool $condition,string $message):void{if(!$condition){throw new RuntimeException($message);}}
-ini_set('error_log','NUL');
+ini_set('error_log',PHP_OS_FAMILY==='Windows'?'NUL':'/dev/null');
 define('ABSPATH',__DIR__.'/');define('ARRAY_A','ARRAY_A');
 $GLOBALS['migration_v9_options']=[];$GLOBALS['migration_v9_dbdelta']=[];
 function dbDelta(string $sql):void{$GLOBALS['migration_v9_dbdelta'][]=$sql;}
