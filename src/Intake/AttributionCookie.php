@@ -251,6 +251,7 @@ final class AttributionCookie {
 		if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])
 			|| ! in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)
 			|| (string) $parts['host'] === ''
+			|| self::decodeUrlPart((string) $parts['host']) === null
 			|| self::decodeUrlPart((string) ($parts['path'] ?? '')) === null) { return null; }
 		$query = self::sanitizeParameters((string) ($parts['query'] ?? ''));
 		$fragment = self::sanitizeFragment((string) ($parts['fragment'] ?? ''));

@@ -201,6 +201,13 @@ namespace {
 	consent_assert(($unsafeFiltered['first_landing_page'] ?? '') === 'https://example.test/contact/?utm_source=care', 'Unsafe stored landing URLs must be dropped and replaced with the safe current landing.');
 	consent_assert(! isset($unsafeFiltered['referrer']), 'Stored URLs with unsafe percent decoding must be dropped entirely by the server sanitizer.');
 	consent_navigation(
+		['utm_source' => 'care'],
+		[CF7AIV\Intake\AttributionCookie::NAME => json_encode(['first_landing_page' => 'https://example%ZZ.test/path?utm_source=care'])],
+		['HTTP_REFERER' => null]
+	);
+	$unsafeHostFiltered = consent_payload();
+	consent_assert(($unsafeHostFiltered['first_landing_page'] ?? '') === 'https://example.test/contact/?utm_source=care', 'Stored URLs with unsafe hostname encoding must be dropped instead of surviving PHP sanitization.');
+	consent_navigation(
 		[],
 		[CF7AIV\Intake\AttributionCookie::NAME => json_encode(['gclid' => 'stale_CLICK-123'])],
 		['HTTP_HOST' => null, 'HTTP_REFERER' => null]

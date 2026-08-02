@@ -187,6 +187,20 @@ const fields = {
 }
 
 {
+	const stale = JSON.stringify({ first_landing_page: 'https://example%ZZ.test/path?utm_source=care' });
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		storage: { cf7aiv_attribution: stale },
+		referrer: '',
+		href: 'https://example.test/safe/?utm_source=care',
+		search: '?utm_source=care',
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	check((page.payload() || {}).first_landing_page === 'https://example.test/safe/?utm_source=care', 'JavaScript must reject the same unsafe hostname encoding as the PHP sanitizer');
+}
+
+{
 	const page = makeHarness({
 		dataLayer: consent(true, false),
 		cookies: { cf7aiv_attribution: '%E0%A4%A' },
