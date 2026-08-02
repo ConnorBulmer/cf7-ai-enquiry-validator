@@ -1,4 +1,23 @@
-# Release verification — 0.2.7
+# Release verification — 0.2.8
+
+The 0.2.8 assisted-setup provenance correction was verified locally on 2026-08-02.
+
+## 0.2.8 assisted-setup provenance verification
+
+- Release identities are all `0.2.8`; release tag is `v0.2.8`.
+- Production reproduction: DeepSeek returned 20 structurally valid, safe
+  suggestions, but all 20 cited HTTPS URLs because the provider schema did not
+  expose the validator's opaque provenance identifiers.
+- Corrected probe: a dynamic enum containing only the finalized `pack:key`,
+  `page:ID`, and `form:ID` references produced 20/20 valid provenance values.
+- DeepSeek and OpenAI wire-level regressions confirm both providers receive the
+  same exact finalized provenance enum.
+- Complete sorted PHP suite: **24/24 PASS**; JavaScript checks: **PASS**;
+  tracked non-vendor PHP lint: **145/145 PASS**.
+- The verified 228-entry local archive SHA-256 is
+  `1add921ceede4e3ce0ec91d97016a6b1094791a2542aeecb36fd2129aa713205`.
+- The MT rollout verifier reports `valid: true`, version `0.2.8`, the same
+  SHA-256, one safe plugin root, no credential-like text, and safe extraction.
 
 The 0.2.7 assisted-setup response correction was verified locally on 2026-08-02.
 

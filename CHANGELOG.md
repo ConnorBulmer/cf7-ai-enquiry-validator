@@ -2,6 +2,15 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.8 — 2026-08-02
+
+- Constrained assisted-setup provenance to the exact finalized pack, page, and
+  form identifiers supplied to the provider.
+- Prevented providers from returning page URLs or invented references that the
+  fail-closed local validator must reject.
+- Applied the same dynamic provenance enum to DeepSeek JSON instructions and
+  OpenAI strict JSON Schema, with provider-wire regressions for both routes.
+
 ## 0.2.7 — 2026-08-02
 
 - Bounded assisted setup to 20 compact suggestions and increased DeepSeek
