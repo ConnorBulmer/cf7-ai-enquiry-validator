@@ -2,6 +2,15 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.7 — 2026-08-02
+
+- Bounded assisted setup to 20 compact suggestions and increased DeepSeek
+  output headroom so larger public site profiles return complete JSON.
+- Kept partial and truncated model output fail-closed while correcting the
+  reproducible 1,500-token truncation seen during Mosaic production testing.
+- Added regressions that pin the shared suggestion bound, DeepSeek output
+  limit, and explicit compact-count provider instruction.
+
 ## 0.2.6 — 2026-08-02
 
 - Normalized WordPress admin form input before settings, policy, mapping,

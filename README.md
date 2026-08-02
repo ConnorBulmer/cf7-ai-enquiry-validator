@@ -73,6 +73,12 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.7 assisted setup response correction
+
+Version 0.2.7 bounds assisted setup to 20 compact suggestions and gives
+DeepSeek enough output headroom to complete its JSON response for larger public
+site profiles. Partial or truncated provider output remains rejected.
+
 ### Version 0.2.6 WordPress admin input correction
 
 Version 0.2.6 normalizes WordPress admin form input before any plugin handler
@@ -266,7 +272,7 @@ Sources, providers, destinations, and consent resolvers can be registered with p
 
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.6 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.7 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -323,7 +329,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.6 --output-dir=dist
+php tools/build-release.php --tag=v0.2.7 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -341,16 +347,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.6`:
+For version `0.2.7`:
 
 ```bash
-git tag v0.2.6
-git push origin v0.2.6
+git tag v0.2.7
+git push origin v0.2.7
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.6.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.7.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.
