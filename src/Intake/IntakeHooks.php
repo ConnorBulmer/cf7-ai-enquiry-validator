@@ -21,6 +21,8 @@ final class IntakeHooks {
 		add_action('wpcf7_submit', [self::class, 'afterSubmit'], 20, 2);
 		add_filter('cf7aiv_submission_sources', [self::class, 'registerSources']);
 		add_filter('cf7aiv_consent_resolvers', [self::class, 'registerConsentResolvers']);
+		$basename = function_exists('plugin_basename') ? plugin_basename(\CF7AIV\FILE) : 'cf7-ai-enquiry-validator/' . basename(\CF7AIV\FILE);
+		add_filter('wp_consent_api_registered_' . $basename, [self::class, 'declareConsentApiCompatibility']);
 	}
 
 	public static function enqueue(): void {
@@ -73,6 +75,10 @@ final class IntakeHooks {
 	public static function registerConsentResolvers(array $resolvers): array {
 		$resolvers['most_restrictive'] = new ConsentResolver();
 		return $resolvers;
+	}
+
+	public static function declareConsentApiCompatibility(mixed $registered = false): bool {
+		return true;
 	}
 
 	private static function log(Throwable $error): void {

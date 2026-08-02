@@ -23,8 +23,17 @@ final class CaptureService {
 		$formId = method_exists($contactForm, 'id') ? (int) $contactForm->id() : (int) ($posted['_wpcf7'] ?? 0);
 		$attribution = Attribution::fromPosted($posted);
 		$signals = ['google' => array_intersect_key($attribution, array_flip(['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization']))];
-		if (function_exists('wp_has_consent')) {
-			$signals['wordpress'] = ['ad_storage' => wp_has_consent('marketing'), 'ad_user_data' => wp_has_consent('marketing'), 'analytics_storage' => wp_has_consent('statistics')];
+		$wordpress = AttributionCookie::resolveWordPressConsent(
+			function_exists('wp_get_consent_type') ? wp_get_consent_type() : null,
+			function_exists('wp_has_consent') ? (bool) wp_has_consent('statistics') : null,
+			function_exists('wp_has_consent') ? (bool) wp_has_consent('marketing') : null
+		);
+		if ($wordpress !== null) {
+			$signals['wordpress'] = [
+				'ad_storage' => $wordpress['marketing'],
+				'ad_user_data' => $wordpress['marketing'],
+				'analytics_storage' => $wordpress['statistics'],
+			];
 		}
 		if (function_exists('cmplz_has_consent')) {
 			$signals['complianz'] = ['ad_storage' => cmplz_has_consent('marketing'), 'ad_user_data' => cmplz_has_consent('marketing'), 'analytics_storage' => cmplz_has_consent('statistics')];

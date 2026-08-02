@@ -154,6 +154,7 @@ foreach (['name', 'email', 'phone', 'click ID', 'attribution', 'consent', 'files
 	cf7aiv_integration_assert(stripos((string) $privacyDocs, $privacyTopic) !== false, "Privacy guide must document {$privacyTopic} handling.");
 }
 $attributionJs = file_get_contents($pluginRoot . '/assets/js/attribution.js');
-cf7aiv_integration_assert(preg_match('/function\s+populateAll\s*\([^)]*\)\s*\{[^}]*collect\s*\(/s', (string) $attributionJs) === 1, 'Site-wide DOMContentLoaded path must collect attribution even when no CF7 form exists.');
+cf7aiv_integration_assert(str_contains((string) $attributionJs, "document.addEventListener('wp_listen_for_consent_change', populateAll)"), 'Attribution must re-evaluate through the standard WordPress consent-change event.');
+cf7aiv_integration_assert(preg_match('/function\s+collect\s*\([^)]*\)\s*\{\s*var\s+consent\s*=\s*consentState\(\);\s*if\s*\(!consent\.statistics\s*&&\s*!consent\.marketing\)/s', (string) $attributionJs) === 1, 'Site-wide attribution collection must be consent-gated before storage is read or written.');
 
 echo "PASS IntegrationTest\n";

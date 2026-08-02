@@ -5,6 +5,7 @@
 /.vscode/
 /coverage/
 /node_modules/
+/.worktrees/
 *.cache
 *.log
 .DS_Store

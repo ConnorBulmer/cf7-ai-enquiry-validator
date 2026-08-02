@@ -1,4 +1,35 @@
-# Release verification — 0.2.3
+# Release verification — 0.2.4
+
+The 0.2.4 consent-safe attribution release was verified locally on 2026-08-02.
+
+## 0.2.4 consent-safe attribution verification
+
+- Release identities: plugin header, `CF7AIV\VERSION`, and `readme.txt`
+  `Stable tag` are all `0.2.4`; release tag is `v0.2.4`.
+- Complete sorted PHP suite command:
+  `Get-ChildItem tests\*Test.php | Sort-Object Name | ForEach-Object { php $_.FullName; if ($LASTEXITCODE -ne 0) { throw "Failed: $($_.Name)" } }`
+  — **24/24 PASS**. `MigrationV9Test.php` emitted its pre-existing retry warning
+  after passing; no test returned a non-zero exit code.
+- JavaScript commands: `node tests/AttributionJsTest.js` and
+  `node --check assets/js/attribution.js` — **PASS**.
+- Non-vendor PHP lint command: every sorted `*.php` file outside `vendor/`
+  was checked with `php -l` — **145/145 PASS**.
+- Consent regression coverage confirms deny-by-default storage, an unqualified
+  WordPress Consent API fallback to known Google Consent Mode, opt-out defaults,
+  explicit denial, statistics-only and marketing-only filtering, unsafe stored
+  URL rejection, consent grant after load, withdrawal cleanup, and idempotent
+  repeated consent/CF7 hooks.
+- Build command: `php tools/build-release.php --tag=v0.2.4 --output-dir=dist`
+  — **PASS**; JSON reports **228** entries and matching `0.2.4` plugin header,
+  version constant, and stable tag.
+- Release contents: `dist/cf7-ai-enquiry-validator-0.2.4.zip` has one
+  `cf7-ai-enquiry-validator/` root, no backslash entries, and the main plugin
+  file with the expected `0.2.4` header and constant.
+- SHA-256: `e7825c7b39dee052d1157c90401c3c0aac38a47e4c008ca0db3a841c206d06df`;
+  the independently computed ZIP hash matches the generated `.sha256` asset.
+- Source-tree and extracted-archive scans for credential-like values and quoted
+  OAuth/API secret assignments: **0 matches**. No environment secrets or
+  production submissions were used or recorded.
 
 The 0.2.3 Google acceptance-testing delta was verified on 2026-07-30.
 

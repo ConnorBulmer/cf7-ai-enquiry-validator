@@ -16,7 +16,8 @@ mapping, lifecycle and idempotency rules decide whether anything can be sent.
 - Grounded evidence outcomes: **Strong match**, **Needs review**, and
   **Not eligible**.
 - Google click IDs, Microsoft click IDs, GA client/session data, UTMs, landing
-  page, referrer and consent capture.
+  page, referrer and consent capture, stored only under the applicable explicit
+  statistics or marketing consent category.
 - Direct GA4 Measurement Protocol, existing server-side GTM, Microsoft UET CAPI
   and signed webhook destinations.
 - Shadow mode, destination dry-runs, review queues, policy versioning,
@@ -71,6 +72,17 @@ then loads the original content from Flamingo or CFDB7 only when an authorised
 worker or reviewer needs it.
 
 ## Current release
+
+### Version 0.2.4 consent-safe attribution
+
+Public attribution is now fail-closed. A configured WordPress Consent API is
+authoritative; only its explicit grant permits the relevant attribution category.
+When that authority is unavailable or unqualified, the collector may use a known
+Google Consent Mode grant as a fallback. Denied, withdrawn, and partial consent
+remove disallowed local attribution, the plugin cookie, and injected Contact Form
+7 fields. Stored landing and current-page URLs are accepted only for safe HTTP(S)
+origins, preventing unsafe values from being carried forward after consent
+filtering.
 
 ### Version 0.2.3 controlled Google testing
 
@@ -134,6 +146,8 @@ Version 2 policies use the universal outcomes `primary_opportunity`, `secondary_
 - No real credential is included in this repository.
 
 ## Data flow and privacy
+
+Public-page attribution storage is denied by default. Explicit WordPress Consent API opt-in decisions are authoritative; when that authority is unavailable, unconfigured, or opt-out by default, the collector uses the latest known Google Consent Mode state. If neither source proves an allowed category, storage is denied. Statistics permits GA/UTM/navigation attribution, marketing permits click IDs, and partial consent removes data outside the granted category. Consent changes are handled through `wp_listen_for_consent_change`; withdrawal deletes the plugin localStorage entry and cookie and clears its hidden CF7 fields. Complianz is compatible through its standard WordPress Consent API bridge. A CF7 enquiry checkbox is not treated as statistics or marketing consent.
 
 The capture hook persists a fingerprint, source reference, encrypted attribution/consent snapshots, and optional consent-gated normalized identity hashes. The asynchronous worker loads the original enquiry from Flamingo or CFDB7 on demand. Only explicitly whitelisted, non-identity fields are redacted and sent to AI. Dedicated name, email, phone, IP, click-ID, attribution, consent, file, hash, secret, and every case-insensitive `cf7aiv_` field is blocked. Free text can still contain self-disclosed sensitive information, so provider suitability remains an administrator responsibility; provider-authored prose is never stored as the result summary.
 
@@ -237,7 +251,7 @@ Sources, providers, destinations, and consent resolvers can be registered with p
 
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.3 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.4 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -294,7 +308,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.3 --output-dir=dist
+php tools/build-release.php --tag=v0.2.4 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -312,16 +326,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.3`:
+For version `0.2.4`:
 
 ```bash
-git tag v0.2.3
-git push origin v0.2.3
+git tag v0.2.4
+git push origin v0.2.4
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.3.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.4.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.
