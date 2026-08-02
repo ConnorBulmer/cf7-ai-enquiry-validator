@@ -2,6 +2,17 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.4 — 2026-08-02
+
+- Made public attribution storage fail closed unless a configured WordPress
+  Consent API grant, or a valid Google Consent Mode fallback when that authority
+  is unavailable or unqualified, permits the relevant category.
+- Made WordPress Consent API decisions authoritative over stale Google Consent
+  Mode state, including opt-out-by-default configurations.
+- Removed disallowed local attribution and injected Contact Form 7 fields on
+  denied, withdrawn, and partial consent; rejected unsafe stored URLs before
+  they can survive filtered attribution state.
+
 ## 0.2.3 — 2026-07-30
 
 - Added strict GA4 debug validation, a dedicated zero-value transport test and
