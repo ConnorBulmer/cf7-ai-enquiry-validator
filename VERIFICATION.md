@@ -1,4 +1,44 @@
-# Release verification — 0.2.4
+# Release verification — 0.2.5
+
+The 0.2.5 archive-safety correction was verified locally on 2026-08-02.
+
+## 0.2.5 archive-safety verification
+
+- Release identities: plugin header, `CF7AIV\VERSION`, and `readme.txt`
+  `Stable tag` are all `0.2.5`; release tag is `v0.2.5`.
+- Root-cause trace: the `v0.2.4` tag tree contains no `NUL` path, while its
+  published ZIP contains one `cf7-ai-enquiry-validator/NUL` entry. The release
+  workflow ran PHP tests before packaging, and `MigrationV9Test.php` configured
+  `NUL` as its error log path; Linux therefore created a regular repository-root
+  file that the filesystem packager included.
+- RED: the focused release-package regression failed because the archive
+  verifier accepted `cf7-ai-enquiry-validator/NUL`.
+- GREEN: the same test passes after the shared source/archive path policy began
+  rejecting Windows device names (including extensions), trailing dots/spaces,
+  alternate data stream colons, and other Windows-unsafe characters. Safe names
+  including `console.md` and `com10.php` remain accepted.
+- `MigrationV9Test.php` now uses `NUL` only on Windows and `/dev/null` elsewhere,
+  preventing Linux test runs from creating repository artifacts.
+- Complete sorted PHP suite command:
+  `Get-ChildItem tests\*Test.php | Sort-Object Name | ForEach-Object { php $_.FullName; if ($LASTEXITCODE -ne 0) { throw "Failed: $($_.Name)" } }`
+  — **24/24 PASS**.
+- JavaScript commands: `node tests/AttributionJsTest.js` and
+  `node --check assets/js/attribution.js` — **PASS**.
+- Tracked non-vendor PHP lint: every sorted tracked `*.php` file outside
+  `vendor/` was checked with `php -l` — **145/145 PASS**.
+- Build command: `php tools/build-release.php --tag=v0.2.5 --output-dir=dist`
+  — **PASS**; JSON reports **228** entries and matching `0.2.5` plugin header,
+  version constant, and stable tag.
+- Local release archive SHA-256:
+  `1768fd3dac7b1234b00ec8601b8f4ad906c10106adfacc18337e81d2849fe04e`;
+  the generated checksum matches independently.
+- The workflow post-build verifier reopens the ZIP and reports one canonical
+  `cf7-ai-enquiry-validator/` root with no Windows-unsafe or reserved paths.
+- The MT rollout verifier command used `Test-Cf7AivRelease.ps1` with
+  `-ExpectedVersion 0.2.5`; output: `valid: true`, version `0.2.5`, SHA-256
+  `1768FD3DAC7B1234B00EC8601B8F4AD906C10106ADFACC18337E81D2849FE04E`.
+  It independently verifies checksum, safe paths, one plugin root, version,
+  credential-like text, and safe extraction.
 
 The 0.2.4 consent-safe attribution release was verified locally on 2026-08-02.
 

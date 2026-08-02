@@ -2,6 +2,18 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.5 — 2026-08-02
+
+- Corrected the release test log sink so Linux runners cannot create a
+  repository-root `NUL` artifact before packaging.
+- Hardened the packager and archive verifier against Windows-reserved device
+  names, reserved names with extensions, trailing dots/spaces, alternate data
+  stream colons, and other Windows-unsafe path characters.
+- Added focused behavioral regressions plus an explicit post-build workflow
+  check for one canonical plugin root with no unsafe archive entries.
+- Supersedes 0.2.4, whose published ZIP contained an unintended `NUL` entry;
+  the 0.2.4 tag and release remain unchanged for audit history.
+
 ## 0.2.4 — 2026-08-02
 
 - Made public attribution storage fail closed unless a configured WordPress
