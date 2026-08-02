@@ -1,4 +1,29 @@
-# Release verification — 0.2.5
+# Release verification — 0.2.6
+
+The 0.2.6 WordPress admin-input correction was verified locally on 2026-08-02.
+
+## 0.2.6 WordPress admin-input verification
+
+- Release identities: plugin header, `CF7AIV\VERSION`, and `readme.txt`
+  `Stable tag` are all `0.2.6`; release tag is `v0.2.6`.
+- RED: a full-handler advanced policy import regression submitted recursively
+  slashed Training and Education JSON, reproducing the production failure with
+  `Policy JSON is invalid` before the correction.
+- GREEN: the shared admin request helper now applies WordPress `wp_unslash()`
+  recursively before any guarded handler processes the request. The same
+  form-specific policy import succeeds and persists a validated draft.
+- Complete sorted PHP suite: **24/24 PASS**.
+- JavaScript commands: `node tests/AttributionJsTest.js` and
+  `node --check assets/js/attribution.js` — **PASS**.
+- Tracked non-vendor PHP lint: **145/145 PASS**.
+- Build command: `php tools/build-release.php --tag=v0.2.6 --output-dir=dist`
+  — **PASS**; JSON reports **228** entries and matching `0.2.6` plugin header,
+  version constant, and stable tag.
+- Local release archive SHA-256:
+  `0a62668e26822277249ddf797e0dee12ba481015780d0cf8c05dcec0b745cec3`;
+  the generated checksum matches independently.
+- The MT rollout verifier reports `valid: true`, version `0.2.6`, the same
+  SHA-256, one safe plugin root, no credential-like text, and safe extraction.
 
 The 0.2.5 archive-safety correction was verified locally on 2026-08-02.
 

@@ -17,6 +17,8 @@ function wp_verify_nonce(string $nonce, string $action): int|false { return $GLO
 function get_current_user_id(): int { return 77; }
 function current_time(string $type, bool $gmt = false): string { return '2026-07-22 12:00:00'; }
 function wp_json_encode(mixed $value, int $flags = 0): string|false { return json_encode($value, $flags); }
+function wp_unslash(mixed $value): mixed { return is_array($value) ? array_map('wp_unslash', $value) : (is_string($value) ? stripslashes($value) : $value); }
+function admin_wp_slash(mixed $value): mixed { return is_array($value) ? array_map('admin_wp_slash', $value) : (is_string($value) ? addslashes($value) : $value); }
 function __(string $value, string $domain = ''): string { return $value; }
 function esc_html(string $value): string { return htmlspecialchars($value, ENT_QUOTES); }
 function esc_attr(string $value): string { return htmlspecialchars($value, ENT_QUOTES); }
@@ -319,6 +321,13 @@ admin_assert(($guidedSettings['setup']['draft_summary']['version']??'')==='guide
 admin_assert(str_contains($guidedQueries,'cf7aiv-policy/v2')&&str_contains($guidedQueries,'Conversion optimisation')&&str_contains($guidedQueries,'Web design')&&!str_contains($guidedQueries,"status='published'"),'Guided values and accepted safe suggestions must be validated into a v2 draft without silent publication.');
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$guidedPolicyPage=ob_get_clean();
 admin_assert(str_contains($guidedPolicyPage,'Publish reviewed draft')&&str_contains($guidedPolicyPage,'value="guided-v1"')&&str_contains($guidedPolicyPage,'cf7aiv_policy_publish'),'Simple Policy Lab must provide an explicit guarded publish action for its saved draft summary.');
+$GLOBALS['wpdb']->queries=[];
+$slashedPolicy=(new CF7AIV\Classification\PolicyPackRegistry())->get('training_education');
+admin_assert(is_array($slashedPolicy),'The Training and Education starter policy must be available for admin import coverage.');
+$_POST=admin_wp_slash(['_wpnonce'=>'nonce','policy_key'=>'form:6262','version'=>'slash-v1','policy_json'=>json_encode($slashedPolicy,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
+CF7AIV\Admin\AdminHooks::policyImport();unset($_POST);
+$slashedPolicyQueries=json_encode($GLOBALS['wpdb']->queries,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+admin_assert(str_contains($slashedPolicyQueries,'form:6262')&&str_contains($slashedPolicyQueries,'training_education')&&str_contains((string)($GLOBALS['admin_redirect']??''),'page=cf7aiv-policy'),'Advanced policy import must recursively unslash normal WordPress admin POST data before decoding JSON.');
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['automation']['verification_mode']='automatic_candidates';
 $_POST=['_wpnonce'=>'nonce','cf7aiv'=>['automation'=>['verification_mode'=>'off']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
 admin_assert($GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['automation']['verification_mode']==='off','Submitting a capable provider form with verification unchecked must persist off.');
