@@ -24,22 +24,33 @@ namespace {
 	function consent_assert(bool $condition, string $message): void {
 		if (! $condition) { $GLOBALS['consentFailures'][] = $message; }
 	}
-	function consent_navigation(array $query, array $cookies = []): void {
+	function consent_navigation(array $query, array $cookies = [], array $serverOverrides = []): void {
 		unset($GLOBALS['cookie_write']);
 		$_COOKIE = $cookies;
 		$_GET = $query;
-		$_SERVER = [
+		$_SERVER = array_replace([
 			'REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.test',
 			'REQUEST_URI' => '/contact/?' . http_build_query($query),
 			'HTTP_ACCEPT' => 'text/html', 'HTTP_SEC_FETCH_MODE' => 'navigate',
 			'HTTP_SEC_FETCH_DEST' => 'document', 'HTTPS' => 'on',
 			'HTTP_REFERER' => 'https://search.example/results',
-		];
+		], $serverOverrides);
 		CF7AIV\Intake\AttributionCookie::serverFallback();
 	}
 	function consent_payload(): array {
 		$write = $GLOBALS['cookie_write'] ?? null;
 		return is_array($write) ? (json_decode($write['value'] ?? '', true) ?: []) : [];
+	}
+	function consent_cookie_expired(): bool {
+		$write = $GLOBALS['cookie_write'] ?? null;
+		return is_array($write)
+			&& ($write['name'] ?? '') === CF7AIV\Intake\AttributionCookie::NAME
+			&& ($write['value'] ?? null) === ''
+			&& (int) ($write['options']['expires'] ?? 0) < time()
+			&& ($write['options']['path'] ?? '') === '/'
+			&& ($write['options']['secure'] ?? null) === true
+			&& ($write['options']['httponly'] ?? null) === false
+			&& ($write['options']['samesite'] ?? '') === 'Lax';
 	}
 
 	// This runs before the WordPress Consent API is made available below: no
@@ -61,6 +72,17 @@ namespace {
 	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => true];
 	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source']);
 	consent_assert(! isset($GLOBALS['cookie_write']), 'A permissive WordPress Consent API with no known consent type must not write the server fallback cookie.');
+	$gcmFallbackCookie = json_encode([
+		'analytics_storage' => 'granted', 'ad_storage' => 'denied',
+		'utm_source' => 'stored-gcm-source',
+	]);
+	consent_navigation([], [CF7AIV\Intake\AttributionCookie::NAME => $gcmFallbackCookie]);
+	consent_assert((consent_payload()['utm_source'] ?? '') === 'stored-gcm-source', 'Known stored Google consent must remain the server fallback when WordPress authority is unqualified.');
+
+	$GLOBALS['consent_type'] = 'optout';
+	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => true];
+	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source']);
+	consent_assert(! isset($GLOBALS['cookie_write']), 'WordPress opt-out defaults must not authorize strict opt-in server attribution storage.');
 
 	$GLOBALS['consent_type'] = 'optin';
 	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => true];
@@ -142,6 +164,11 @@ namespace {
 	$GLOBALS['consent_categories'] = ['statistics' => false, 'marketing' => false];
 	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source']);
 	consent_assert(! isset($GLOBALS['cookie_write']), 'Denied consent must not write the server fallback attribution cookie.');
+	consent_navigation(
+		['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source'],
+		[CF7AIV\Intake\AttributionCookie::NAME => json_encode(['gclid' => 'stale_CLICK-123', 'utm_source' => 'stale-source'])]
+	);
+	consent_assert(consent_cookie_expired(), 'Denied consent must expire an existing attribution cookie with matching cookie attributes.');
 
 	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => false];
 	$staleFullConsent = json_encode(['gclid' => 'persisted_GOOGLE-456', 'gbraid' => 'PERSISTEDGBRAID123', 'wbraid' => 'PERSISTEDWBRAID123', 'msclkid' => 'fedcba9876543210fedcba9876543210', 'utm_source' => 'persisted-source', 'first_landing_page' => 'https://example.test/?gclid=persisted_GOOGLE-456', 'current_page' => 'https://example.test/?gbraid=PERSISTEDGBRAID123', 'referrer' => 'https://search.example/results']);
@@ -150,12 +177,47 @@ namespace {
 	consent_assert(($statisticsPayload['utm_source'] ?? '') === 'fresh-source', 'Statistics consent must retain UTM attribution.');
 	consent_assert(($statisticsPayload['first_landing_page'] ?? '') === 'https://example.test/contact/?utm_source=fresh-source&utm_campaign=summer-care' && ($statisticsPayload['current_page'] ?? '') === 'https://example.test/contact/?utm_source=fresh-source&utm_campaign=summer-care', 'Statistics consent must retain click-ID-sanitized landing and current URLs.');
 	consent_assert(! isset($statisticsPayload['gclid']) && ! isset($statisticsPayload['gbraid']) && ! isset($statisticsPayload['wbraid']) && ! isset($statisticsPayload['msclkid']), 'Statistics-only consent must strip advertising click identifiers.');
+	consent_navigation(
+		['utm_source' => 'paid search'],
+		[],
+		[
+			'REQUEST_URI' => '/contact/?GCLID=%43LICK123&%67braid=GBRAID123&utm_source=paid%20search#step?WbRaId=WBRAID123&view=details',
+			'HTTP_REFERER' => 'https://search.example/results?%6Dsclkid=0123456789abcdef0123456789abcdef&q=care#results?ZC_GAD=CLICK123&page=2',
+		]
+	);
+	$sanitizedPayload = consent_payload();
+	consent_assert(($sanitizedPayload['current_page'] ?? '') === 'https://example.test/contact/?utm_source=paid%20search#step?view=details', 'Server statistics URLs must remove mixed-case and encoded click-ID names from queries and query-like fragments.');
+	consent_assert(($sanitizedPayload['referrer'] ?? '') === 'https://search.example/results?q=care#results?page=2', 'Server referrers must remove encoded click-ID names and query-like fragment identifiers.');
+	$unsafeStored = json_encode([
+		'first_landing_page' => 'not a valid absolute URL',
+		'referrer' => 'https://search.example/results?utm_source=%E0%A4%A',
+	]);
+	consent_navigation(
+		['utm_source' => 'care'],
+		[CF7AIV\Intake\AttributionCookie::NAME => $unsafeStored],
+		['HTTP_REFERER' => null]
+	);
+	$unsafeFiltered = consent_payload();
+	consent_assert(($unsafeFiltered['first_landing_page'] ?? '') === 'https://example.test/contact/?utm_source=care', 'Unsafe stored landing URLs must be dropped and replaced with the safe current landing.');
+	consent_assert(! isset($unsafeFiltered['referrer']), 'Stored URLs with unsafe percent decoding must be dropped entirely by the server sanitizer.');
+	consent_navigation(
+		[],
+		[CF7AIV\Intake\AttributionCookie::NAME => json_encode(['gclid' => 'stale_CLICK-123'])],
+		['HTTP_HOST' => null, 'HTTP_REFERER' => null]
+	);
+	consent_assert(consent_cookie_expired(), 'Statistics-only downgrade filtering to no values must expire the stale attribution cookie.');
 
 	$GLOBALS['consent_categories'] = ['statistics' => false, 'marketing' => true];
 	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source', 'utm_campaign' => 'summer-care'], [CF7AIV\Intake\AttributionCookie::NAME => $staleFullConsent]);
 	$marketingPayload = consent_payload();
 	consent_assert(($marketingPayload['gclid'] ?? '') === 'fresh_GOOGLE-123', 'Marketing consent must retain valid advertising click identifiers.');
 	consent_assert(! isset($marketingPayload['utm_source'], $marketingPayload['utm_campaign'], $marketingPayload['first_landing_page'], $marketingPayload['current_page'], $marketingPayload['referrer']), 'Marketing-only consent must strip analytics and navigation attribution.');
+	consent_navigation(
+		[],
+		[CF7AIV\Intake\AttributionCookie::NAME => json_encode(['utm_source' => 'stale-source'])],
+		['HTTP_HOST' => null, 'HTTP_REFERER' => null]
+	);
+	consent_assert(consent_cookie_expired(), 'Marketing-only downgrade filtering to no values must expire the stale attribution cookie.');
 
 	$GLOBALS['consent_categories'] = ['statistics' => true, 'marketing' => true];
 	consent_navigation(['gclid' => 'fresh_GOOGLE-123', 'utm_source' => 'fresh-source', 'utm_campaign' => 'summer-care']);

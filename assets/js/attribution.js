@@ -19,7 +19,8 @@
 	function readCookie(name) {
 		var prefix = name + '=';
 		var part = document.cookie.split('; ').find(function (item) { return item.indexOf(prefix) === 0; });
-		return part ? decodeURIComponent(part.slice(prefix.length)) : '';
+		if (!part) return '';
+		try { return decodeURIComponent(part.slice(prefix.length)); } catch (e) { return ''; }
 	}
 	function readStored() {
 		var raw = '';
@@ -47,10 +48,10 @@
 		document.cookie = storageName + '=;path=/;Max-Age=0;SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
 		clearAllFields();
 	}
-	function knownConsentType(value) {
+	function explicitOptInType(value) {
 		if (typeof value !== 'string') return false;
 		value = value.toLowerCase().replace(/[-_\s]/g, '');
-		return value === 'optin' || value === 'optout';
+		return value === 'optin';
 	}
 	function googleConsentMode() {
 		var mode = {};
@@ -66,15 +67,14 @@
 	function consentState() {
 		if (typeof window.wp_has_consent === 'function') {
 			try {
-				if (typeof window.wp_get_consent_type !== 'function' || !knownConsentType(window.wp_get_consent_type())) {
-					return { statistics: false, marketing: false, source: 'wordpress' };
+				if (typeof window.wp_get_consent_type === 'function' && explicitOptInType(window.wp_get_consent_type())) {
+					return {
+						statistics: window.wp_has_consent('statistics') === true,
+						marketing: window.wp_has_consent('marketing') === true,
+						source: 'wordpress',
+					};
 				}
-				return {
-					statistics: window.wp_has_consent('statistics') === true,
-					marketing: window.wp_has_consent('marketing') === true,
-					source: 'wordpress',
-				};
-			} catch (e) { return { statistics: false, marketing: false, source: 'wordpress' }; }
+			} catch (e) {}
 		}
 		var mode = googleConsentMode();
 		return {
@@ -84,25 +84,72 @@
 			mode: mode,
 		};
 	}
-	function hasClickParameter(value) {
-		try {
-			var url = new URL(value);
-			return clickKeys.concat(['zc_gad']).some(function (key) { return url.searchParams.has(key); });
-		} catch (e) { return false; }
+	function decodeUrlPart(value) {
+		if (/%(?![0-9a-f]{2})/i.test(value)) return null;
+		try { return decodeURIComponent(value.replace(/\+/g, ' ')); } catch (e) { return null; }
 	}
-	function withoutClickParameters(value) {
+	function sanitizeParameters(value) {
+		var kept = [];
+		var hadClick = false;
+		var identifiers = clickKeys.concat(['zc_gad']);
+		if (!value) return { value: '', hadClick: false };
+		for (var index = 0; index < value.split('&').length; index++) {
+			var part = value.split('&')[index];
+			var separator = part.indexOf('=');
+			var rawName = separator === -1 ? part : part.slice(0, separator);
+			var rawValue = separator === -1 ? '' : part.slice(separator + 1);
+			var name = decodeUrlPart(rawName);
+			if (name === null || decodeUrlPart(rawValue) === null) return null;
+			if (identifiers.indexOf(name.toLowerCase()) !== -1) {
+				hadClick = true;
+				continue;
+			}
+			kept.push(part);
+		}
+		return { value: kept.join('&'), hadClick: hadClick };
+	}
+	function sanitizeFragment(value) {
+		if (!value) return { value: '', hadClick: false };
+		var question = value.indexOf('?');
+		var prefix = '';
+		var parameters = '';
+		if (question !== -1) {
+			prefix = value.slice(0, question);
+			parameters = value.slice(question + 1);
+			if (decodeUrlPart(prefix) === null) return null;
+		} else if (value.indexOf('=') !== -1) {
+			parameters = value;
+		} else {
+			return decodeUrlPart(value) === null ? null : { value: value, hadClick: false };
+		}
+		var sanitized = sanitizeParameters(parameters);
+		if (!sanitized) return null;
+		return {
+			value: prefix + (sanitized.value ? '?' + sanitized.value : ''),
+			hadClick: sanitized.hadClick,
+		};
+	}
+	function sanitizeUrl(value) {
+		if (typeof value !== 'string' || /[\u0000-\u001f\u007f]/.test(value)) return null;
 		try {
 			var url = new URL(value);
-			clickKeys.concat(['zc_gad']).forEach(function (key) { url.searchParams.delete(key); });
-			return url.toString();
-		} catch (e) { return value; }
+			if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || decodeUrlPart(url.pathname) === null) return null;
+			var query = sanitizeParameters(url.search.slice(1));
+			var fragment = sanitizeFragment(url.hash.slice(1));
+			if (!query || !fragment) return null;
+			url.search = query.value ? '?' + query.value : '';
+			url.hash = fragment.value ? '#' + fragment.value : '';
+			return { value: url.toString(), hadClick: query.hadClick || fragment.hadClick };
+		} catch (e) { return null; }
 	}
 	function filterStored(values, consent) {
 		if (!consent.marketing) {
 			clickKeys.forEach(function (key) { delete values[key]; });
-			if (hasClickParameter(values.first_landing_page || '')) delete values.first_landing_page;
-			['current_page', 'referrer'].forEach(function (key) {
-				if (values[key]) values[key] = withoutClickParameters(values[key]);
+			['first_landing_page', 'current_page', 'referrer'].forEach(function (key) {
+				if (!values[key]) return;
+				var sanitized = sanitizeUrl(values[key]);
+				if (!sanitized || (key === 'first_landing_page' && sanitized.hadClick)) delete values[key];
+				else values[key] = sanitized.value;
 			});
 		}
 		if (!consent.statistics) {
@@ -116,7 +163,9 @@
 		if (ga) result.ga_client_id = ga[1];
 		document.cookie.split('; ').some(function (part) {
 			if (part.indexOf('_ga_') !== 0) return false;
-			var match = decodeURIComponent(part.split('=').slice(1).join('=')).match(/(?:^|\.)s(\d{6,20})(?:\.|$)/);
+			var decoded = '';
+			try { decoded = decodeURIComponent(part.split('=').slice(1).join('=')); } catch (e) { return false; }
+			var match = decoded.match(/(?:^|\.)s(\d{6,20})(?:\.|$)/);
 			if (match) result.ga_session_id = match[1];
 			return !!match;
 		});
@@ -154,10 +203,16 @@
 			utmKeys.forEach(function (key) {
 				if (params.has(key)) stored[key] = (params.get(key) || '').slice(0, 512);
 			});
-			var current = consent.marketing ? location.href.slice(0, 2048) : withoutClickParameters(location.href).slice(0, 2048);
-			if (!stored.first_landing_page) stored.first_landing_page = current;
-			stored.current_page = current;
-			if (!stored.referrer && document.referrer) stored.referrer = withoutClickParameters(document.referrer).slice(0, 2048);
+			var currentUrl = consent.marketing ? { value: location.href.slice(0, 2048) } : sanitizeUrl(location.href);
+			if (currentUrl) {
+				var current = currentUrl.value.slice(0, 2048);
+				if (!stored.first_landing_page) stored.first_landing_page = current;
+				stored.current_page = current;
+			}
+			if (!stored.referrer && document.referrer) {
+				var referrer = sanitizeUrl(document.referrer);
+				if (referrer) stored.referrer = referrer.value.slice(0, 2048);
+			}
 			Object.assign(stored, gaIdentity());
 		}
 		captureConsent(stored, consent);

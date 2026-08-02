@@ -42,7 +42,7 @@ function makeHarness(options = {}) {
 		removeItem: (key) => stored.delete(key),
 	};
 	global.document = {
-		referrer: 'https://search.example/results',
+		referrer: Object.prototype.hasOwnProperty.call(options, 'referrer') ? options.referrer : 'https://search.example/results',
 		addEventListener: (name, callback) => { (listeners[name] ||= []).push(callback); },
 		querySelectorAll: (selector) => selector === '.wpcf7 form' ? [form] : [],
 	};
@@ -97,7 +97,8 @@ const fields = {
 }
 
 // wp_has_consent is permissive when the Consent API has no configured type;
-// function presence alone must not authorize attribution storage.
+// function presence alone must not authorize attribution storage without a
+// known Google Consent Mode fallback.
 {
 	const page = makeHarness({
 		wpHasConsent: () => true,
@@ -105,6 +106,27 @@ const fields = {
 	});
 	page.emit('DOMContentLoaded');
 	check(page.payload() === null && !page.hasCookie(), 'an installed WordPress Consent API with no known consent type must not persist attribution');
+}
+
+{
+	const page = makeHarness({
+		wpHasConsent: () => true,
+		dataLayer: consent(true, true),
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.gclid === 'TESTCLICK123' && payload.utm_source === 'paid-search', 'known Google consent must remain the fallback when WordPress consent authority is unqualified');
+}
+
+{
+	const page = makeHarness({
+		wpConsentType: 'optout',
+		wpHasConsent: () => true,
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(page.payload() === null && !page.hasCookie(), 'WordPress opt-out defaults must not authorize strict opt-in attribution storage');
 }
 
 // A collector that reuses stale storage after a denied branch must fail this case.
@@ -129,6 +151,64 @@ const fields = {
 	check(payload.utm_source === 'paid-search' && payload.first_landing_page === 'https://example.test/landing/?utm_source=paid-search&utm_campaign=care' && payload.current_page === 'https://example.test/landing/?utm_source=paid-search&utm_campaign=care' && payload.referrer === 'https://search.example/results', 'statistics consent must retain UTM, referrer, and click-ID-sanitized landing URLs');
 	check(payload.ga_client_id === '123456789.1234567890' && payload.ga_session_id === '1234567890', 'statistics consent must retain GA client and session identifiers');
 	check(!('gclid' in payload) && !('gbraid' in payload) && !('wbraid' in payload) && !('msclkid' in payload), 'statistics-only consent must exclude advertising click identifiers');
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		search: '?GCLID=TESTCLICK123&%67braid=GBRAID123&utm_source=paid%20search',
+		href: 'https://example.test/landing/?GCLID=TESTCLICK123&%67braid=GBRAID123&utm_source=paid%20search#step?WbRaId=WBRAID123&view=details',
+		referrer: 'https://search.example/results?%6Dsclkid=0123456789abcdef0123456789abcdef&q=care#results?ZC_GAD=TESTCLICK123&page=2',
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.current_page === 'https://example.test/landing/?utm_source=paid%20search#step?view=details', 'statistics URLs must remove mixed-case and encoded click-ID names from queries and query-like fragments');
+	check(payload.referrer === 'https://search.example/results?q=care#results?page=2', 'statistics referrers must remove encoded click-ID names and query-like fragment identifiers');
+}
+
+{
+	const stale = JSON.stringify({
+		first_landing_page: 'not a valid absolute URL',
+		referrer: 'https://search.example/results?utm_source=%E0%A4%A',
+	});
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		storage: { cf7aiv_attribution: stale },
+		referrer: '',
+		href: 'https://example.test/safe/?utm_source=care',
+		search: '?utm_source=care',
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.first_landing_page === 'https://example.test/safe/?utm_source=care', 'unsafe stored landing URLs must be dropped instead of surviving consent filtering');
+	check(!('referrer' in payload), 'stored URLs with unsafe percent decoding must be dropped entirely');
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		cookies: { cf7aiv_attribution: '%E0%A4%A' },
+		fields,
+	});
+	let threw = false;
+	try { page.emit('DOMContentLoaded'); } catch (error) { threw = true; }
+	check(!threw && page.payload() !== null, 'malformed plugin cookie encoding must be treated as absent without aborting collection');
+}
+
+foreachMalformedGaCookie([
+	{ _ga: '%E0%A4%A' },
+	{ _ga_CONTAINER: '%E0%A4%A' },
+]);
+
+function foreachMalformedGaCookie(cases) {
+	cases.forEach((cookies) => {
+		const page = makeHarness({ dataLayer: consent(true, false), cookies, fields });
+		let threw = false;
+		try { page.emit('DOMContentLoaded'); } catch (error) { threw = true; }
+		check(!threw && page.payload() !== null, 'malformed GA cookie encoding must be treated as absent without aborting collection');
+	});
 }
 
 {

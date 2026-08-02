@@ -15,29 +15,37 @@ final class AttributionCookie {
 			|| (defined('DOING_AJAX') && DOING_AJAX)
 			|| (function_exists('wp_doing_ajax') && wp_doing_ajax())
 			|| (function_exists('is_feed') && is_feed())) { return; }
+		$persisted = self::storedCookieValues($_COOKIE);
+		$google = array_intersect_key($persisted, array_flip(['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization']));
 		$consent = self::resolveConsentState(
 			function_exists('wp_get_consent_type') ? wp_get_consent_type() : null,
 			function_exists('wp_has_consent') ? (bool) wp_has_consent('statistics') : null,
-			function_exists('wp_has_consent') ? (bool) wp_has_consent('marketing') : null
+			function_exists('wp_has_consent') ? (bool) wp_has_consent('marketing') : null,
+			$google
 		);
-		if (! $consent['statistics'] && ! $consent['marketing']) { return; }
-		$values = self::filterByConsent(self::buildServerValues($_GET, $_COOKIE, $_SERVER), $consent);
-		if ($values === []) { return; }
+		if (! $consent['statistics'] && ! $consent['marketing']) { self::expireExistingCookie(); return; }
+		$values = self::filterByConsent(self::mergeValues($_GET, $persisted, $_SERVER), $consent);
+		if ($values === []) { self::expireExistingCookie(); return; }
 		$settings = function_exists('get_option') ? (array) get_option(Settings::OPTION, []) : [];
 		$days = max(1, min(365, (int) ($settings['attribution']['retention_days'] ?? 90)));
-		setcookie(self::NAME, self::rawCookieJson($values), [
-			'expires' => time() + ($days * DAY_IN_SECONDS), 'path' => '/',
-			'secure' => function_exists('is_ssl') && is_ssl(), 'httponly' => false, 'samesite' => 'Lax',
-		]);
+		setcookie(self::NAME, self::rawCookieJson($values), self::cookieOptions(time() + ($days * DAY_IN_SECONDS)));
 	}
 
 	/** @return array{statistics: bool, marketing: bool} */
-	public static function resolveConsentState(mixed $consentType, ?bool $statistics, ?bool $marketing): array {
-		if (! is_string($consentType)) { return ['statistics' => false, 'marketing' => false]; }
+	public static function resolveConsentState(mixed $consentType, ?bool $statistics, ?bool $marketing, array $google = []): array {
+		$wordpress = self::resolveWordPressConsent($consentType, $statistics, $marketing);
+		if ($wordpress !== null) { return $wordpress; }
+		return [
+			'statistics' => self::granted($google['analytics_storage'] ?? null),
+			'marketing' => self::granted($google['ad_storage'] ?? null),
+		];
+	}
+
+	/** @return array{statistics: bool, marketing: bool}|null */
+	public static function resolveWordPressConsent(mixed $consentType, ?bool $statistics, ?bool $marketing): ?array {
+		if (! is_string($consentType)) { return null; }
 		$normalized = preg_replace('/[-_\s]/', '', strtolower(trim($consentType))) ?? '';
-		if (! in_array($normalized, ['optin', 'optout'], true)) {
-			return ['statistics' => false, 'marketing' => false];
-		}
+		if ($normalized !== 'optin') { return null; }
 		return ['statistics' => $statistics === true, 'marketing' => $marketing === true];
 	}
 
@@ -74,15 +82,7 @@ final class AttributionCookie {
 	 * @return array<string, string>
 	 */
 	public static function buildServerValues(array $query, array $cookies, array $server): array {
-		$persisted = [];
-		if (isset($cookies[self::NAME]) && is_string($cookies[self::NAME])) {
-			// PHP normally exposes the single-decoded value. The second attempt
-			// only upgrades cookies written by the earlier double-encoded build.
-			$decoded = json_decode($cookies[self::NAME], true);
-			if (! is_array($decoded)) { $decoded = json_decode(rawurldecode($cookies[self::NAME]), true); }
-			$persisted = is_array($decoded) ? $decoded : [];
-		}
-		return self::mergeValues($query, $persisted, $server);
+		return self::mergeValues($query, self::storedCookieValues($cookies), $server);
 	}
 
 	/** @param array<string, string> $values */
@@ -152,11 +152,11 @@ final class AttributionCookie {
 	private static function filterByConsent(array $values, array $consent): array {
 		if (! $consent['marketing']) {
 			foreach (IdentifierValidator::CLICK_KEYS as $key) { unset($values[$key]); }
-			if (isset($values['first_landing_page']) && self::hasClickParameter($values['first_landing_page'])) {
-				unset($values['first_landing_page']);
-			}
-			foreach (['current_page', 'referrer'] as $key) {
-				if (isset($values[$key])) { $values[$key] = self::withoutClickParameters($values[$key]); }
+			foreach (['first_landing_page', 'current_page', 'referrer'] as $key) {
+				if (! isset($values[$key])) { continue; }
+				$sanitized = self::sanitizeUrl($values[$key]);
+				if ($sanitized === null || ($key === 'first_landing_page' && $sanitized['had_click'])) { unset($values[$key]); }
+				else { $values[$key] = $sanitized['value']; }
 			}
 			if (! isset($values['first_landing_page']) && isset($values['current_page'])) {
 				$values['first_landing_page'] = $values['current_page'];
@@ -171,19 +171,90 @@ final class AttributionCookie {
 		return $values;
 	}
 
-	private static function hasClickParameter(string $value): bool {
-		$query = parse_url($value, PHP_URL_QUERY);
-		if (! is_string($query) || $query === '') { return false; }
-		parse_str($query, $parameters);
-		return array_intersect(array_merge(IdentifierValidator::CLICK_KEYS, ['zc_gad']), array_keys($parameters)) !== [];
+	/** @param array<string, mixed> $cookies @return array<string, mixed> */
+	private static function storedCookieValues(array $cookies): array {
+		if (! isset($cookies[self::NAME]) || ! is_string($cookies[self::NAME])) { return []; }
+		try {
+			$decoded = json_decode($cookies[self::NAME], true);
+			if (! is_array($decoded)) { $decoded = json_decode(rawurldecode($cookies[self::NAME]), true); }
+			return is_array($decoded) ? $decoded : [];
+		} catch (\Throwable) { return []; }
 	}
 
-	private static function withoutClickParameters(string $value): string {
-		$parts = parse_url($value);
-		if (! is_array($parts)) { return $value; }
-		$parameters = [];
-		if (isset($parts['query'])) { parse_str((string) $parts['query'], $parameters); }
-		foreach (array_merge(IdentifierValidator::CLICK_KEYS, ['zc_gad']) as $key) { unset($parameters[$key]); }
+	private static function expireExistingCookie(): void {
+		if (! isset($_COOKIE[self::NAME])) { return; }
+		setcookie(self::NAME, '', self::cookieOptions(time() - DAY_IN_SECONDS));
+	}
+
+	/** @return array{expires:int,path:string,secure:bool,httponly:bool,samesite:string} */
+	private static function cookieOptions(int $expires): array {
+		return [
+			'expires' => $expires, 'path' => '/',
+			'secure' => function_exists('is_ssl') && is_ssl(), 'httponly' => false, 'samesite' => 'Lax',
+		];
+	}
+
+	private static function granted(mixed $value): bool {
+		return is_scalar($value) && strtolower(trim((string) $value)) === 'granted';
+	}
+
+	private static function decodeUrlPart(string $value): ?string {
+		if (preg_match('/%(?![0-9A-Fa-f]{2})/', $value) === 1) { return null; }
+		$decoded = rawurldecode(str_replace('+', ' ', $value));
+		return preg_match('//u', $decoded) === 1 ? $decoded : null;
+	}
+
+	/** @return array{value:string,had_click:bool}|null */
+	private static function sanitizeParameters(string $value): ?array {
+		if ($value === '') { return ['value' => '', 'had_click' => false]; }
+		$kept = [];
+		$hadClick = false;
+		$identifiers = array_merge(IdentifierValidator::CLICK_KEYS, ['zc_gad']);
+		foreach (explode('&', $value) as $part) {
+			$separator = strpos($part, '=');
+			$rawName = $separator === false ? $part : substr($part, 0, $separator);
+			$rawValue = $separator === false ? '' : substr($part, $separator + 1);
+			$name = self::decodeUrlPart($rawName);
+			if ($name === null || self::decodeUrlPart($rawValue) === null) { return null; }
+			if (in_array(strtolower($name), $identifiers, true)) { $hadClick = true; continue; }
+			$kept[] = $part;
+		}
+		return ['value' => implode('&', $kept), 'had_click' => $hadClick];
+	}
+
+	/** @return array{value:string,had_click:bool}|null */
+	private static function sanitizeFragment(string $value): ?array {
+		if ($value === '') { return ['value' => '', 'had_click' => false]; }
+		$question = strpos($value, '?');
+		$prefix = '';
+		if ($question !== false) {
+			$prefix = substr($value, 0, $question);
+			$parameters = substr($value, $question + 1);
+			if (self::decodeUrlPart($prefix) === null) { return null; }
+		} elseif (str_contains($value, '=')) {
+			$parameters = $value;
+		} else {
+			return self::decodeUrlPart($value) === null ? null : ['value' => $value, 'had_click' => false];
+		}
+		$sanitized = self::sanitizeParameters($parameters);
+		if ($sanitized === null) { return null; }
+		return [
+			'value' => $prefix . ($sanitized['value'] !== '' ? '?' . $sanitized['value'] : ''),
+			'had_click' => $sanitized['had_click'],
+		];
+	}
+
+	/** @return array{value:string,had_click:bool}|null */
+	private static function sanitizeUrl(string $value): ?array {
+		if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) { return null; }
+		try { $parts = parse_url($value); } catch (\Throwable) { return null; }
+		if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])
+			|| ! in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)
+			|| (string) $parts['host'] === ''
+			|| self::decodeUrlPart((string) ($parts['path'] ?? '')) === null) { return null; }
+		$query = self::sanitizeParameters((string) ($parts['query'] ?? ''));
+		$fragment = self::sanitizeFragment((string) ($parts['fragment'] ?? ''));
+		if ($query === null || $fragment === null) { return null; }
 		$scheme = isset($parts['scheme']) ? $parts['scheme'] . '://' : '';
 		$user = $parts['user'] ?? '';
 		$pass = isset($parts['pass']) ? ':' . $parts['pass'] : '';
@@ -191,9 +262,12 @@ final class AttributionCookie {
 		$host = $parts['host'] ?? '';
 		$port = isset($parts['port']) ? ':' . $parts['port'] : '';
 		$path = $parts['path'] ?? '';
-		$query = $parameters !== [] ? '?' . http_build_query($parameters) : '';
-		$fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
-		return self::limit($scheme . $auth . $host . $port . $path . $query . $fragment, 2048);
+		$queryString = $query['value'] !== '' ? '?' . $query['value'] : '';
+		$fragmentString = $fragment['value'] !== '' ? '#' . $fragment['value'] : '';
+		return [
+			'value' => self::limit($scheme . $auth . $host . $port . $path . $queryString . $fragmentString, 2048),
+			'had_click' => $query['had_click'] || $fragment['had_click'],
+		];
 	}
 
 	private static function isUrlKey(string $key): bool {
