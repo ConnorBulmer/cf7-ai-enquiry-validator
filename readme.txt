@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.2.4
+Stable tag: 0.2.5
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,11 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.5 =
+* Prevents test logging from creating repository artifacts on Linux release runners.
+* Rejects Windows-unsafe or reserved archive path components, including device names, trailing dots/spaces, and alternate data stream colons.
+* Adds a post-build release check for one canonical plugin root with no unsafe archive entries.
 
 = 0.2.4 =
 * Stores public attribution only when a configured WordPress Consent API grant or Google Consent Mode fallback proves the relevant category.

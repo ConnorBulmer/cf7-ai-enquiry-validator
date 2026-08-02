@@ -66,6 +66,7 @@ final class ReleasePackager {
 			if ($item instanceof \SplFileInfo && $item->isFile()) {
 				$relative = self::relative($resolvedRoot, $item->getPathname());
 				if (! self::excluded($relative, false)) {
+					self::assertSafeArchivePath($relative);
 					$files[] = $relative;
 				}
 			}
@@ -165,7 +166,7 @@ final class ReleasePackager {
 		}
 	}
 
-	private static function verifyArchive(string $zipPath, int $expectedEntries): void {
+	public static function verifyArchive(string $zipPath, int $expectedEntries): void {
 		$archive = new ZipArchive();
 		if ($archive->open($zipPath) !== true) {
 			throw new RuntimeException('Generated release ZIP could not be reopened.');
@@ -180,6 +181,7 @@ final class ReleasePackager {
 				if (! is_string($name) || ! str_starts_with($name, self::SLUG . '/') || str_contains($name, '\\')) {
 					throw new RuntimeException('Generated release ZIP has an invalid entry path.');
 				}
+				self::assertSafeArchivePath($name);
 				if ($name === self::SLUG . '/' . self::MAIN_FILE) {
 					$hasMain = true;
 				}
@@ -189,6 +191,25 @@ final class ReleasePackager {
 			}
 		} finally {
 			$archive->close();
+		}
+	}
+
+	private static function assertSafeArchivePath(string $path): void {
+		$components = explode('/', str_replace('\\', '/', $path));
+		foreach ($components as $component) {
+			if (
+				$component === ''
+				|| $component === '.'
+				|| $component === '..'
+				|| preg_match('/[. ]$/D', $component) === 1
+				|| preg_match('/[<>:"|?*\x00-\x1F]/', $component) === 1
+			) {
+				throw new RuntimeException("Release archive path contains a Windows-unsafe component: {$path}");
+			}
+			$deviceBase = strtoupper(rtrim(explode('.', $component, 2)[0], '. '));
+			if (preg_match('/^(?:CON|PRN|AUX|NUL|(?:COM|LPT)(?:[1-9]|\x{00B9}|\x{00B2}|\x{00B3}))$/uD', $deviceBase) === 1) {
+				throw new RuntimeException("Release archive path contains a Windows-unsafe component: {$path}");
+			}
 		}
 	}
 
