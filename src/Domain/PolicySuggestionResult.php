@@ -28,8 +28,16 @@ final class PolicySuggestionResult {
 		return new self(array_values(array_filter($value['suggestions'], 'is_array')));
 	}
 
-	/** @return array<string,mixed> */
-	public static function jsonSchema(): array {
+	/** @param list<string> $allowedSourceRefs @return array<string,mixed> */
+	public static function jsonSchema(array $allowedSourceRefs = []): array {
+		$sourceRefItems = ['type' => 'string', 'maxLength' => 120];
+		$normalizedSourceRefs = [];
+		foreach ($allowedSourceRefs as $sourceRef) {
+			if (! is_string($sourceRef) || preg_match('/\A(?:pack:[A-Za-z0-9_\-]{1,100}|(?:page|form):[1-9][0-9]*)\z/', $sourceRef) !== 1) { continue; }
+			$normalizedSourceRefs[] = $sourceRef;
+		}
+		$normalizedSourceRefs = array_values(array_unique($normalizedSourceRefs));
+		if ($normalizedSourceRefs !== []) { $sourceRefItems['enum'] = $normalizedSourceRefs; }
 		return [
 			'type' => 'object',
 			'additionalProperties' => false,
@@ -47,7 +55,7 @@ final class PolicySuggestionResult {
 							['type' => 'string', 'maxLength' => 500],
 							['type' => 'object', 'additionalProperties' => false, 'required' => ['field', 'meaning'], 'properties' => ['field' => ['type' => 'string', 'maxLength' => 100], 'meaning' => ['type' => 'string', 'maxLength' => 300]]],
 						]],
-						'source_refs' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 10, 'items' => ['type' => 'string', 'maxLength' => 120]],
+						'source_refs' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 10, 'items' => $sourceRefItems],
 					],
 				],
 			]],

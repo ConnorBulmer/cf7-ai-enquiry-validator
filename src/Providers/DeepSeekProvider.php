@@ -26,7 +26,7 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	public function key(): string { return 'deepseek'; }
 
 	public function suggestPolicy(PolicySuggestionRequest $request): PolicySuggestionResult {
-		$schema = json_encode(PolicySuggestionResult::jsonSchema(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		$schema = json_encode(PolicySuggestionResult::jsonSchema($request->allowedSourceRefs()), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		$payload = [
 			'model' => $this->model,
 			'messages' => [

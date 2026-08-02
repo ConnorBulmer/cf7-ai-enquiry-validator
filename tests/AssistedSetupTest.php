@@ -302,13 +302,27 @@ foreach (['openai', 'deepseek'] as $providerKey) {
 	$result = $actualProvider->suggestPolicy($taintedRequest);
 	setup_assert(count($result->suggestions) === 1, ucfirst($providerKey) . ' must parse setup suggestions.');
 	$wire = (string) ($transport->requests[0]['arguments']['body'] ?? '');
+	$wirePayload = json_decode($wire, true, 64, JSON_THROW_ON_ERROR);
 	foreach (['Ada Person', 'ada@example.test', '7700 900123', 'historic private enquiry', 'TOP-SECRET', 'https://outside.test/private', 'your-name', 'your-email', 'gclid'] as $forbidden) {
 		setup_assert(! str_contains($wire, $forbidden), ucfirst($providerKey) . " payload must exclude {$forbidden}.");
 	}
 	setup_assert(str_contains($wire, 'store') === ($providerKey === 'openai'), 'OpenAI must explicitly disable response storage.');
 	setup_assert(str_contains($wire, 'json_schema') || str_contains($wire, 'Required JSON Schema'), ucfirst($providerKey) . ' must request the fixed suggestion schema.');
+	if ($providerKey === 'openai') {
+		$wireSchema = $wirePayload['text']['format']['schema'] ?? [];
+	} else {
+		$systemContent = (string) ($wirePayload['messages'][0]['content'] ?? '');
+		$schemaPrefix = "\nRequired JSON Schema: ";
+		$schemaStart = strpos($systemContent, $schemaPrefix);
+		$schemaEnd = strpos($systemContent, "\nReturn one valid JSON object", $schemaStart === false ? 0 : $schemaStart + strlen($schemaPrefix));
+		$wireSchema = $schemaStart !== false && $schemaEnd !== false
+			? json_decode(substr($systemContent, $schemaStart + strlen($schemaPrefix), $schemaEnd - $schemaStart - strlen($schemaPrefix)), true, 64, JSON_THROW_ON_ERROR)
+			: [];
+	}
+	$wireSourceRefs = $wireSchema['properties']['suggestions']['items']['properties']['source_refs']['items']['enum'] ?? null;
+	setup_assert($wireSourceRefs === $taintedRequest->allowedSourceRefs(), ucfirst($providerKey) . ' suggestion schema must constrain provenance to the exact finalized pack, page, and form identifiers.');
 	if ($providerKey === 'deepseek') {
-		$deepSeekWire = json_decode($wire, true, 64, JSON_THROW_ON_ERROR);
+		$deepSeekWire = $wirePayload;
 		setup_assert(($deepSeekWire['max_tokens'] ?? null) === 4000, 'DeepSeek assisted setup must reserve enough output headroom for a complete bounded JSON response.');
 		setup_assert(str_contains((string) ($deepSeekWire['messages'][0]['content'] ?? ''), 'no more than 20 compact'), 'DeepSeek assisted setup must explicitly request the bounded compact suggestion count.');
 	}
