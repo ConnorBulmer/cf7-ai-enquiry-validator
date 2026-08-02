@@ -8,6 +8,8 @@ use InvalidArgumentException;
 use JsonException;
 
 final class PolicySuggestionResult {
+	public const MAX_SUGGESTIONS = 20;
+
 	/** @param list<array<string,mixed>> $suggestions */
 	public function __construct(
 		public readonly array $suggestions = [],
@@ -34,7 +36,7 @@ final class PolicySuggestionResult {
 			'required' => ['suggestions'],
 			'properties' => ['suggestions' => [
 				'type' => 'array',
-				'maxItems' => 50,
+				'maxItems' => self::MAX_SUGGESTIONS,
 				'items' => [
 					'type' => 'object',
 					'additionalProperties' => false,

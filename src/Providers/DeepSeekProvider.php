@@ -30,13 +30,13 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
-				['role' => 'system', 'content' => 'Suggest compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.' . "\nRequired JSON Schema: " . $schema . "\nReturn one valid JSON object matching this schema and no other text."],
+				['role' => 'system', 'content' => 'Suggest no more than ' . PolicySuggestionResult::MAX_SUGGESTIONS . ' compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.' . "\nRequired JSON Schema: " . $schema . "\nReturn one valid JSON object matching this schema and no other text."],
 				['role' => 'user', 'content' => $request->providerProfileJson()],
 			],
 			'response_format' => ['type' => 'json_object'],
 			'thinking' => ['type' => 'disabled'],
 			'temperature' => 0,
-			'max_tokens' => 1500,
+			'max_tokens' => 4000,
 		];
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),

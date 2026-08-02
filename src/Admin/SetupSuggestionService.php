@@ -7,13 +7,14 @@ namespace CF7AIV\Admin;
 use CF7AIV\Classification\Redactor;
 use CF7AIV\Contracts\PolicySuggestionProviderInterface;
 use CF7AIV\Domain\PolicySuggestionRequest;
+use CF7AIV\Domain\PolicySuggestionResult;
 use CF7AIV\Hooks;
 use InvalidArgumentException;
 use Throwable;
 
 final class SetupSuggestionService {
 	private const TYPES = ['service', 'audience', 'value_signal', 'seriousness_signal', 'legitimate_non_conversion', 'exclusion', 'field_mapping'];
-	private const SUGGESTION_LIMIT = 50;
+	private const SUGGESTION_LIMIT = PolicySuggestionResult::MAX_SUGGESTIONS;
 	private const BATCH_CHARACTER_LIMIT = 40000;
 	private ?string $error = null;
 
