@@ -398,6 +398,18 @@ final class CF7AIVTestSource implements CF7AIV\Contracts\SubmissionSourceInterfa
 	public function get(string $reference): ?array { return ['source' => 'test', 'reference' => $reference, 'form_id' => 5, 'fields' => ['message' => 'We need residential care soon.'], 'is_historical' => false, 'is_calibration' => false]; }
 	public function iterate(array $arguments = []): iterable { return []; }
 }
+cf7aiv_classification_assert(interface_exists(CF7AIV\Contracts\SubmissionReferenceLocatorInterface::class), 'The generic persistent-source locator contract must exist.');
+final class CF7AIVTestLocatorSource implements CF7AIV\Contracts\SubmissionSourceInterface, CF7AIV\Contracts\SubmissionReferenceLocatorInterface {
+	public array $calls = [];
+	public function __construct(private readonly string $sourceKey, private readonly ?string $located) {}
+	public function key(): string { return $this->sourceKey; }
+	public function findReferenceBySubmissionId(string $submissionId, int $formId, string $capturedAt): ?string {
+		$this->calls[] = compact('submissionId', 'formId', 'capturedAt');
+		return $this->located;
+	}
+	public function get(string $reference): ?array { return ['source' => $this->sourceKey, 'reference' => $reference, 'form_id' => 5, 'fields' => ['message' => 'We need residential care soon.'], 'is_historical' => false, 'is_calibration' => false]; }
+	public function iterate(array $arguments = []): iterable { return []; }
+}
 final class CF7AIVTestProvider implements CF7AIV\Contracts\AIProviderInterface {
 	public int $calls = 0;
 	public array $requests = [];
@@ -869,6 +881,51 @@ $pendingWorker = new CF7AIV\Classification\ClassificationWorker(
 );
 $pendingWorker->process(14);
 cf7aiv_classification_assert($pendingStore->failures[0]['transient'] === true && $pendingQueue[0]['hook'] === 'cf7aiv_classify_item', 'A CFDB7 row not yet visible must be treated as transient source-link pending and requeued.');
+
+$customToken = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+$customCreatedAt = '2026-08-03 10:20:30';
+$customItem = [
+	'id' => 130, 'source_type' => 'cf7', 'source_reference' => null, 'form_id' => 5, 'created_at' => $customCreatedAt,
+	'attribution_encrypted' => CF7AIV\Infrastructure\Crypto::encrypt(json_encode(['submission_id' => $customToken], JSON_THROW_ON_ERROR)),
+	'is_calibration' => 0, 'is_historical' => 0, 'attribution_ready' => 1,
+];
+$firstLocator = new CF7AIVTestLocatorSource('internal-first', '701');
+$secondLocator = new CF7AIVTestLocatorSource('internal-second', '702');
+$customStore = new CF7AIVTestItemStore($customItem);
+$customWorker = new CF7AIV\Classification\ClassificationWorker(
+	$customStore, $policies,
+	static fn (): array => ['registered_first' => $firstLocator, 'registered_second' => $secondLocator],
+	static fn (): array => ['capture' => new CF7AIVCapturingProvider($deepResult)],
+	static fn (): array => ['automation' => ['mode' => 'shadow'], 'providers' => ['selected' => 'capture']],
+);
+$customWorker->process(130);
+cf7aiv_classification_assert($firstLocator->calls === [['submissionId' => $customToken, 'formId' => 5, 'capturedAt' => $customCreatedAt]], 'Generic source resolution must pass the exact token, form ID, and capture timestamp to the locator.');
+cf7aiv_classification_assert($secondLocator->calls === [], 'Generic source resolution must stop after the first registered exact locator result.');
+cf7aiv_classification_assert($customStore->links === [['itemId' => 130, 'sourceType' => 'registered_first', 'sourceReference' => '701']], 'Generic source resolution must persist the registered source key and located reference without a CFDB7 dependency.');
+cf7aiv_classification_assert($customStore->success !== [], 'A custom persistent locator result must continue through classification.');
+
+$invisibleLocator = new CF7AIVTestLocatorSource('invisible', null);
+$invisibleStore = new CF7AIVTestItemStore(array_merge($customItem, ['id' => 131]));
+$invisibleQueue = [];
+(new CF7AIV\Classification\ClassificationWorker(
+	$invisibleStore, $policies,
+	static fn (): array => ['registered_invisible' => $invisibleLocator],
+	static fn (): array => ['capture' => new CF7AIVCapturingProvider($deepResult)],
+	static fn (): array => ['automation' => ['mode' => 'shadow'], 'providers' => ['selected' => 'capture']],
+	static function (string $hook, array $arguments, int $delay) use (&$invisibleQueue): void { $invisibleQueue[] = compact('hook', 'arguments', 'delay'); },
+))->process(131);
+cf7aiv_classification_assert($invisibleStore->failures[0]['transient'] === true && ($invisibleQueue[0]['delay'] ?? 0) === 60, 'A registered locator with no visible reference must remain a transient 60-second retry.');
+
+$unconfiguredStore = new CF7AIVTestItemStore(array_merge($customItem, ['id' => 132]));
+$unconfiguredQueue = [];
+(new CF7AIV\Classification\ClassificationWorker(
+	$unconfiguredStore, $policies,
+	static fn (): array => ['plain_source' => new CF7AIVTestSource()],
+	static fn (): array => ['capture' => new CF7AIVCapturingProvider($deepResult)],
+	static fn (): array => ['automation' => ['mode' => 'shadow'], 'providers' => ['selected' => 'capture']],
+	static function (string $hook, array $arguments, int $delay) use (&$unconfiguredQueue): void { $unconfiguredQueue[] = compact('hook', 'arguments', 'delay'); },
+))->process(132);
+cf7aiv_classification_assert($unconfiguredStore->failures[0]['transient'] === false && $unconfiguredQueue === [], 'No registered locator must be a permanent configuration failure with no retry.');
 
 foreach (['cf7aiv_after_capture', 'cf7aiv_classify_item'] as $hook) {
 	cf7aiv_classification_assert(isset($GLOBALS['cf7aiv_test_actions'][$hook]), "Classification hook {$hook} must be registered.");

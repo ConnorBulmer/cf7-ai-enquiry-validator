@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CF7AIV\Classification;
 
 use CF7AIV\Contracts\AIProviderInterface;
+use CF7AIV\Contracts\SubmissionReferenceLocatorInterface;
 use CF7AIV\Contracts\SubmissionSourceInterface;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Domain\ClassificationRequest;
@@ -18,7 +19,6 @@ use CF7AIV\Infrastructure\Settings;
 use CF7AIV\Providers\PermanentProviderException;
 use CF7AIV\Providers\ProviderException;
 use CF7AIV\Providers\TransientProviderException;
-use CF7AIV\Sources\CFDB7Source;
 use CF7AIV\Admin\WpCalibrationRunStore;
 use CF7AIV\Admin\CalibrationRunStoreInterface;
 use Throwable;
@@ -230,22 +230,35 @@ final class ClassificationWorker {
 		$sources = ($this->sourceResolver)();
 		$key = (string) ($item['source_type'] ?? '');
 		if ($key === 'cf7') {
-			$cfdb7 = $sources['cfdb7'] ?? null;
-			if (! $cfdb7 instanceof CFDB7Source) {
-				throw new PermanentProviderException('A generic CF7 item has no registered persistent source.');
-			}
 			$submissionId = $this->submissionId($item);
 			if ($submissionId === '') {
 				throw new PermanentProviderException('A generic CF7 item has no source-link token.');
 			}
-			$reference = $cfdb7->findReferenceBySubmissionId($submissionId);
-			if ($reference === null) {
-				throw new TransientProviderException('Persistent source link is not visible yet.');
+			$locators = [];
+			foreach ($sources as $registeredKey => $source) {
+				if (is_string($registeredKey) && $registeredKey !== ''
+					&& $source instanceof SubmissionSourceInterface
+					&& $source instanceof SubmissionReferenceLocatorInterface) {
+					$locators[$registeredKey] = $source;
+				}
 			}
-			$this->items->linkSource($itemId, 'cfdb7', $reference);
-			$item['source_type'] = 'cfdb7';
-			$item['source_reference'] = $reference;
-			return [$cfdb7, $reference];
+			if ($locators === []) {
+				throw new PermanentProviderException('A generic CF7 item has no registered persistent source.');
+			}
+			foreach ($locators as $registeredKey => $locator) {
+				$reference = $locator->findReferenceBySubmissionId(
+					$submissionId,
+					(int) ($item['form_id'] ?? 0),
+					(string) ($item['created_at'] ?? ''),
+				);
+				if ($reference === null || trim($reference) === '') { continue; }
+				$reference = trim($reference);
+				$this->items->linkSource($itemId, $registeredKey, $reference);
+				$item['source_type'] = $registeredKey;
+				$item['source_reference'] = $reference;
+				return [$locator, $reference];
+			}
+			throw new TransientProviderException('Persistent source link is not visible yet.');
 		}
 		if (! isset($sources[$key]) || ! $sources[$key] instanceof SubmissionSourceInterface) {
 			throw new PermanentProviderException('Registered submission source is unavailable.');

@@ -15,6 +15,25 @@ add_filter('cf7aiv_submission_sources', function (array $sources): array {
 
 `get()` returns the canonical `source`, `reference`, `form_id`, `submitted_at`, `fields`, `is_historical`, and `is_calibration` keys. Historical iteration must mark both flags true.
 
+Sources that can resolve a generic CF7 capture after their own persistent row
+becomes visible may also implement
+`CF7AIV\Contracts\SubmissionReferenceLocatorInterface`:
+
+```php
+public function findReferenceBySubmissionId(
+    string $submissionId,
+    int $formId,
+    string $capturedAt
+): ?string;
+```
+
+The same registered object must implement `SubmissionSourceInterface`. It must
+return its stable opaque source reference only after proving the complete
+submission token belongs to the supplied form and capture time, or `null` while
+the record is not visible. Registration order is deterministic: the first
+registered locator that proves a reference owns the link. Never return raw
+submission content from the locator or use partial token matching.
+
 ## AI providers
 
 Implement `CF7AIV\Contracts\AIProviderInterface::classify(ClassificationRequest): ClassificationResult` and register with `cf7aiv_ai_providers`. Providers must use the already-redacted request, validate the fixed result contract, classify 429/timeouts/5xx as transient, and never log the body or API key.

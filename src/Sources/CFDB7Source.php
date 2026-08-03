@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace CF7AIV\Sources;
 
+use CF7AIV\Contracts\SubmissionReferenceLocatorInterface;
 use CF7AIV\Contracts\SubmissionSourceInterface;
 use CF7AIV\Intake\SourceNormalizer;
 
-final class CFDB7Source implements SubmissionSourceInterface {
+final class CFDB7Source implements SubmissionSourceInterface, SubmissionReferenceLocatorInterface {
 	public function key(): string { return 'cfdb7'; }
 
 	public function get(string $reference): ?array {
@@ -18,7 +19,7 @@ final class CFDB7Source implements SubmissionSourceInterface {
 		return is_array($row) ? $this->normalize($row, false) : null;
 	}
 
-	public function findReferenceBySubmissionId(string $submissionId, int $limit = 50): ?string {
+	public function findReferenceBySubmissionId(string $submissionId, int $formId = 0, string $capturedAt = ''): ?string {
 		global $wpdb;
 		$submissionId = trim($submissionId);
 		if (preg_match('/\A[A-Za-z0-9._~-]{8,128}\z/', $submissionId) !== 1
@@ -26,7 +27,7 @@ final class CFDB7Source implements SubmissionSourceInterface {
 			return null;
 		}
 		$table = $wpdb->prefix . 'db7_forms';
-		$limit = max(1, min(100, $limit));
+		$limit = 50;
 		$rows = $wpdb->get_results($wpdb->prepare("SELECT form_id, form_value FROM {$table} ORDER BY form_id DESC LIMIT %d", $limit), ARRAY_A);
 		foreach (is_array($rows) ? $rows : [] as $row) {
 			if (! is_array($row) || (int) ($row['form_id'] ?? 0) < 1) { continue; }
