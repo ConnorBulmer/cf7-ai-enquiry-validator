@@ -78,41 +78,21 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	private function v2JsonGuidance(ClassificationRequest $request): string {
 		if ($request->policySchema !== PolicyValidator::SCHEMA_V2) { return ''; }
 		$mapping = json_encode($request->allowedEvidence, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-		$outcome = $request->allowedOutcomeIds[0] ?? '';
-		$tier = $request->allowedTierIds[0] ?? '';
-		$fieldKey = array_key_first($request->context);
-		$evidence = [];
-		$code = array_key_first($request->allowedEvidence);
-		if (is_string($fieldKey) && is_string($code)) {
-			$value = $request->context[$fieldKey] ?? '';
-			if (is_array($value)) {
-				$value = current(array_filter($value, static fn (mixed $item): bool => is_scalar($item)));
-			}
-			$excerpt = trim((string) (is_scalar($value) ? $value : ''));
-			$excerpt = preg_replace('/\s+/u', ' ', $excerpt) ?? $excerpt;
-			if (strlen($excerpt) > 160) {
-				$excerpt = substr($excerpt, 0, 160);
-				while ($excerpt !== '' && preg_match('//u', $excerpt) !== 1) { $excerpt = substr($excerpt, 0, -1); }
-			}
-			if (strlen($excerpt) >= 2) {
-				$evidence[] = [
-					'dimension' => $request->allowedEvidence[$code],
-					'code' => $code,
-					'field_key' => $fieldKey,
-					'excerpt' => $excerpt,
-				];
-			}
+		if (! in_array('insufficient_information', $request->allowedOutcomeIds, true)
+			|| ! in_array('insufficient_information', $request->allowedTierIds, true)) {
+			return "\nEvidence code-to-dimension mapping: " . $mapping
+				. "\nEach evidence dimension must equal the value mapped from its code exactly.";
 		}
 		$example = [
-			'outcome_id' => $outcome,
-			'tier_id' => $tier,
-			'reason_code' => 'qualified',
-			'model_confidence' => 0.5,
-			'evidence' => $evidence,
-			'missing_evidence' => [],
+			'outcome_id' => 'insufficient_information',
+			'tier_id' => 'insufficient_information',
+			'reason_code' => 'insufficient_information',
+			'model_confidence' => 0,
+			'evidence' => [],
+			'missing_evidence' => array_keys($request->allowedEvidence),
 			'exclusion_codes' => [],
 			'ambiguity_flags' => [],
-			'summary' => 'Classify using only grounded request evidence.',
+			'summary' => 'Insufficient information to classify reliably.',
 		];
 		return "\nEvidence code-to-dimension mapping: " . $mapping
 			. "\nEach evidence dimension must equal the value mapped from its code exactly."

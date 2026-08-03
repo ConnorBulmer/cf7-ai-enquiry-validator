@@ -161,6 +161,7 @@ cf7aiv_classification_assert($deepBody['model'] === 'deepseek-v4-flash' && $deep
 cf7aiv_classification_assert(($deepBody['thinking']['type'] ?? null) === 'disabled', 'DeepSeek classification must disable thinking so reasoning cannot consume the JSON output budget.');
 cf7aiv_classification_assert(str_contains($deepBody['messages'][0]['content'], '"ambiguity_flags"') && str_contains($deepBody['messages'][0]['content'], '"additionalProperties":false'), 'DeepSeek must receive the fixed classification JSON schema, not merely a request for JSON.');
 cf7aiv_classification_assert(str_contains($deepBody['messages'][0]['content'], 'JSON'), 'DeepSeek JSON mode prompt must explicitly request JSON.');
+cf7aiv_classification_assert(! str_contains($deepBody['messages'][0]['content'], 'Evidence code-to-dimension mapping:') && ! str_contains($deepBody['messages'][0]['content'], 'Example JSON output:'), 'Legacy v1 DeepSeek requests must not receive v2 evidence guidance.');
 cf7aiv_classification_assert(! str_contains((string) $deepCall['arguments']['body'], 'ada@example.test'), 'Provider payload must not contain excluded identity.');
 
 $deepRetryTransport = new CF7AIVTestTransport([

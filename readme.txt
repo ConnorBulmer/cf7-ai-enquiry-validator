@@ -60,9 +60,9 @@ The plugin stores source references and encrypted attribution/consent snapshots,
 == Changelog ==
 
 = 0.2.9 =
-* Gives DeepSeek the exact evidence code-to-dimension mapping and a concrete grounded JSON example for every v2 classification request.
+* Gives DeepSeek the exact evidence code-to-dimension mapping and a neutral, non-eligible JSON example for v2 classification requests.
 * Prevents intermittent fail-closed classifications caused by independently valid evidence codes and dimensions being paired incorrectly.
-* Keeps provider output validation strict and adds a UTF-8-safe example boundary regression.
+* Keeps request-controlled enquiry text out of system-level examples while preserving strict provider output validation.
 
 = 0.2.8 =
 * Constrains assisted-setup provenance to the exact finalized pack, page, and form identifiers supplied to the provider.
