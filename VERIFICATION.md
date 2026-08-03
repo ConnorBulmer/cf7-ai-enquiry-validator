@@ -10,17 +10,17 @@ The 0.2.9 DeepSeek evidence-schema correction was verified locally on 2026-08-03
   paired. Strict local validation rejected both attempts and kept production
   state untouched.
 - RED: the provider-wire regression failed because v2 requests did not include
-  the exact evidence code-to-dimension mapping or a neutral JSON example.
-  Review also caught that an early example promoted request-controlled text
-  into a system message and assigned it arbitrary qualified evidence.
-- GREEN: DeepSeek now receives the published mapping and a schema-valid,
-  evidence-free insufficient-information example; request text remains in the
-  redacted user context. Local catalog, schema, privacy, and grounding
-  validation remain unchanged.
+  the exact evidence code-to-dimension mapping or concrete pair examples.
+  Review caught that two early full-result examples either promoted request
+  text or assumed a tier-to-outcome pairing not required by custom policies.
+- GREEN: DeepSeek now receives only the published mapping and JSON examples of
+  its allowed code/dimension pairs. Tier, outcome, evidence excerpts, and
+  request text remain outside those examples. Local catalog, schema, privacy,
+  and grounding validation remain unchanged.
 - Complete sorted PHP suite: **24/24 PASS**; JavaScript checks: **PASS**;
   tracked non-vendor PHP lint: **145/145 PASS**.
 - The verified 228-entry local archive SHA-256 is
-  `5cefe2063c62e586f17ffc954e1eb890073d3a44c8927ea27d3a97b241bae50b`.
+  `0f21d1781f0aad4f630f9c4eea83433e40b4ec602a275d136c69bb34ef528198`.
 - The MT rollout verifier reports `valid: true`, version `0.2.9`, the same
   SHA-256, one safe plugin root, no credential-like text, and safe extraction.
 

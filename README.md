@@ -76,10 +76,10 @@ worker or reviewer needs it.
 ### Version 0.2.9 DeepSeek evidence-schema guidance
 
 Version 0.2.9 gives DeepSeek the exact published evidence code-to-dimension
-mapping and a neutral, non-eligible JSON example. This prevents intermittent
-fail-closed classifications in JSON mode while keeping request-controlled
-enquiry text out of system instructions and preserving strict local schema,
-catalog, privacy, and grounding validation.
+mapping plus concrete JSON examples of every allowed pair. This prevents
+intermittent fail-closed classifications in JSON mode without inventing tier,
+outcome, evidence-excerpt, or enquiry semantics, while preserving strict local
+schema, catalog, privacy, and grounding validation.
 
 ### Version 0.2.8 assisted setup provenance correction
 

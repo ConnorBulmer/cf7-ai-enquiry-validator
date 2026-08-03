@@ -78,25 +78,13 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	private function v2JsonGuidance(ClassificationRequest $request): string {
 		if ($request->policySchema !== PolicyValidator::SCHEMA_V2) { return ''; }
 		$mapping = json_encode($request->allowedEvidence, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-		if (! in_array('insufficient_information', $request->allowedOutcomeIds, true)
-			|| ! in_array('insufficient_information', $request->allowedTierIds, true)) {
-			return "\nEvidence code-to-dimension mapping: " . $mapping
-				. "\nEach evidence dimension must equal the value mapped from its code exactly.";
+		$pairs = [];
+		foreach ($request->allowedEvidence as $code => $dimension) {
+			$pairs[] = ['code' => $code, 'dimension' => $dimension];
 		}
-		$example = [
-			'outcome_id' => 'insufficient_information',
-			'tier_id' => 'insufficient_information',
-			'reason_code' => 'insufficient_information',
-			'model_confidence' => 0,
-			'evidence' => [],
-			'missing_evidence' => array_keys($request->allowedEvidence),
-			'exclusion_codes' => [],
-			'ambiguity_flags' => [],
-			'summary' => 'Insufficient information to classify reliably.',
-		];
 		return "\nEvidence code-to-dimension mapping: " . $mapping
 			. "\nEach evidence dimension must equal the value mapped from its code exactly."
-			. "\nExample JSON output: " . json_encode($example, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+			. "\nEvidence pair examples: " . json_encode($pairs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 	}
 
 	protected function extractText(array $body): string {

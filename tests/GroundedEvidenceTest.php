@@ -262,11 +262,10 @@ grounded_assert(
 	'DeepSeek must receive the exact published evidence code-to-dimension mapping so independently valid enum values cannot be paired incorrectly.',
 );
 grounded_assert(
-	str_contains($deepSystemPrompt, 'Example JSON output:')
-		&& str_contains($deepSystemPrompt, '"reason_code":"insufficient_information"')
-		&& str_contains($deepSystemPrompt, '"evidence":[]')
+	str_contains($deepSystemPrompt, 'Evidence pair examples: [{"code":"service_fit","dimension":"service_fit"},{"code":"readiness_signal","dimension":"readiness"}]')
+		&& ! str_contains($deepSystemPrompt, 'Example JSON output:')
 		&& ! str_contains($deepSystemPrompt, 'We need a website rebuild before October.'),
-	'DeepSeek JSON mode must receive a neutral non-eligible example without promoting request-controlled enquiry text into the system message.',
+	'DeepSeek JSON mode must receive only concrete code-to-dimension pair examples without inventing tier/outcome semantics or promoting request text.',
 );
 grounded_assert(($deepPayload['max_tokens'] ?? null) === 900, 'DeepSeek v2 output must allow 900 tokens for grounded evidence.');
 grounded_assert($deepResult->providerUsage === ['input_tokens' => 101, 'output_tokens' => 52, 'reasoning_tokens' => 7, 'calls' => 1], 'DeepSeek usage must be normalized onto the result.');

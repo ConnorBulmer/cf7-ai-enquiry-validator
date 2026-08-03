@@ -4,12 +4,12 @@ All notable changes to CF7 AI Enquiry Validator are documented here. The project
 
 ## 0.2.9 — 2026-08-03
 
-- Added the exact published evidence code-to-dimension mapping and a neutral,
-  non-eligible JSON example to DeepSeek v2 classification instructions.
+- Added the exact published evidence code-to-dimension mapping and concrete JSON
+  examples of every allowed pair to DeepSeek v2 classification instructions.
 - Prevented intermittent fail-closed classifications when JSON mode paired an
   allowed evidence code with the wrong independently allowed dimension.
-- Preserved strict local validation and kept request-controlled enquiry text
-  out of higher-priority system-level examples.
+- Preserved strict local validation and kept tier, outcome, evidence excerpts,
+  and request-controlled enquiry text out of system-level examples.
 
 ## 0.2.8 — 2026-08-02
 
