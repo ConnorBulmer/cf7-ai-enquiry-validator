@@ -203,6 +203,22 @@ foreach (['errors', 'partialErrors', 'operationErrors'] as $errorKey) {
 	cf7aiv_delivery_assert(str_contains((string) $result->error, 'Rejected') && str_contains((string) $result->error, 'data[0].eventName'), 'Microsoft validation failures may retain only a bounded safe code and field.');
 	cf7aiv_delivery_assert(! str_contains((string) $result->error, 'private@example.test'), 'Microsoft validation messages must not retain provider message text.');
 }
+$microsoftDocumentedError = CF7AIV\Destinations\MicrosoftUetResponseClassifier::classify(
+	new CF7AIV\Infrastructure\HttpResponse(400, '{"error":{"code":"ValidationError","message":"private@example.test token=private","details":[{"index":0,"propertyName":"data[0].userData","errorMessage":"private@example.test"}]},"traceId":"private-trace"}'),
+	'local-stable-event',
+);
+cf7aiv_delivery_assert(
+	! $microsoftDocumentedError->successful
+	&& ! $microsoftDocumentedError->retryable
+	&& str_contains((string) $microsoftDocumentedError->error, 'ValidationError')
+	&& str_contains((string) $microsoftDocumentedError->error, 'data[0].userData'),
+	'Microsoft documented error envelopes must retain only the safe code and rejected property path.',
+);
+cf7aiv_delivery_assert(
+	! str_contains((string) $microsoftDocumentedError->error, 'private@example.test')
+	&& ! str_contains((string) $microsoftDocumentedError->error, 'private-trace'),
+	'Microsoft documented error envelopes must discard messages, trace IDs, identity, and secrets.',
+);
 $malformedMicrosoft = CF7AIV\Destinations\MicrosoftUetResponseClassifier::classify(new CF7AIV\Infrastructure\HttpResponse(200, '{not-json'), 'local-stable-event');
 cf7aiv_delivery_assert($malformedMicrosoft->successful && $malformedMicrosoft->remoteId === 'local-stable-event', 'Malformed optional Microsoft success bodies must not crash or replace the stable local receipt.');
 
@@ -244,6 +260,22 @@ cf7aiv_delivery_assert(
 	&& ! str_contains($msDefaultJson, 'phone_sha256')
 	&& ! isset($msDefaultEvent['userData']['em'], $msDefaultEvent['userData']['ph']),
 	'Microsoft enhanced matching must remain absent by default.',
+);
+$unidentifiedMicrosoftEvent = CF7AIV\Delivery\EnvelopeBuilder::build(
+	$item,
+	$mapping,
+	array_diff_key($attribution, ['msclkid' => true]),
+	['analytics_storage' => 'granted', 'ad_storage' => 'granted', 'ad_user_data' => 'denied', 'ad_personalization' => 'denied'],
+	false,
+);
+$unidentifiedMicrosoftTransport = new CF7AIVDeliveryTransport();
+$unidentifiedMicrosoftResult = (new CF7AIV\Destinations\MicrosoftUetDestination($unidentifiedMicrosoftTransport, '12345', 'uet-token'))->send($unidentifiedMicrosoftEvent);
+cf7aiv_delivery_assert(
+	! $unidentifiedMicrosoftResult->successful
+	&& ! $unidentifiedMicrosoftResult->retryable
+	&& $unidentifiedMicrosoftTransport->requests === []
+	&& str_contains((string) $unidentifiedMicrosoftResult->error, 'identifier'),
+	'Microsoft delivery must fail locally without transport when CAPI-required userData has no supported identifier.',
 );
 foreach (['PRIVATE enquiry text', 'Ada Private', 'ada@example.test', '+447700900123', 'REMOTE_ADDR', 'HTTP_USER_AGENT'] as $forbidden) {
 	cf7aiv_delivery_assert(! str_contains($msDefaultJson, $forbidden), 'Microsoft payloads must exclude raw identity, form content, IP, and user agent fields.');

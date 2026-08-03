@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CF7 AI Enquiry Validator
  * Description: Asynchronously classifies stored Contact Form 7 enquiries and dispatches only approved, attributable conversions.
- * Version: 0.2.14
+ * Version: 0.2.15
  * Requires at least: 6.5
  * Requires PHP: 8.1
  * Author: CF7 AI Enquiry Validator contributors
@@ -17,7 +17,7 @@ namespace CF7AIV;
 
 defined('ABSPATH') || exit;
 
-const VERSION = '0.2.14';
+const VERSION = '0.2.15';
 const FILE = __FILE__;
 const DIR = __DIR__ . '/';
 define(__NAMESPACE__ . '\\URL', function_exists('plugin_dir_url') ? plugin_dir_url(__FILE__) : '');

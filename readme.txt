@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.14
+Stable tag: 0.2.15
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -59,10 +59,15 @@ The plugin stores source references and encrypted attribution/consent snapshots,
 
 == Changelog ==
 
+= 0.2.15 =
+* Parses Microsoft CAPI's documented nested validation-error envelope while retaining only bounded error codes and property paths.
+* Adds a one-off synthetic anonymous ID to the zero-value transport diagnostic because Microsoft requires at least one supported user-data identifier.
+* Refuses identifier-free Microsoft requests locally instead of sending a request that CAPI must reject; schema remains version 10.
+
 = 0.2.14 =
 * Wraps each Microsoft UET Conversion API event in the documented data batch and disables partial validation continuation.
 * Uses one stable event and transaction identity across retries and safely classifies Microsoft batch, authentication, rate-limit, transient, and malformed-body responses.
-* Adds an exact-confirmation Microsoft transport test that sends one zero-value, consent-denied, identifier-free diagnostic event without changing production settings.
+* Adds an exact-confirmation Microsoft transport test that sends one zero-value, consent-denied diagnostic event without changing production settings.
 * Keeps Microsoft account IDs, UET tag details, credentials, and conversion-goal configuration outside reusable plugin source; schema remains version 10.
 
 = 0.2.13 =

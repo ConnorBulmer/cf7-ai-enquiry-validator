@@ -79,7 +79,7 @@ final class MicrosoftUetTestService {
 			'GBP',
 			$occurredAt,
 			['test_mode' => 'controlled_transport'],
-			[],
+			['microsoft_anonymous_id' => substr(hash('sha256', $eventId . '|cf7aiv-microsoft-transport'), 0, 32)],
 			[
 				'analytics_storage' => 'denied',
 				'ad_storage' => 'denied',

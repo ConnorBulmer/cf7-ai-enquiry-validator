@@ -38,6 +38,15 @@ final class MicrosoftUetResponseClassifier {
 		if (! is_array($decoded)) {
 			return null;
 		}
+		foreach ($decoded as $key => $candidate) {
+			if (! is_string($key) || strtolower($key) !== 'error' || ! is_array($candidate)) {
+				continue;
+			}
+			return [
+				'code' => self::safePart(self::scalarForKeys($candidate, ['code', 'errorcode']) ?? 'ValidationError', 64),
+				'field' => self::safePart(self::scalarForKeys($candidate, ['field', 'fieldpath', 'propertyname', 'parameter']) ?? '', 128),
+			];
+		}
 		$entry = self::findErrorEntry($decoded);
 		if ($entry === null) {
 			return null;

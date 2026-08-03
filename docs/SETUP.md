@@ -88,8 +88,10 @@ same tag, because duplicate tags can double-count browser events.
    ```
 
    It sends one `cf7aiv_transport_test` event with zero GBP, denied advertising
-   consent, a synthetic event/transaction ID, and no click ID or identity. Do
-   not configure the business EventGoal to match this diagnostic name.
+   consent, a synthetic event/transaction ID, and only the one-off synthetic
+   anonymous ID required by CAPI. It sends no click ID, enhanced identity, IP,
+   or user agent. Do not configure the business EventGoal to match this
+   diagnostic name.
 5. Confirm provider acceptance, safe retry/error handling, and that the
    diagnostic event did not increment the business goal.
 6. Verify denied and granted consent states in a fresh browser, then disable

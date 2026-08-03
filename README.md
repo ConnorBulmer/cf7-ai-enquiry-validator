@@ -73,13 +73,15 @@ worker or reviewer needs it.
 
 ## Current release
 
-### Version 0.2.14 Microsoft UET Conversion API hardening
+### Version 0.2.15 Microsoft UET Conversion API validation hardening
 
-Version 0.2.14 sends Microsoft events inside the documented `data` batch,
+Version 0.2.15 sends Microsoft events inside the documented `data` batch,
 uses one stable event/transaction identity across retries, safely classifies
-provider batch and transport failures, and adds an exact-confirmation,
-zero-value Microsoft transport test. The diagnostic event is consent-denied
-and contains no click ID or enhanced identity. Account IDs, UET tag details,
+provider batch and nested validation failures, and adds an exact-confirmation,
+zero-value Microsoft transport test. The diagnostic event is consent-denied,
+contains no click ID or enhanced identity, and uses only a one-off synthetic
+anonymous ID required by CAPI. Identifier-free events fail locally without a
+network request. Account IDs, UET tag details,
 credentials, and conversion-goal configuration remain outside reusable source.
 Schema remains version 10, so no migration is required.
 
@@ -339,7 +341,7 @@ scanner's page and character limits. Copy-paste CPT and builder examples are in
 
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.14 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.15 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -396,7 +398,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.14 --output-dir=dist
+php tools/build-release.php --tag=v0.2.15 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -414,16 +416,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.14`:
+For version `0.2.15`:
 
 ```bash
-git tag v0.2.14
-git push origin v0.2.14
+git tag v0.2.15
+git push origin v0.2.15
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.14.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.15.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.

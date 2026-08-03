@@ -31,7 +31,7 @@ $consent = ['analytics_storage' => 'granted', 'ad_storage' => 'granted', 'ad_use
 $intakeEvent = CF7AIV\Delivery\EnvelopeBuilder::build($item, $mapping, ['ga_client_id' => '111.222', 'ga_session_id' => '1234567890', 'session_started_at' => '2026-07-22T09:59:00Z'], $consent);
 review_check(($intakeEvent->attribution['client_id'] ?? null) === '111.222' && ($intakeEvent->attribution['session_id'] ?? null) === '1234567890', 'Envelope must map intake ga_client_id/ga_session_id to canonical GA keys.');
 review_check(($intakeEvent->attribution['session_started_at'] ?? null) === '2026-07-22T09:59:00Z', 'Envelope must preserve session_started_at.');
-$canonicalEvent = CF7AIV\Delivery\EnvelopeBuilder::build($item, $mapping, ['client_id' => '333.444', 'ga_client_id' => 'wrong', 'session_id' => '2345678901', 'ga_session_id' => 'wrong'], $consent);
+$canonicalEvent = CF7AIV\Delivery\EnvelopeBuilder::build($item, $mapping, ['client_id' => '333.444', 'ga_client_id' => 'wrong', 'session_id' => '2345678901', 'ga_session_id' => 'wrong', 'msclkid' => '0123456789abcdef0123456789abcdef'], $consent);
 review_check(($canonicalEvent->attribution['client_id'] ?? null) === '333.444' && ($canonicalEvent->attribution['session_id'] ?? null) === '2345678901', 'Canonical GA aliases must remain accepted and take precedence.');
 
 $base = CF7AIV\Infrastructure\Settings::defaults();

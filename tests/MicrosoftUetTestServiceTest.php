@@ -92,11 +92,12 @@ cf7aiv_microsoft_test_assert(
 	&& $event['customData']['currency'] === 'GBP'
 	&& $event['customData']['transactionId'] === $event['eventId']
 	&& $event['adStorageConsent'] === 'D'
-	&& ($event['userData'] ?? []) === [],
-	'The controlled Microsoft event must be zero-value, synthetic, consent-denied, and identifier-free.',
+	&& array_keys($event['userData'] ?? []) === ['anonymousId']
+	&& preg_match('/^[a-f0-9]{32}$/', (string) ($event['userData']['anonymousId'] ?? '')) === 1,
+	'The controlled Microsoft event must be zero-value, consent-denied, and use only a synthetic anonymous ID required by CAPI.',
 );
 $serializedBody = json_encode($body, JSON_THROW_ON_ERROR);
-foreach (['msclkid', 'email', 'phone', 'clientUserAgent', 'clientIpAddress', 'anonymousId', 'PRIVATE'] as $forbidden) {
+foreach (['msclkid', 'email', 'phone', 'clientUserAgent', 'clientIpAddress', 'PRIVATE'] as $forbidden) {
 	cf7aiv_microsoft_test_assert(! str_contains($serializedBody, $forbidden), "Controlled Microsoft payload must exclude {$forbidden}.");
 }
 $serializedReceipt = json_encode($receipt, JSON_THROW_ON_ERROR);

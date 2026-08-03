@@ -1,11 +1,21 @@
-# Release verification — 0.2.14 candidate
+# Release verification — 0.2.15 candidate
 
-The 0.2.14 Microsoft UET Conversion API hardening candidate was verified
+The 0.2.15 Microsoft UET Conversion API validation-hardening candidate was verified
 locally on 2026-08-03. Automated verification used synthetic fixtures only and
 made no external AI, analytics, or advertising request.
 
-## 0.2.14 Microsoft UET CAPI verification
+## 0.2.15 Microsoft UET CAPI verification
 
+- Live diagnostic RED: Microsoft CAPI returned HTTP 400 `ValidationError` at
+  `data[0].userData` because the original identifier-free diagnostic omitted
+  every provider-supported user identifier.
+- TDD RED: the documented nested `error.details` response regression failed
+  because the classifier did not retain its safe rejected-property path.
+- TDD RED: the controlled transport regression failed because its request did
+  not include the one-off synthetic anonymous ID required by CAPI.
+- GREEN: documented error envelopes now retain only bounded code/property
+  diagnostics, identifier-free production events fail before transport, and
+  the guarded diagnostic carries only its synthetic anonymous ID.
 - TDD RED: `DeliveryTest.php` failed because the existing Microsoft request had
   no top-level `data` batch or stable `transactionId`.
 - TDD RED: the Microsoft response-classifier regression failed because the
@@ -21,16 +31,16 @@ made no external AI, analytics, or advertising request.
   but the test exits successfully.
 - JavaScript attribution suite: **PASS**; JavaScript syntax check: **PASS**.
 - Complete local PHP lint excluding generated `dist`: **247/247 PASS**.
-- Release identities are all `0.2.14`; schema remains `10`; release tag
-  contract is `v0.2.14`.
-- Release build: `php tools/build-release.php --tag=v0.2.14 --output-dir=dist`
-  - archive: `cf7-ai-enquiry-validator-0.2.14.zip`;
+- Release identities are all `0.2.15`; schema remains `10`; release tag
+  contract is `v0.2.15`.
+- Release build: `php tools/build-release.php --tag=v0.2.15 --output-dir=dist`
+  - archive: `cf7-ai-enquiry-validator-0.2.15.zip`;
   - entries: **231** under one canonical `cf7-ai-enquiry-validator` root;
   - unsafe entries: **0**;
   - credential/site-pattern matches in reopened archive: **0**;
   - checksum file matches the reopened archive: **PASS**;
   - SHA-256:
-    `0689e2c946f06feecde429673cccc892cf16c2175a8e9bfb27b0002f8f630cf4`.
+    `ba1ce0c25519b427ffe506d77b451bd0fbd2ccc168469b8f10d4d6514f8cdfdf`.
 - The Microsoft contract suite covers one-event `data` envelopes,
   `continueOnValidationError: false`, mapped name/value/currency, integer event
   time, stable event/transaction identity, consented click data, enhanced
@@ -39,9 +49,10 @@ made no external AI, analytics, or advertising request.
   400/401 failures, retryable 408/425/429/5xx failures, timeouts, and bounded
   provider code/field diagnostics with no raw body retention.
 - The controlled transport suite proves exact confirmation, required encrypted
-  configuration, one live zero-value request, denied advertising consent,
-  empty user data, no click/identity fields, no settings mutation, stable
-  synthetic identity, safe success/failure receipts, and token/tag redaction.
+  configuration, one live zero-value request, denied advertising consent, one
+  synthetic anonymous ID, no click/enhanced identity fields, no settings
+  mutation, stable synthetic identity, safe success/failure receipts, and
+  token/tag redaction.
 
 ## Previous 0.2.13 portability verification
 

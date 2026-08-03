@@ -15,10 +15,17 @@ final class MicrosoftUetDestination implements DestinationInterface {
 	public function send(ConversionEvent $event): DeliveryResult {
 		if ($this->tagId === '' || $this->token === '') { throw new InvalidArgumentException('Microsoft UET tag ID and token are required.'); }
 		$userData = [];
+		$anonymousId = $event->attribution['microsoft_anonymous_id'] ?? $event->attribution['anonymous_id'] ?? '';
+		if (is_scalar($anonymousId) && preg_match('/\A[A-Za-z0-9-]{8,128}\z/', trim((string) $anonymousId)) === 1) {
+			$userData['anonymousId'] = trim((string) $anonymousId);
+		}
 		if (($event->attribution['msclkid'] ?? '') !== '') { $userData['msclkid'] = (string) $event->attribution['msclkid']; }
 		if ($this->enhancedMatching && ($event->consent['ad_user_data'] ?? 'unknown') === 'granted') {
 			if (isset($event->userData['email_sha256'])) { $userData['em'] = $event->userData['email_sha256']; }
 			if (isset($event->userData['phone_sha256'])) { $userData['ph'] = $event->userData['phone_sha256']; }
+		}
+		if ($userData === []) {
+			return new DeliveryResult(false, false, null, 'Microsoft UET requires at least one supported user identifier.');
 		}
 		$providerEvent = ['eventType' => 'custom', 'eventId' => $event->eventId, 'eventName' => $event->eventName, 'eventTime' => (int) strtotime($event->occurredAt), 'userData' => $userData, 'customData' => ['value' => $event->value, 'currency' => $event->currency, 'transactionId' => $event->eventId], 'adStorageConsent' => ($event->consent['ad_storage'] ?? 'unknown') === 'granted' ? 'G' : 'D'];
 		$body = ['data' => [$providerEvent], 'continueOnValidationError' => false];
