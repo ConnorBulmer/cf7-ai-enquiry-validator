@@ -37,6 +37,14 @@ ui_assert(str_contains($keys, '<th scope="row">Landing navigation</th>') && str_
 $region = AdminUi::tableRegion('Review queue results', '<table><tr><td>Trusted table</td></tr></table>');
 ui_assert(str_contains($region, 'tabindex="0"') && str_contains($region, 'aria-label="Review queue results"'), 'Wide table regions must be keyboard focusable and labelled.');
 
+$css = file_get_contents(__DIR__ . '/../assets/css/admin.css');
+ui_assert(is_string($css), 'Admin stylesheet must be readable.');
+foreach (['.cf7aiv-admin {', '.cf7aiv-admin .cf7aiv-metric-grid', '.cf7aiv-admin .cf7aiv-table-region', '.cf7aiv-admin :focus-visible', '@media (max-width: 782px)', '@media (forced-colors: active)'] as $fragment) {
+	ui_assert(str_contains($css, $fragment), "Admin stylesheet must contain {$fragment}.");
+}
+ui_assert(! preg_match('/(^|})\s*(?:html|body|\.wrap|\.card|table|input|select|textarea|button)\b/m', $css), 'Admin selectors must not target global WordPress or public elements.');
+ui_assert(! str_contains($css, '!important'), 'Admin CSS must avoid unverified important overrides.');
+
 ui_assert(AdminUi::duration(null) === 'No pending queue', 'Null queue age must be human-readable.');
 ui_assert(AdminUi::duration(59) === '59 seconds', 'Sub-minute duration must use seconds.');
 ui_assert(AdminUi::duration(3660) === '1 hour 1 minute', 'Duration must use compact human units.');

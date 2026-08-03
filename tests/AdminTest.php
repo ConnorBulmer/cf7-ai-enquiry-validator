@@ -318,6 +318,9 @@ admin_assert(str_contains($failedReviewNotice,'Approve-and-dispatch was not comp
 $simplePages=$setup.$policyPage.$reviewQueue.$integrations;
 admin_assert(str_contains($reviewQueue,'detail_item=91')&&str_contains($reviewQueue,'Review item 91'),'Simple Review Queue must link to a sanitized per-item review control.');
 admin_assert(str_contains($reviewQueue,'name="review_revisions[91]" value="7"'),'Bulk review must post the revision rendered for each selected row.');
+admin_assert(str_contains($reviewQueue, 'cf7aiv-toolbar cf7aiv-filter-toolbar'), 'Review filtering must have a dedicated toolbar.');
+admin_assert(str_contains($reviewQueue, 'cf7aiv-toolbar cf7aiv-bulk-toolbar'), 'Bulk review must have a separate toolbar.');
+admin_assert(str_contains($reviewQueue, 'aria-label="Review queue results"') && str_contains($reviewQueue, 'tabindex="0"'), 'Review results must use a labelled local scroll region.');
 $_GET=['detail_item'=>91,'_wpnonce'=>'nonce'];
 ob_start();CF7AIV\Admin\AdminPages::reviewQueue();$simpleReviewDetail=ob_get_clean();unset($_GET);
 admin_assert(str_contains($simpleReviewDetail,'value="change_tier"')&&str_contains($simpleReviewDetail,'name="tier_id"')&&str_contains($simpleReviewDetail,'name="outcome_id"')&&!str_contains($simpleReviewDetail,'private-source-reference')&&!str_contains($simpleReviewDetail,'Original source detail'),'Simple item detail must support tier/outcome correction without rendering raw source.');

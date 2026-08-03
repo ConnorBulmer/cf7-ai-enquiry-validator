@@ -23,10 +23,11 @@ final class ReviewQueuePage {
 			echo '<div class="notice notice-error"><p>Approve-and-dispatch was not completed. Current review state: ' . self::e($currentState) . '.</p></div>';
 		}
 		echo '<ul class="cf7aiv-decision-legend" aria-label="Decision states"><li><span class="cf7aiv-status-badge is-strong">Strong match</span></li><li><span class="cf7aiv-status-badge is-review">Needs review</span></li><li><span class="cf7aiv-status-badge is-ineligible">Not eligible</span></li></ul>';
-		echo '<form method="get"><input type="hidden" name="page" value="cf7aiv-review"><label for="cf7aiv-review-state">Review state</label><input id="cf7aiv-review-state" name="review_state" value="' . self::e($state) . '"><button type="submit" class="button">Filter</button></form>';
+		echo '<form method="get" class="cf7aiv-toolbar cf7aiv-filter-toolbar"><input type="hidden" name="page" value="cf7aiv-review"><label for="cf7aiv-review-state">Review state</label><input id="cf7aiv-review-state" name="review_state" value="' . self::e($state) . '"><button type="submit" class="button">Filter</button></form>';
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_bulk_review">';
 		wp_nonce_field('cf7aiv_bulk_review');
-		echo '<div class="tablenav top"><label for="cf7aiv-review-action">Bulk review action</label><select id="cf7aiv-review-action" name="review_action"><option value="confirm">Confirm prediction</option><option value="approve_no_send">Approve without send</option><option value="approve_dispatch">Approve and dispatch</option><option value="reject">Reject</option><option value="reanalyse">Reanalyse</option></select><button type="submit" class="button">Apply</button></div>';
+		echo '<div class="tablenav top cf7aiv-toolbar cf7aiv-bulk-toolbar"><label for="cf7aiv-review-action">Bulk review action</label><select id="cf7aiv-review-action" name="review_action"><option value="confirm">Confirm prediction</option><option value="approve_no_send">Approve without send</option><option value="approve_dispatch">Approve and dispatch</option><option value="reject">Reject</option><option value="reanalyse">Reanalyse</option></select><button type="submit" class="button">Apply</button></div>';
+		ob_start();
 		echo '<table class="widefat striped"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Outcome</th><th scope="col">Tier</th><th scope="col">Decision state</th><th scope="col">Evidence codes</th><th scope="col">Missing evidence</th><th scope="col">Ambiguity</th><th scope="col">Policy</th><th scope="col">Source</th><th scope="col">Attribution</th><th scope="col">Consent</th><th scope="col">Review</th><th scope="col">Delivery status</th>';
 		if ($advanced) {
 			echo '<th scope="col">AI diagnostic, not dispatch score.</th>';
@@ -54,7 +55,9 @@ final class ReviewQueuePage {
 		if ($rows === []) {
 			echo '<tr><td colspan="' . ($advanced ? 15 : 14) . '">No review items match this filter.</td></tr>';
 		}
-		echo '</tbody></table></form>';
+		echo '</tbody></table>';
+		$table = (string) ob_get_clean();
+		echo AdminUi::tableRegion('Review queue results', $table) . '</form>';
 		self::reviewDetail($advanced,$rows);
 		echo '</div>';
 	}

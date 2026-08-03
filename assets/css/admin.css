@@ -1,73 +1,244 @@
-.cf7aiv-admin .card {
+.cf7aiv-admin {
+	--cf7aiv-space-1: 4px;
+	--cf7aiv-space-2: 8px;
+	--cf7aiv-space-3: 12px;
+	--cf7aiv-space-4: 16px;
+	--cf7aiv-space-5: 24px;
+	--cf7aiv-border: #c3c4c7;
+	--cf7aiv-surface: #fff;
+	--cf7aiv-surface-subtle: #f6f7f7;
+	--cf7aiv-text-muted: #50575e;
+}
+
+.cf7aiv-admin .cf7aiv-page-header {
 	max-width: 1100px;
-	margin-top: 16px;
-	padding: 16px 20px;
+	margin: var(--cf7aiv-space-5) 0;
 }
 
-.cf7aiv-admin label,
-.cf7aiv-admin legend {
-	display: block;
+.cf7aiv-admin .cf7aiv-page-header h1,
+.cf7aiv-admin > h1 {
+	margin-bottom: var(--cf7aiv-space-2);
+}
+
+.cf7aiv-admin .cf7aiv-page-header p,
+.cf7aiv-admin .description {
+	color: var(--cf7aiv-text-muted);
+}
+
+.cf7aiv-admin .card,
+.cf7aiv-admin .cf7aiv-panel {
+	max-width: 1100px;
+	margin-top: var(--cf7aiv-space-4);
+	padding: var(--cf7aiv-space-4) var(--cf7aiv-space-5);
+	border: 1px solid var(--cf7aiv-border);
+	background: var(--cf7aiv-surface);
+}
+
+.cf7aiv-admin .cf7aiv-panel-grid,
+.cf7aiv-admin .cf7aiv-metric-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: var(--cf7aiv-space-4);
+}
+
+.cf7aiv-admin .cf7aiv-panel-grid {
+	max-width: 1100px;
+}
+
+.cf7aiv-admin .cf7aiv-panel-grid .cf7aiv-panel {
+	margin-top: 0;
+}
+
+.cf7aiv-admin .cf7aiv-metric {
+	padding: var(--cf7aiv-space-4);
+	border: 1px solid var(--cf7aiv-border);
+	background: var(--cf7aiv-surface);
+}
+
+.cf7aiv-admin .cf7aiv-metric dl,
+.cf7aiv-admin .cf7aiv-metric dd,
+.cf7aiv-admin .cf7aiv-metric p {
+	margin: 0;
+}
+
+.cf7aiv-admin .cf7aiv-metric dt,
+.cf7aiv-admin .cf7aiv-metric p {
+	color: var(--cf7aiv-text-muted);
+}
+
+.cf7aiv-admin .cf7aiv-metric dd {
+	margin-top: var(--cf7aiv-space-1);
+	font-size: 1.5rem;
 	font-weight: 600;
-	margin-top: 10px;
 }
 
-.cf7aiv-admin textarea,
-.cf7aiv-admin select,
-.cf7aiv-admin input:not([type="checkbox"]):not([type="hidden"]) {
-	max-width: 100%;
+.cf7aiv-admin .cf7aiv-metric p {
+	margin-top: var(--cf7aiv-space-2);
 }
 
-.cf7aiv-stage-list,
-.cf7aiv-decision-legend {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	list-style: none;
-	margin: 12px 0;
-	padding: 0;
+.cf7aiv-admin .cf7aiv-empty-state {
+	margin: var(--cf7aiv-space-3) 0;
+	padding: var(--cf7aiv-space-3);
+	border-left: 4px solid var(--cf7aiv-border);
+	background: var(--cf7aiv-surface-subtle);
+	color: var(--cf7aiv-text-muted);
 }
 
-.cf7aiv-status-badge {
+.cf7aiv-admin .cf7aiv-status-badge {
 	display: inline-block;
 	border: 1px solid #8c8f94;
 	border-radius: 999px;
 	padding: 3px 9px;
-	background: #f6f7f7;
+	background: var(--cf7aiv-surface-subtle);
 	color: #1d2327;
 	font-weight: 600;
 }
 
-.cf7aiv-status-badge.is-current,
-.cf7aiv-status-badge.is-strong {
+.cf7aiv-admin .cf7aiv-status-badge.is-current,
+.cf7aiv-admin .cf7aiv-status-badge.is-strong,
+.cf7aiv-admin .cf7aiv-status-badge.is-positive {
 	border-color: #008a20;
 	background: #edfaef;
 	color: #005c12;
 }
 
-.cf7aiv-status-badge.is-review {
+.cf7aiv-admin .cf7aiv-status-badge.is-review,
+.cf7aiv-admin .cf7aiv-status-badge.is-warning {
 	border-color: #996800;
 	background: #fcf9e8;
 	color: #6e4b00;
 }
 
-.cf7aiv-status-badge.is-ineligible {
+.cf7aiv-admin .cf7aiv-status-badge.is-ineligible,
+.cf7aiv-admin .cf7aiv-status-badge.is-negative {
 	border-color: #a7aaad;
 	background: #f0f0f1;
 	color: #3c434a;
 }
 
-.cf7aiv-suggestion {
-	border-top: 1px solid #dcdcde;
-	margin-top: 16px;
-	padding-top: 12px;
+.cf7aiv-admin .cf7aiv-stage-list,
+.cf7aiv-admin .cf7aiv-decision-legend,
+.cf7aiv-admin .cf7aiv-actions,
+.cf7aiv-admin .cf7aiv-page-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--cf7aiv-space-2);
+	margin: var(--cf7aiv-space-3) 0;
+	padding: 0;
 }
 
+.cf7aiv-admin .cf7aiv-stage-list,
+.cf7aiv-admin .cf7aiv-decision-legend {
+	list-style: none;
+}
+
+.cf7aiv-admin .cf7aiv-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: var(--cf7aiv-space-2);
+	margin: var(--cf7aiv-space-4) 0;
+	padding: var(--cf7aiv-space-3);
+	border: 1px solid var(--cf7aiv-border);
+	background: var(--cf7aiv-surface-subtle);
+}
+
+.cf7aiv-admin .cf7aiv-bulk-toolbar.tablenav {
+	height: auto;
+	margin-bottom: var(--cf7aiv-space-2);
+}
+
+.cf7aiv-admin .cf7aiv-toolbar label {
+	margin: 0;
+}
+
+.cf7aiv-admin label,
+.cf7aiv-admin legend {
+	display: block;
+	margin-top: var(--cf7aiv-space-3);
+	font-weight: 600;
+}
+
+.cf7aiv-admin input:not([type="checkbox"]):not([type="hidden"]),
+.cf7aiv-admin select,
+.cf7aiv-admin textarea {
+	box-sizing: border-box;
+	width: min(100%, 48rem);
+}
+
+.cf7aiv-admin textarea {
+	min-height: 6rem;
+}
+
+.cf7aiv-admin .cf7aiv-actions .button,
+.cf7aiv-admin .cf7aiv-toolbar .button,
+.cf7aiv-admin .cf7aiv-safety-action {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+}
+
+.cf7aiv-admin .cf7aiv-table-region {
+	max-width: 100%;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	margin: var(--cf7aiv-space-3) 0;
+}
+
+.cf7aiv-admin .cf7aiv-table-region .widefat,
 .cf7aiv-admin .widefat {
-	margin-top: 12px;
+	margin-top: var(--cf7aiv-space-2);
+}
+
+.cf7aiv-admin .cf7aiv-table-region table {
+	min-width: 760px;
+}
+
+.cf7aiv-admin .cf7aiv-table-region caption,
+.cf7aiv-admin .widefat caption {
+	padding: var(--cf7aiv-space-2);
+	color: var(--cf7aiv-text-muted);
+	text-align: left;
+}
+
+.cf7aiv-admin .cf7aiv-suggestion {
+	margin-top: var(--cf7aiv-space-4);
+	padding-top: var(--cf7aiv-space-3);
+	border-top: 1px solid #dcdcde;
+}
+
+.cf7aiv-admin .cf7aiv-advanced {
+	border-left: 4px solid #2271b1;
+}
+
+.cf7aiv-admin .cf7aiv-table-region:focus-visible,
+.cf7aiv-admin :focus-visible {
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
+}
+
+@media (max-width: 782px) {
+	.cf7aiv-admin .cf7aiv-form-grid,
+	.cf7aiv-admin .cf7aiv-metric-grid,
+	.cf7aiv-admin .cf7aiv-panel-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.cf7aiv-admin .card,
+	.cf7aiv-admin .cf7aiv-panel {
+		padding: var(--cf7aiv-space-3);
+	}
+
+	.cf7aiv-admin .cf7aiv-toolbar {
+		align-items: stretch;
+	}
 }
 
 @media (forced-colors: active) {
-	.cf7aiv-status-badge {
+	.cf7aiv-admin .cf7aiv-status-badge,
+	.cf7aiv-admin .card,
+	.cf7aiv-admin .cf7aiv-table-region {
 		border: 1px solid ButtonText;
 	}
 }
