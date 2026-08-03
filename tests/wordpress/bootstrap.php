@@ -41,6 +41,22 @@ if (is_wp_error($pageId)) { throw new RuntimeException('Could not create fixture
 $settings = CF7AIV\Infrastructure\Settings::defaults();
 $settings['destinations']['ga4']['measurement_id'] = 'G-TEST123';
 update_option(CF7AIV\Infrastructure\Settings::OPTION, $settings, false);
+
+global $wpdb;
+$timestamp = current_time('mysql', true);
+$deliveryInserted = $wpdb->insert($wpdb->prefix . 'cf7aiv_deliveries', [
+	'item_id' => 0,
+	'destination_key' => 'portability_fixture',
+	'mapping_key' => 'portability_fixture',
+	'idempotency_key' => hash('sha256', 'cf7aiv-portability-fixture-delivery'),
+	'state' => 'failed',
+	'attempts' => 1,
+	'last_error' => 'Controlled local delivery failure',
+	'created_at' => $timestamp,
+	'updated_at' => $timestamp,
+]);
+if ($deliveryInserted === false) { throw new RuntimeException('Could not create delivery failure fixture.'); }
+
 update_option('cf7aiv_portability_fixture', ['page_id' => (int) $pageId, 'form_ids' => [$successId, $failureId]], false);
 flush_rewrite_rules(false);
 echo wp_json_encode(['page_id' => (int) $pageId, 'form_ids' => [$successId, $failureId]], JSON_THROW_ON_ERROR) . "\n";
