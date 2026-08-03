@@ -90,8 +90,9 @@ private enquiries, account identifiers, or raw provider responses.
   weakening or bypassing live anti-spam. No Turnstile or site setting was
   changed. The rendered attempt contained 42 hidden fields, including 27
   attribution-related fields (one non-empty) and the anti-spam token field.
-- Server-side exact-marker searches found zero matching CFDB7 rows and zero
-  matching Flamingo rows. They also found zero exact plugin items or
+- Server-side exact-marker searches found zero matching CFDB7 rows; Flamingo
+  was unavailable and not an active source. They also found zero exact plugin
+  items or
   deliveries, zero items/deliveries created in the attempt window, and zero
   plugin scheduled actions in that window. There was therefore no exact
   synthetic row to back up or delete and no cleanup was performed. This public
