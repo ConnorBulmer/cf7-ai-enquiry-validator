@@ -29,7 +29,8 @@ raw provider responses.
   Windows-unsafe/reserved paths, **0** credential matches, **0**
   private/production-PII matches, and **0** site-identifier matches. A broader
   email-pattern review classified only expected public third-party vendor
-  attribution metadata, not private or site data.
+  attribution metadata and reserved-domain synthetic self-test fixtures, not
+  private or site data.
 - This candidate has not been uploaded, installed, or accepted on production.
   Fresh live acceptance and a new deployed archive/install hash comparison are
   required before it can be called live.
