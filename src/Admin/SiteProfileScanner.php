@@ -145,7 +145,10 @@ final class SiteProfileScanner {
 	private function positiveIds(mixed $values): array {
 		if (! is_array($values)) { return []; }
 		$ids = [];
+		$inspected = 0;
 		foreach ($values as $value) {
+			$inspected++;
+			if ($inspected > self::FORM_REFERENCE_LIMIT) { break; }
 			if (! is_scalar($value)) { continue; }
 			$id = (int) $value;
 			if ($id <= 0 || in_array($id, $ids, true)) { continue; }

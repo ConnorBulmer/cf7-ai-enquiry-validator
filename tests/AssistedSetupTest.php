@@ -136,7 +136,7 @@ add_filter('cf7aiv_site_profile_post_content', static function (string $content,
 add_filter('cf7aiv_site_profile_post_form_ids', static function (array $ids, mixed $post, string $content): array {
 	if ((int) $post->ID !== 44 || ! str_contains($content, 'Builder service details')) { return $ids; }
 	$GLOBALS['setup_builder_content_input_length'] = strlen($content);
-	return [...$ids, ...range(1, 500), 34, -1, 34];
+	return [...$ids, ...array_fill(0, 10000, 0), 101, 500, 34, -1, 34];
 }, 10, 3);
 $extendedProfile = (new SiteProfileScanner(null, static fn (): array => [[
 	'id' => 34,

@@ -13,7 +13,7 @@ property, advertising account, submission content or credential was used.
   **149/149 PASS**; release-package contract and identifier scan: **PASS**.
 - Review RED/GREEN regressions prove the PHP fallback removes legacy
   `submission_id`, scanner extensions process at most 100,000 content
-  characters and 100 form references per page, server-GTM-only configuration
+  characters and 100 raw form-reference entries per page, server-GTM-only configuration
   supplies its Measurement ID, conflicting Google route IDs fail closed, and
   both GS1 and GS2 GA session cookies parse for the configured property.
 - Matrix: WordPress 6.9/PHP 8.1.34 and WordPress 7.0.2/PHP 8.3.31, each with
@@ -43,7 +43,7 @@ property, advertising account, submission content or credential was used.
 - A fresh one-root release build contains **229** entries and excludes tests,
   tooling, CI metadata, implementation plans, verification evidence and
   credential/site-identifier patterns. Independently verified archive SHA-256:
-  `81312304309ed9177ac578b1704fa55facd9fc926171248accc4f7e4c474370c`.
+  `ffb9c0c28891781f135d03f878d3e96526d72834cf05f305b137f8af7d56ca95`.
 
 The 0.2.10 DeepSeek supporting-evidence correction was verified locally and
 against the configured isolated production provider on 2026-08-03.
