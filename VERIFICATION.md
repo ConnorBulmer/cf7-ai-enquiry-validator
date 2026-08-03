@@ -60,8 +60,9 @@ responses.
   attribution, database, scheduler, and public runtime paths.
 - Fresh rollback evidence remains outside `public_html` at
   `/home/sites/25b/3/3f7a206908/backups/20260803-215757Z-cf7aiv-0.2.16-final-predeploy`.
-  Its 232-file plugin copy exactly matches the live-before and live-after
-  manifests. The mode-0600 server-only snapshot contains the three allow-listed
+  Its 232-file plugin copy exactly matches both pre-install live-tree reads
+  (before and after backup creation). The mode-0600 server-only snapshot
+  contains the three allow-listed
   settings/secrets/schema rows and is non-empty; the backup remained present
   and non-empty after temporary-upload cleanup.
 - Post-install state comparison proved all three current option values and
