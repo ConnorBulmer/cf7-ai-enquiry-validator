@@ -20,6 +20,20 @@ private enquiries, account identifiers, or raw provider responses.
   `/home/sites/25b/3/3f7a206908/backups/20260803-185207Z-cf7aiv-0.2.16-predeploy`.
   The exact prior plugin copy matched the pre-deployment live tree, and the
   non-empty sensitive option snapshot remained server-side and hash-verified.
+- The first archive/install aggregate mismatch triggered the conservative
+  rollback before diagnosis. The operator preserved the inventoried active
+  state, replaced the live plugin directory with the exact 231-file backup,
+  and ran a server-only WP-CLI restore helper over the snapshot's
+  `captured_at_utc`/`rows` envelope. The helper allow-listed each
+  `option_name`, restored its serialized `option_value` through WordPress
+  option APIs, and emitted no value; the snapshot was neither printed nor
+  downloaded. The plugin was reactivated because it had been active, then
+  version `0.2.15`, schema `10`, status, health, scheduler aggregates, the
+  public page, and CF7 presence were read back. The rollback-tree manifest
+  matched the original backup manifest. After the mismatch was isolated to
+  non-ordinal PowerShell sorting, the exact hash-matched `0.2.16` archive was
+  redeployed and the same acceptance readbacks were repeated. Schema remained
+  `10`, so no database downgrade was needed.
 - Instrumented version, schema, status, health, and read-only safety commands
   returned complete output and exit zero. Automation, consent, destination
   enabled/dry-run/live flags, mapping versions/statuses, scheduled hooks, and
@@ -36,9 +50,10 @@ private enquiries, account identifiers, or raw provider responses.
   configured positive GBP value, stable event/idempotency identity, one live
   network call, and a suppressed repeat. Its delivery store was isolated in
   memory, so no production item or delivery row was created.
-- Post-test relevant option rows exactly matched the server-side pre-deployment
-  snapshot. Mapping, hook, pause, and delivery aggregates were unchanged, and
-  no transient setting or production test record required cleanup.
+- Post-test relevant option rows exactly matched all three server-side
+  pre-deployment snapshot rows byte-for-byte. Mapping, hook, pause, and
+  delivery aggregates were unchanged; only four completed plugin actions
+  remained, with no plugin action scheduled in the public-test window.
 - Authenticated live administration acceptance covered Overview, Review Queue,
   Policy Lab, Integrations, Tracking Health, and Setup at `1440x1000`,
   `900x1000`, and `390x844` — **18/18 combinations PASS**. Every combination
@@ -58,10 +73,32 @@ private enquiries, account identifiers, or raw provider responses.
   44px high. The only non-WordPress-button control observed was WordPress
   core's notice-dismiss control, not a plugin action.
 - Public HTTP checks for the home page and a representative course page
-  returned 200, rendered Contact Form 7 with the expected 20 plugin hidden
-  fields and attribution behavior, exposed no plugin administration CSS, and
-  contained no PHP fatal/parse/uncaught-exception marker. No public form was
-  submitted.
+  returned 200, rendered Contact Form 7 and attribution behavior, exposed no
+  plugin administration CSS, and contained no PHP fatal/parse/uncaught-
+  exception marker. A fresh read-only home-page check also confirmed the CF7
+  form, Cloudflare Turnstile token field, and 27 attribution-related hidden
+  fields.
+- The public modal form was exercised with the exact non-personal marker
+  `CF7AIV-QA-20260803-2017`. Without consent, CF7 returned HTTP 200 with
+  `validation_failed` and one consent error. With consent checked, it returned
+  HTTP 200 with `spam` and zero invalid fields. Both paths displayed a visitor
+  response in the form, did not navigate the page, and cleared the submitting
+  state.
+- The live form uses Cloudflare Turnstile. In the automated browser the
+  `_wpcf7_turnstile_response` token remained empty and no challenge iframe
+  loaded, so an accepted automated submission could not be obtained without
+  weakening or bypassing live anti-spam. No Turnstile or site setting was
+  changed. The rendered attempt contained 42 hidden fields, including 27
+  attribution-related fields (one non-empty) and the anti-spam token field.
+- Server-side exact-marker searches found zero matching CFDB7 rows and zero
+  matching Flamingo rows. They also found zero exact plugin items or
+  deliveries, zero items/deliveries created in the attempt window, and zero
+  plugin scheduled actions in that window. There was therefore no exact
+  synthetic row to back up or delete and no cleanup was performed. This public
+  evidence is deliberately limited to validation/spam response handling and
+  page independence; it does **not** claim accepted CF7 mail flow or an
+  accepted stored submission, and no asynchronous classification/delivery path
+  was entered by this fixture.
 
 ## 0.2.16 WordPress-native administration verification
 
