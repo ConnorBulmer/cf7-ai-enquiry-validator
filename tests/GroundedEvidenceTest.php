@@ -267,6 +267,11 @@ grounded_assert(
 		&& ! str_contains($deepSystemPrompt, 'We need a website rebuild before October.'),
 	'DeepSeek JSON mode must receive only concrete code-to-dimension pair examples without inventing tier/outcome semantics or promoting request text.',
 );
+grounded_assert(
+	str_contains($deepSystemPrompt, 'Do not stop after required evidence')
+		&& str_contains($deepSystemPrompt, 'minimum_supporting_evidence'),
+	'DeepSeek must be explicitly told to include grounded supporting evidence needed by the chosen tier instead of returning only its required evidence groups.',
+);
 grounded_assert(($deepPayload['max_tokens'] ?? null) === 900, 'DeepSeek v2 output must allow 900 tokens for grounded evidence.');
 grounded_assert($deepResult->providerUsage === ['input_tokens' => 101, 'output_tokens' => 52, 'reasoning_tokens' => 7, 'calls' => 1], 'DeepSeek usage must be normalized onto the result.');
 
