@@ -1,12 +1,12 @@
 # Release verification — 0.2.16 final candidate
 
-The current 0.2.16 final-review candidate was verified locally and in the
-disposable WordPress matrix on 2026-08-03. Its administration markup changes
-produce archive bytes that differ from the archive previously accepted on the
-live Mosaic Media Training site. The current candidate is **not deployed** and
-is pending fresh live acceptance. Local automation used synthetic fixtures
-only and retained no credentials, private enquiries, account identifiers, or
-raw provider responses.
+The current 0.2.16 final-review candidate was verified locally, in the
+disposable WordPress matrix, and on the live Mosaic Media Training site on
+2026-08-03. The exact final archive is deployed and accepted at schema 10.
+Local automation used synthetic fixtures only; the final live redeploy used no
+new provider, analytics, advertising, or form-submission request and retained
+no credentials, private enquiries, account identifiers, or raw provider
+responses.
 
 ## Current final-candidate status
 
@@ -31,9 +31,87 @@ raw provider responses.
   email-pattern review classified only expected public third-party vendor
   attribution metadata and reserved-domain synthetic self-test fixtures, not
   private or site data.
-- This candidate has not been uploaded, installed, or accepted on production.
-  Fresh live acceptance and a new deployed archive/install hash comparison are
-  required before it can be called live.
+- This exact candidate is live and accepted. Its installed 232-file canonical
+  manifest matches the reopened archive with zero path/hash mismatches.
+
+## Final live acceptance — current 0.2.16 archive
+
+- Exact deployed archive: `cf7-ai-enquiry-validator-0.2.16.zip`, SHA-256
+  `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
+  The remote upload matched this required hash before installation. After full
+  acceptance, only that exact temporary ZIP was removed and its absence was
+  proved.
+- Active plugin/version and installed schema readback are
+  `cf7-ai-enquiry-validator` `0.2.16` and `10`. The installed tree contains 232
+  files; its ordinal/Linux-sorted per-file manifest SHA-256 is
+  `33d76e0d322102b8237114a147b86c845ab12585f8075df9badca762207614ab`,
+  exactly equal to the reopened final ZIP manifest with **0** path/hash
+  mismatches.
+- Compared with the previously accepted 232-file tree, exactly three files
+  changed, and direct installed-file readback matches the final archive:
+  - `src/Admin/AdminPages.php`:
+    `8a0ba74ec638545918ea353e5d685a613f4df9d5ebd3b206edad7a4e79a71fab`;
+  - `src/Admin/IntegrationsPage.php`:
+    `9f54edf75367aa25c605c2adf8c4c68955894f4a8c22dc5fffcd2e3e22c86c01`;
+  - `src/Admin/ReviewQueuePage.php`:
+    `c3342ab95cba20fe68d6563396693a4d908ccfb2cf4c3da3e9b92d921cee85f7`.
+  All other 229 packaged files are byte-identical to the previously accepted
+  tree, including provider, classification, delivery, consent, mapping,
+  attribution, database, scheduler, and public runtime paths.
+- Fresh rollback evidence remains outside `public_html` at
+  `/home/sites/25b/3/3f7a206908/backups/20260803-215757Z-cf7aiv-0.2.16-final-predeploy`.
+  Its 232-file plugin copy exactly matches the live-before and live-after
+  manifests. The mode-0600 server-only snapshot contains the three allow-listed
+  settings/secrets/schema rows and is non-empty; the backup remained present
+  and non-empty after temporary-upload cleanup.
+- Post-install state comparison proved all three current option values and
+  autoload fields byte-for-byte equal to the server-only snapshot. Setup/live
+  lifecycle, live automation, verification off, consent respect, enhanced
+  matching off, 90-day retention, and every destination enabled/dry-run/live/
+  validation flag remained unchanged. Four published/enabled mapping rows
+  retained their exact baseline fingerprint; item aggregates remained one
+  classified/review item; delivery and paused-destination aggregates remained
+  empty; and all four plugin actions remained complete.
+- The StackCP proxy returned no captured output for the install call and, later,
+  one duplicate read-only WP-CLI batch. Both were treated as transport gaps,
+  not successes. A controller-authorized direct reconciliation then proved the
+  complete canonical installed tree, active 0.2.16/schema 10, and status/health
+  baseline with framed output and RC 0; a separate framed post-state comparison
+  proved option, mapping, item, delivery, pause, scheduler, and changed-file
+  preservation. An early diagnostic `tree_state` label used order-sensitive PHP
+  array identity; its own canonical manifests and explicit zero-mismatch
+  comparison conclusively proved the exact new tree.
+- No DeepSeek, GA4, Microsoft, webhook, or other live destination request was
+  repeated. The prior controlled classification, GA4 validation/transport,
+  Microsoft zero-value transport, qualified-mapping, end-to-end, privacy, and
+  duplicate-suppression acceptance below remains applicable because the final
+  archive changes only the three server-rendered Admin files listed above;
+  every provider and delivery runtime file is byte-identical.
+- Authenticated live administration acceptance covered Overview, Review Queue,
+  Policy Lab, Integrations, Tracking Health, and Setup at `1440x1000`,
+  `900x1000`, and `390x844`: **18/18 combinations PASS**. Every screen had its
+  expected heading, `.cf7aiv-page-header`, `.cf7aiv-admin` wrapper, and live
+  stylesheet `ver=0.2.16`, with zero document overflow, raw `<pre>` output,
+  fatal markers, console errors, or page errors. Cards retained
+  `min-width: 0`.
+- Review Queue retained its purpose text and a labelled/focusable local table
+  region with `overflow-x: auto` and a visible solid 2px outline at mobile and
+  in forced colours. A read-only structural inspection of the first existing
+  review detail confirmed per-item actions and a 44px submit without returning
+  content or an identifier. Integrations showed distinct Microsoft UET and
+  Webhook card headings. Live Health correctly showed two `role="status"`
+  empty states and no empty delivery table; its calibration action and 44px
+  submit were present. Setup exposed 30 controls, zero missing labels, and a
+  44px safety action.
+- Public read-only checks for `/` and `/media-training-courses/` both returned
+  HTTP 200, rendered Contact Form 7 and 27 attribution-related hidden fields,
+  exposed no public plugin-admin CSS, and contained no fatal marker. No form
+  was submitted during this final redeploy.
+- The historical public-form limitation remains unchanged: Cloudflare
+  Turnstile did not issue an automated-browser token, so the earlier fixture
+  could demonstrate only validation/spam response handling and page
+  independence, not accepted mail flow or an accepted stored submission. No
+  Turnstile or site setting was weakened or changed.
 
 ## Historical live acceptance — superseded 0.2.16 archive
 
