@@ -13,6 +13,8 @@ function cf7aiv_intake_assert(bool $condition, string $message): void {
 
 $GLOBALS['cf7aiv_test_actions'] = [];
 $GLOBALS['cf7aiv_test_filters'] = [];
+$GLOBALS['cf7aiv_test_options'] = [];
+$GLOBALS['cf7aiv_inline_script'] = '';
 
 function add_action(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void {
 	$GLOBALS['cf7aiv_test_actions'][$hook][] = [$callback, $priority, $acceptedArgs];
@@ -22,6 +24,10 @@ function add_filter(string $hook, mixed $callback, int $priority = 10, int $acce
 }
 function plugin_dir_url(string $file): string { return 'https://example.test/wp-content/plugins/cf7-ai-enquiry-validator/'; }
 function as_enqueue_async_action(): int { return 1; }
+function get_option(string $key, mixed $default = false): mixed { return $GLOBALS['cf7aiv_test_options'][$key] ?? $default; }
+function wp_enqueue_script(string $handle, string $source, array $dependencies = [], string|bool|null $version = false, array|bool $arguments = []): void {}
+function wp_add_inline_script(string $handle, string $data, string $position = 'after'): bool { $GLOBALS['cf7aiv_inline_script'] = $data; return true; }
+function wp_json_encode(mixed $value, int $flags = 0, int $depth = 512): string|false { return json_encode($value, $flags, $depth); }
 
 define('ABSPATH', __DIR__ . '/');
 define('AUTH_KEY', 'intake-test-auth-key');
@@ -122,5 +128,17 @@ $resolverCallbacks = $GLOBALS['cf7aiv_test_filters']['cf7aiv_consent_resolvers']
 $resolverRegistration = $resolverCallbacks[array_key_last($resolverCallbacks)][0];
 $resolvers = $resolverRegistration([]);
 cf7aiv_intake_assert(isset($resolvers['most_restrictive']), 'The built-in consent resolver must be registered by key.');
+
+$GLOBALS['cf7aiv_test_options']['cf7aiv_settings'] = [
+	'attribution' => ['retention_days' => 90],
+	'destinations' => ['ga4' => ['measurement_id' => 'g-abc123', 'api_secret' => 'PRIVATE-GA-SECRET']],
+];
+CF7AIV\Intake\IntakeHooks::enqueue();
+cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":"G-ABC123"'), 'The configured GA4 Measurement ID must be public attribution configuration.');
+cf7aiv_intake_assert(! str_contains($GLOBALS['cf7aiv_inline_script'], 'PRIVATE-GA-SECRET'), 'No GA4 API secret may be localized.');
+
+$GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations']['ga4']['measurement_id'] = 'UA-invalid';
+CF7AIV\Intake\IntakeHooks::enqueue();
+cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":""'), 'An invalid GA4 Measurement ID must disable browser identity capture.');
 
 echo "PASS IntakeTest\n";

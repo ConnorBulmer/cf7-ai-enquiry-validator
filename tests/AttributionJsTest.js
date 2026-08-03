@@ -39,7 +39,7 @@ function makeHarness(options = {}) {
 	let pluginWrites = 0;
 
 	global.window = {
-		cf7aivAttribution: { cookieName: pluginName, retentionDays: 90, fields: options.fields || {} },
+		cf7aivAttribution: { cookieName: pluginName, retentionDays: 90, measurementId: options.measurementId || '', fields: options.fields || {} },
 		dataLayer: options.dataLayer || [],
 		crypto: global.crypto,
 	};
@@ -162,6 +162,7 @@ const fields = {
 {
 	const page = makeHarness({
 		dataLayer: consent(true, false),
+		measurementId: 'G-CONTAINER',
 		cookies: { _ga: 'GA1.1.123456789.1234567890', _ga_CONTAINER: 'GS1.1.s1234567890.o1' },
 		storage: { cf7aiv_attribution: JSON.stringify({ gclid: 'STALECLICK123', gbraid: 'STALEGBRAID123', wbraid: 'STALEWBRAID123', msclkid: 'fedcba9876543210fedcba9876543210', utm_source: 'stale-source', first_landing_page: 'https://example.test/?gclid=STALECLICK123', current_page: 'https://example.test/?gbraid=STALEGBRAID123', referrer: 'https://search.example/results' }) },
 		fields,
@@ -238,11 +239,71 @@ foreachMalformedGaCookie([
 
 function foreachMalformedGaCookie(cases) {
 	cases.forEach((cookies) => {
-		const page = makeHarness({ dataLayer: consent(true, false), cookies, fields });
+		const page = makeHarness({ dataLayer: consent(true, false), measurementId: 'G-CONTAINER', cookies, fields });
 		let threw = false;
 		try { page.emit('DOMContentLoaded'); } catch (error) { threw = true; }
 		check(!threw && page.payload() !== null, 'malformed GA cookie encoding must be treated as absent without aborting collection');
 	});
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		measurementId: 'G-ABC123',
+		cookies: {
+			_ga: 'GA1.1.111111111.1111111111',
+			_ga_OTHER: 'GS1.1.s2222222222.o1',
+			_ga_ABC123: 'GS1.1.s3333333333.o1',
+		},
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.ga_client_id === '111111111.1111111111', 'the configured GA4 property must use its default client cookie');
+	check(payload.ga_session_id === '3333333333', 'the configured GA4 property must ignore an unrelated session cookie');
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		measurementId: 'G-ABC123',
+		cookies: {
+			brand_ga: 'GA1.1.444444444.4444444444',
+			brand_ga_ABC123: 'GS1.1.s5555555555.o1',
+		},
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.ga_client_id === '444444444.4444444444' && payload.ga_session_id === '5555555555', 'a configured GA4 property must accept one valid custom-prefix cookie pair');
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		measurementId: 'G-ABC123',
+		cookies: {
+			_ga: 'GA1.1.111111111.1111111111',
+			_ga_ABC123: 'GS1.1.s3333333333.o1',
+			brand_ga: 'GA1.1.444444444.4444444444',
+			brand_ga_ABC123: 'GS1.1.s5555555555.o1',
+		},
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(!('ga_client_id' in payload) && !('ga_session_id' in payload), 'multiple plausible cookie pairs for one property must fail closed');
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		cookies: { _ga: 'GA1.1.111111111.1111111111', _ga_ABC123: 'GS1.1.s3333333333.o1' },
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(!('ga_client_id' in payload) && !('ga_session_id' in payload), 'GA identity must be omitted when no valid Measurement ID is configured');
 }
 
 {

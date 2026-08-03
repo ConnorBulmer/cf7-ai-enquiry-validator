@@ -16,11 +16,20 @@
 		if (key === 'msclkid') return /^[a-f0-9]{32}$/i.test(value) ? value : '';
 		return /^[A-Za-z0-9._~-]{8,256}$/.test(value) ? value : '';
 	}
+	function cookieEntries() {
+		if (!document.cookie) return [];
+		return document.cookie.split(';').map(function (part) {
+			part = part.trim();
+			var separator = part.indexOf('=');
+			if (separator < 1) return null;
+			try {
+				return { name: part.slice(0, separator), value: decodeURIComponent(part.slice(separator + 1)) };
+			} catch (e) { return null; }
+		}).filter(function (entry) { return entry !== null; });
+	}
 	function readCookie(name) {
-		var prefix = name + '=';
-		var part = document.cookie.split('; ').find(function (item) { return item.indexOf(prefix) === 0; });
-		if (!part) return '';
-		try { return decodeURIComponent(part.slice(prefix.length)); } catch (e) { return ''; }
+		var matches = cookieEntries().filter(function (entry) { return entry.name === name; });
+		return matches.length === 1 ? matches[0].value : '';
 	}
 	function readStored() {
 		var raw = '';
@@ -165,18 +174,24 @@
 		return values;
 	}
 	function gaIdentity() {
-		var result = {};
-		var ga = readCookie('_ga').match(/^GA\d+\.\d+\.(\d+\.\d+)$/);
-		if (ga) result.ga_client_id = ga[1];
-		document.cookie.split('; ').some(function (part) {
-			if (part.indexOf('_ga_') !== 0) return false;
-			var decoded = '';
-			try { decoded = decodeURIComponent(part.split('=').slice(1).join('=')); } catch (e) { return false; }
-			var match = decoded.match(/(?:^|\.)s(\d{6,20})(?:\.|$)/);
-			if (match) result.ga_session_id = match[1];
-			return !!match;
+		var measurement = typeof cfg.measurementId === 'string' ? cfg.measurementId.trim().toUpperCase() : '';
+		if (!/^G-[A-Z0-9]+$/.test(measurement)) return {};
+		var suffix = measurement.slice(2).replace(/[^A-Z0-9]/g, '_');
+		var ending = '_ga_' + suffix;
+		var entries = cookieEntries();
+		var pairs = [];
+		entries.forEach(function (entry) {
+			if (!entry.name.endsWith(ending)) return;
+			var prefix = entry.name.slice(0, -ending.length);
+			var clients = entries.filter(function (candidate) { return candidate.name === prefix + '_ga'; });
+			if (clients.length !== 1) return;
+			var clientMatch = clients[0].value.match(/^GA\d+\.\d+\.(\d+\.\d+)$/);
+			var sessionMatch = entry.value.match(/(?:^|\.)s(\d{6,20})(?:\.|$)/);
+			if (clientMatch && sessionMatch) {
+				pairs.push({ ga_client_id: clientMatch[1], ga_session_id: sessionMatch[1] });
+			}
 		});
-		return result;
+		return pairs.length === 1 ? pairs[0] : {};
 	}
 	function captureConsent(target, consent) {
 		if (consent.source === 'wordpress') {
