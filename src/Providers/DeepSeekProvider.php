@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CF7AIV\Providers;
 
+use CF7AIV\Classification\PolicyValidator;
 use CF7AIV\Classification\ResultValidator;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Contracts\PolicySuggestionProviderInterface;
@@ -55,10 +56,11 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 
 	protected function send(ClassificationRequest $request, bool $reasoning): HttpResponse {
 		$schema = json_encode(ResultValidator::jsonSchema($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		$guidance = $this->v2JsonGuidance($request);
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
-				['role' => 'system', 'content' => $request->systemPrompt . "\nRequired JSON Schema: " . $schema . "\nReturn one valid JSON object matching this schema and no other text."],
+				['role' => 'system', 'content' => $request->systemPrompt . "\nRequired JSON Schema: " . $schema . $guidance . "\nReturn one valid JSON object matching this schema and no other text."],
 				['role' => 'user', 'content' => json_encode($this->userInput($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)],
 			],
 			'response_format' => ['type' => 'json_object'],
@@ -71,6 +73,18 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 			'timeout' => max(5, min(120, $this->timeout)),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
+	}
+
+	private function v2JsonGuidance(ClassificationRequest $request): string {
+		if ($request->policySchema !== PolicyValidator::SCHEMA_V2) { return ''; }
+		$mapping = json_encode($request->allowedEvidence, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		$pairs = [];
+		foreach ($request->allowedEvidence as $code => $dimension) {
+			$pairs[] = ['code' => $code, 'dimension' => $dimension];
+		}
+		return "\nEvidence code-to-dimension mapping: " . $mapping
+			. "\nEach evidence dimension must equal the value mapped from its code exactly."
+			. "\nEvidence pair examples: " . json_encode($pairs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 	}
 
 	protected function extractText(array $body): string {
