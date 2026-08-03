@@ -225,14 +225,15 @@ the maintainer guide with a builder-metadata and public-CPT example.
 ## Provider result canonicalization
 
 The existing generic result validator remains the single authority for mapping
-an allowed tier to the tier's canonical outcome/dimension. No provider-specific
-or site-specific mapping is added.
+an allowed evidence code to the code's canonical policy dimension. No
+provider-specific or site-specific mapping is added.
 
 Provider-wire regression tests must feed both DeepSeek and OpenAI a syntactically
-valid response whose tier is allowed but whose outcome/dimension conflicts with
-that tier. Both adapters must produce the canonical tier/outcome pair defined by
-the request policy. Existing malformed-response and unavailable-provider
-behavior remains unchanged.
+valid response whose evidence code is allowed but whose supplied dimension
+conflicts with that code's policy dimension. Both adapters must produce the
+canonical evidence code/dimension pair while preserving the separately
+validated tier and outcome. Existing malformed-response and
+unavailable-provider behavior remains unchanged.
 
 ## Test strategy
 

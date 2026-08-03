@@ -635,15 +635,14 @@ git commit -m "feat: extend bounded site profile scanning"
 
 **Interfaces:**
 - Consumes: `ResultValidator::fromJson()` through both real provider adapters.
-- Produces: canonical tier/outcome from `ClassificationRequest` policy dimensions.
+- Produces: canonical evidence dimensions from `ClassificationRequest::allowedEvidence`.
 
-- [ ] **Step 1: Add a v2 request with canonical outcome mapping**
+- [ ] **Step 1: Add a v2 request with canonical evidence mapping**
 
-Construct a request whose allowed tiers include `website_rebuild`, whose
-allowed outcomes include `primary_opportunity` and `secondary_opportunity`, and
-whose policy metadata maps `website_rebuild` to `primary_opportunity`. Create a
-syntactically valid provider JSON response that selects `website_rebuild` but
-claims `secondary_opportunity`.
+Construct a request whose `allowedEvidence` maps `service_fit` to the
+`service_fit` dimension. Create a syntactically valid provider JSON response
+that uses the allowed `service_fit` code but claims the separately allowed
+`specificity` dimension. Keep the tier and outcome valid.
 
 - [ ] **Step 2: Pass the mismatched response through both wire adapters**
 
@@ -653,7 +652,8 @@ OpenAI `output[].content[].text` envelope. Assert:
 ```php
 foreach ([$deepSeekResult, $openAiResult] as $result) {
 	cf7aiv_classification_assert($result->tierId === 'website_rebuild', 'Provider adapter must preserve the allowed tier.');
-	cf7aiv_classification_assert($result->outcomeId === 'primary_opportunity', 'Provider adapter must canonicalize the tier outcome.');
+	cf7aiv_classification_assert($result->outcomeId === 'primary_opportunity', 'Provider adapter must preserve the allowed outcome.');
+	cf7aiv_classification_assert($result->evidence[0]->code === 'service_fit' && $result->evidence[0]->dimension === 'service_fit', 'Provider adapter must canonicalize evidence dimension from its allowed code.');
 }
 ```
 

@@ -277,6 +277,50 @@ function result_for(string $outcome, string $tier, float $confidence, array $cod
 
 $agencyPolicy = (new CF7AIV\Classification\PolicyPackRegistry())->get('agency');
 cf7aiv_classification_assert(is_array($agencyPolicy), 'Evidence decision tests require the agency policy pack.');
+$wireEvidence = [];
+foreach ($agencyPolicy['evidence_catalog'] as $entry) { $wireEvidence[(string) $entry['code']] = (string) $entry['dimension']; }
+$wireRequest = new CF7AIV\Domain\ClassificationRequest(
+	'provider-wire',
+	'agency-v2',
+	'Website design project required.',
+	['message' => 'Website design project required.'],
+	'Classify the supplied business enquiry.',
+	array_column($agencyPolicy['tier_definitions'], 'id'),
+	array_values(array_unique(array_column($agencyPolicy['tier_definitions'], 'outcome_id'))),
+	$wireEvidence,
+	CF7AIV\Classification\PolicyValidator::SCHEMA_V2,
+	$agencyPolicy['exclusion_catalog'],
+	$agencyPolicy['ambiguity_catalog'],
+);
+$mismatchedDimensionJson = json_encode([
+	'outcome_id' => 'primary_opportunity',
+	'tier_id' => 'website_rebuild',
+	'reason_code' => 'qualified',
+	'model_confidence' => 0.91,
+	'evidence' => [[
+		'dimension' => 'specificity',
+		'code' => 'service_fit',
+		'field_key' => 'message',
+		'excerpt' => 'Website design',
+	]],
+	'missing_evidence' => [],
+	'exclusion_codes' => [],
+	'ambiguity_flags' => [],
+	'summary' => 'A website design opportunity.',
+], JSON_THROW_ON_ERROR);
+$wireDeepTransport = new CF7AIVTestTransport([
+	new CF7AIV\Infrastructure\HttpResponse(200, json_encode(['choices' => [['message' => ['content' => $mismatchedDimensionJson]]]], JSON_THROW_ON_ERROR)),
+]);
+$wireOpenTransport = new CF7AIVTestTransport([
+	new CF7AIV\Infrastructure\HttpResponse(200, json_encode(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => $mismatchedDimensionJson]]]]], JSON_THROW_ON_ERROR)),
+]);
+$wireDeepResult = (new CF7AIV\Providers\DeepSeekProvider($wireDeepTransport, 'controlled-deep-key'))->classify($wireRequest);
+$wireOpenResult = (new CF7AIV\Providers\OpenAIProvider($wireOpenTransport, 'controlled-open-key'))->classify($wireRequest);
+foreach ([$wireDeepResult, $wireOpenResult] as $wireResult) {
+	cf7aiv_classification_assert($wireResult->tierId === 'website_rebuild', 'Provider adapter must preserve the allowed tier.');
+	cf7aiv_classification_assert($wireResult->outcomeId === 'primary_opportunity', 'Provider adapter must preserve the allowed outcome.');
+	cf7aiv_classification_assert(($wireResult->evidence[0]->code ?? '') === 'service_fit' && ($wireResult->evidence[0]->dimension ?? '') === 'service_fit', 'Provider adapter must canonicalize the evidence dimension from its allowed code.');
+}
 $lowConfidence = result_for('primary_opportunity', 'website_rebuild', 0.05, ['service_fit', 'commercial_intent', 'specific_need']);
 $highConfidence = result_for('primary_opportunity', 'website_rebuild', 0.99, ['service_fit', 'commercial_intent', 'specific_need']);
 $lowEvidenceDecision = CF7AIV\Classification\EvidenceEvaluator::evaluate($lowConfidence, $agencyPolicy);
