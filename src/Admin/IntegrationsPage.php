@@ -19,6 +19,14 @@ final class IntegrationsPage {
 		$selectedProvider = (string) ($providers['selected'] ?? 'deepseek');
 		$verificationSupported = self::verificationSupported($selectedProvider);
 		echo '<div class="wrap cf7aiv-admin"><h1>Integrations</h1><p>All credentials are write-only. Blank secret fields retain the currently stored encrypted value.</p>';
+		$testStatus = is_scalar($_GET['microsoft_test'] ?? null) ? (string) $_GET['microsoft_test'] : '';
+		$testNotices = [
+			'success' => 'Microsoft accepted the controlled zero-value transport event.',
+			'retryable' => 'The Microsoft transport test encountered a temporary error; review health logs before retrying.',
+			'failed' => 'The Microsoft transport test was rejected; verify the tag ID and authentication key.',
+			'refused' => 'The Microsoft transport test was not sent because its exact confirmation phrase was missing.',
+		];
+		if (isset($testNotices[$testStatus])) { echo '<div class="notice"><p>' . self::e($testNotices[$testStatus]) . '</p></div>'; }
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_save_settings">';
 		wp_nonce_field('cf7aiv_settings');
 		echo '<fieldset><legend>Interface mode</legend><input type="hidden" name="cf7aiv[ui][advanced_mode]" value="0">';
@@ -55,6 +63,10 @@ final class IntegrationsPage {
 		echo '<fieldset><legend>Retention and uninstall</legend><label>Retention days <input type="number" min="1" max="3650" name="cf7aiv[privacy][retention_days]" value="' . (int) ($privacy['retention_days'] ?? 90) . '"></label>';
 		echo self::checkbox('Delete plugin data on uninstall', 'cf7aiv[privacy][delete_on_uninstall]', ! empty($privacy['delete_on_uninstall']));
 		echo self::checkbox('Enhanced matching', 'cf7aiv[privacy][enhanced_matching]', ! empty($privacy['enhanced_matching'])) . '</fieldset><button type="submit">Save integration settings</button></form>';
+
+		echo '<fieldset><legend>Microsoft UET transport test</legend><p>Sends one zero-value, consent-denied, identifier-free diagnostic event without changing Microsoft settings or mappings. Type <code>SEND_ZERO_VALUE_MICROSOFT_TEST</code> to confirm.</p><form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_test_microsoft">';
+		wp_nonce_field('cf7aiv_test_microsoft');
+		echo '<label for="cf7aiv-microsoft-confirmation">Confirmation</label><input id="cf7aiv-microsoft-confirmation" name="confirmation" autocomplete="off" value=""><button type="submit">Send controlled Microsoft test</button></form></fieldset>';
 
 		echo '<fieldset><legend>Automation lifecycle</legend>';
 		self::transitionForm('cf7aiv_automation_transition', 'cf7aiv_automation_transition', 'Enable live automation', 'live');

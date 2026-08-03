@@ -12,6 +12,7 @@ use CF7AIV\Contracts\AIProviderInterface;
 use CF7AIV\Infrastructure\Migration;
 use CF7AIV\Infrastructure\Settings;
 use CF7AIV\Integration\GA4TestService;
+use CF7AIV\Integration\MicrosoftUetTestService;
 use CF7AIV\Integration\OperationalSafety;
 use CF7AIV\Integration\PipelineSelfTest;
 use CF7AIV\Integration\PilotDefaults;
@@ -115,6 +116,21 @@ final class Commands {
 		\WP_CLI::success($mode === 'transport'
 			? 'One dedicated zero-value GA4 transport test was sent after strict validation.'
 			: 'GA4 payload passed strict validation; no event was collected.');
+	}
+
+	/** @param list<string> $args @param array<string, mixed> $assocArgs */
+	public function microsoft_test(array $args, array $assocArgs): void {
+		try {
+			$result = (new MicrosoftUetTestService())->transport((string) ($assocArgs['confirm'] ?? ''));
+		} catch (InvalidArgumentException $error) {
+			\WP_CLI::error($error->getMessage());
+			return;
+		}
+		$this->json($result);
+		if (empty($result['successful'])) {
+			\WP_CLI::error('Microsoft UET controlled transport test failed.');
+		}
+		\WP_CLI::success('One dedicated zero-value Microsoft UET transport test was sent.');
 	}
 
 	/** @param list<string> $args @param array<string, mixed> $assocArgs */
