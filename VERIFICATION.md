@@ -181,9 +181,8 @@ checkout-specific source mtimes.
 ## Historical live acceptance — superseded 0.2.16 archive
 
 The evidence in this section applies only to the earlier archive whose SHA-256
-is recorded below. It remains historical deployment evidence and is
-superseded for the current final candidate; it does not claim that the current
-candidate hash is live.
+is recorded below. It remains historical deployment evidence and supplies no
+acceptance evidence for the current deterministic archive.
 
 - The exact `cf7-ai-enquiry-validator-0.2.16.zip` archive was uploaded outside
   `public_html`, matched SHA-256
