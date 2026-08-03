@@ -6,6 +6,9 @@ $assert = static function (bool $condition, string $message): void {
 
 $phase = (string) ($args[0] ?? 'before');
 $mode = (string) getenv('CF7AIV_SOURCE_MODE');
+$expectedWordPress = (string) getenv('CF7AIV_WORDPRESS_VERSION');
+$wordPressVersion = (string) get_bloginfo('version');
+$assert($expectedWordPress !== '' && $wordPressVersion === $expectedWordPress, 'WordPress version must match the pinned matrix cell.');
 $assert(defined('CF7AIV\VERSION'), 'Plugin version is unavailable.');
 $assert(CF7AIV\Infrastructure\Migration::VERSION === '10', 'Schema version must remain 10.');
 $assert((string) get_option('cf7aiv_schema_version') === '10', 'Installed schema version must be 10.');
@@ -38,4 +41,4 @@ if ($phase === 'after') {
 	$assert($count >= 2, 'AJAX success and mail failure must both create classification items.');
 }
 
-echo 'PASS runtime ' . $phase . ' php=' . PHP_VERSION . ' source=' . $mode . "\n";
+echo 'PASS runtime ' . $phase . ' wp=' . $wordPressVersion . ' php=' . PHP_VERSION . ' source=' . $mode . "\n";

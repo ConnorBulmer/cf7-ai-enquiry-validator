@@ -76,10 +76,12 @@ worker or reviewer needs it.
 ### Version 0.2.13 cross-site portability hardening
 
 Version 0.2.13 scopes operational source-link tokens to each form and page,
-binds GA identity to the configured property, generalizes persistent source
-locators, and qualifies bounded CFDB7 matching by form, time and exact token.
+binds GA identity to one configured direct-GA4 or server-GTM property,
+generalizes persistent source locators, and qualifies bounded CFDB7 matching by
+form, time and exact token.
 It also extends the bounded public-site scanner through explicit filters and
-adds real WordPress browser coverage across PHP 8.1/8.3 and Flamingo/CFDB7.
+adds real WordPress 6.9/7.0.2 browser coverage across PHP 8.1/8.3 and
+Flamingo/CFDB7.
 Schema remains version 10, so no migration is required.
 
 ### Version 0.2.12 deterministic evidence dimensions

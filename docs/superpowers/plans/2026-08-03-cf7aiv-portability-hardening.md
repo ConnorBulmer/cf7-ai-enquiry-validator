@@ -4,7 +4,7 @@
 
 **Goal:** Release a site-independent `0.2.13` patch that makes CF7 submission linking form- and attempt-safe, resolves persistent sources reliably, selects only the configured GA4 identity, extends assisted scanning safely, and proves the result across isolated and real WordPress tests.
 
-**Architecture:** Keep attribution history consented and persistent, but move the operational submission token into form-local JavaScript memory. Let any registered persistent source implement a small locator contract, with CFDB7 using form-, time- and exact-token-qualified candidates. Pass only the configured GA4 Measurement ID to the browser, add bounded WordPress filters around the existing scanner, and preserve the shared result validator as the provider-independent canonicalization boundary.
+**Architecture:** Keep attribution history consented and persistent, but move the operational submission token into form-local JavaScript memory. Let any registered persistent source implement a small locator contract, with CFDB7 using form-, time- and exact-token-qualified candidates. Pass only one unique configured Google Measurement ID to the browser, add bounded WordPress filters around the existing scanner, and preserve the shared result validator as the provider-independent canonicalization boundary.
 
 **Tech Stack:** WordPress 6.5+, Contact Form 7, PHP 8.1/8.3, vanilla JavaScript, Node.js 20, WP-CLI, Docker Compose, MariaDB, GitHub Actions, Git.
 
@@ -27,7 +27,7 @@
 
 - Create `src/Contracts/SubmissionReferenceLocatorInterface.php`: generic exact source-link lookup contract.
 - Modify `assets/js/attribution.js`: form-local attempt tokens, terminal-event rotation and Measurement-ID-aware GA cookie pairing.
-- Modify `src/Intake/IntakeHooks.php`: expose only a validated GA4 Measurement ID to attribution JavaScript.
+- Modify `src/Intake/IntakeHooks.php`: expose only one validated Measurement ID shared by the configured GA4/server-GTM routes to attribution JavaScript.
 - Modify `src/Classification/ClassificationWorker.php`: resolve generic CF7 items through registered locator sources without a CFDB7 class dependency.
 - Modify `src/Sources/CFDB7Source.php`: implement form/time/token-qualified exact candidate lookup.
 - Modify `src/Admin/SiteProfileScanner.php`: add bounded public-post and builder-content extension filters.
@@ -692,7 +692,7 @@ git commit -m "test: lock provider outcome canonicalization"
 - Modify: `VERIFICATION.md`
 
 **Interfaces:**
-- Consumes: `CF7AIV_WORDPRESS_IMAGE` (`wordpress:php8.1-apache` or `wordpress:php8.3-apache`) and `CF7AIV_SOURCE_MODE` (`flamingo` or `cfdb7`).
+- Consumes: `CF7AIV_WORDPRESS_IMAGE` (`wordpress:6.9-php8.1-apache` or `wordpress:7.0.2-php8.3-apache`) and `CF7AIV_SOURCE_MODE` (`flamingo` or `cfdb7`).
 - Produces: an isolated WordPress site on a loopback port, deterministic test-only forms and zero retained containers/volumes after each matrix cell.
 
 - [x] **Step 1: Create the disposable Compose topology**
@@ -757,10 +757,10 @@ then run Playwright against the loopback site. The spec must:
 `run-matrix.ps1` loops in this order:
 
 ```text
-wordpress:php8.1-apache + flamingo
-wordpress:php8.1-apache + cfdb7
-wordpress:php8.3-apache + flamingo
-wordpress:php8.3-apache + cfdb7
+wordpress:6.9-php8.1-apache + flamingo
+wordpress:6.9-php8.1-apache + cfdb7
+wordpress:7.0.2-php8.3-apache + flamingo
+wordpress:7.0.2-php8.3-apache + cfdb7
 ```
 
 For each cell, assign a unique Compose project and port, run bootstrap, runtime

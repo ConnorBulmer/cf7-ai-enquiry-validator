@@ -284,6 +284,21 @@ function foreachMalformedGaCookie(cases) {
 		measurementId: 'G-ABC123',
 		cookies: {
 			_ga: 'GA1.1.111111111.1111111111',
+			_ga_ABC123: 'GS2.1.s6666666666$o1$g0$t6666667777$j42$l0$h123456789',
+		},
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.ga_client_id === '111111111.1111111111' && payload.ga_session_id === '6666666666', 'the configured GA4 property must parse the current dollar-delimited GS2 session cookie format');
+}
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, false),
+		measurementId: 'G-ABC123',
+		cookies: {
+			_ga: 'GA1.1.111111111.1111111111',
 			_ga_ABC123: 'GS1.1.s3333333333.o1',
 			brand_ga: 'GA1.1.444444444.4444444444',
 			brand_ga_ABC123: 'GS1.1.s5555555555.o1',

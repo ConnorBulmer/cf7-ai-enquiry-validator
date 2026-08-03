@@ -186,7 +186,7 @@
 			var clients = entries.filter(function (candidate) { return candidate.name === prefix + '_ga'; });
 			if (clients.length !== 1) return;
 			var clientMatch = clients[0].value.match(/^GA\d+\.\d+\.(\d+\.\d+)$/);
-			var sessionMatch = entry.value.match(/(?:^|\.)s(\d{6,20})(?:\.|$)/);
+			var sessionMatch = entry.value.match(/(?:^|[.$])s(\d{6,20})(?:[.$]|$)/);
 			if (clientMatch && sessionMatch) {
 				pairs.push({ ga_client_id: clientMatch[1], ga_session_id: sessionMatch[1] });
 			}

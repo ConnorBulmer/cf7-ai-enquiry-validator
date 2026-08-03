@@ -137,7 +137,21 @@ CF7AIV\Intake\IntakeHooks::enqueue();
 cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":"G-ABC123"'), 'The configured GA4 Measurement ID must be public attribution configuration.');
 cf7aiv_intake_assert(! str_contains($GLOBALS['cf7aiv_inline_script'], 'PRIVATE-GA-SECRET'), 'No GA4 API secret may be localized.');
 
-$GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations']['ga4']['measurement_id'] = 'UA-invalid';
+$GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations'] = [
+	'ga4' => ['measurement_id' => ''],
+	'server_gtm' => ['measurement_id' => 'g-sgtm123'],
+];
+CF7AIV\Intake\IntakeHooks::enqueue();
+cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":"G-SGTM123"'), 'A server-GTM-only route must expose its configured Measurement ID for browser identity capture.');
+
+$GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations'] = [
+	'ga4' => ['measurement_id' => 'G-DIRECT123'],
+	'server_gtm' => ['measurement_id' => 'G-SGTM123'],
+];
+CF7AIV\Intake\IntakeHooks::enqueue();
+cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":""'), 'Different configured Google route properties must fail closed instead of capturing identity for the wrong destination.');
+
+$GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations'] = ['ga4' => ['measurement_id' => 'UA-invalid']];
 CF7AIV\Intake\IntakeHooks::enqueue();
 cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":""'), 'An invalid GA4 Measurement ID must disable browser identity capture.');
 

@@ -29,9 +29,14 @@ final class IntakeHooks {
 		try {
 			$settings = (array) get_option(Settings::OPTION, []);
 			$days = max(1, min(365, (int) ($settings['attribution']['retention_days'] ?? 90)));
-			$ga4 = (array) ($settings['destinations']['ga4'] ?? []);
-			$measurementId = strtoupper(trim((string) ($ga4['measurement_id'] ?? '')));
-			if (preg_match('/\AG-[A-Z0-9]+\z/', $measurementId) !== 1) { $measurementId = ''; }
+			$measurementIds = [];
+			foreach (['ga4', 'server_gtm'] as $destination) {
+				$config = (array) ($settings['destinations'][$destination] ?? []);
+				$candidate = strtoupper(trim((string) ($config['measurement_id'] ?? '')));
+				if (preg_match('/\AG-[A-Z0-9]+\z/', $candidate) === 1) { $measurementIds[] = $candidate; }
+			}
+			$measurementIds = array_values(array_unique($measurementIds));
+			$measurementId = count($measurementIds) === 1 ? $measurementIds[0] : '';
 			wp_enqueue_script('cf7aiv-attribution', \CF7AIV\URL . 'assets/js/attribution.js', [], \CF7AIV\VERSION, true);
 			wp_add_inline_script('cf7aiv-attribution', 'window.cf7aivAttribution=' . wp_json_encode(['cookieName' => AttributionCookie::NAME, 'retentionDays' => $days, 'measurementId' => $measurementId, 'fields' => FieldNames::map()]) . ';', 'before');
 		} catch (Throwable $error) { self::log($error); }

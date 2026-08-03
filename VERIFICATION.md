@@ -11,7 +11,12 @@ property, advertising account, submission content or credential was used.
 - Complete sorted standalone PHP suite: **24/24 PASS**; JavaScript attribution
   suite and syntax checks: **PASS**; tracked non-vendor PHP lint:
   **149/149 PASS**; release-package contract and identifier scan: **PASS**.
-- Matrix: WordPress 6.9/PHP 8.1.34 and WordPress 7.0/PHP 8.3.31, each with
+- Review RED/GREEN regressions prove the PHP fallback removes legacy
+  `submission_id`, scanner extensions process at most 100,000 content
+  characters and 100 form references per page, server-GTM-only configuration
+  supplies its Measurement ID, conflicting Google route IDs fail closed, and
+  both GS1 and GS2 GA session cookies parse for the configured property.
+- Matrix: WordPress 6.9/PHP 8.1.34 and WordPress 7.0.2/PHP 8.3.31, each with
   Contact Form 7 6.1.6 plus either Flamingo 2.6.3 or CFDB7 1.4.0.
 - Result: **4/4 cells PASS**, comprising **8/8 real-browser Playwright tests**
   and pre/post WordPress-loaded runtime assertions in every cell.
@@ -32,10 +37,13 @@ property, advertising account, submission content or credential was used.
 - Every cell ran under a unique Compose project and loopback port. Final
   checks found no retained `cf7aiv-portability` containers, volumes or
   networks.
+- The matrix pins `wordpress:6.9-php8.1-apache` and
+  `wordpress:7.0.2-php8.3-apache`; runtime assertions verify the exact core
+  version rather than relying on mutable generic PHP image tags.
 - A fresh one-root release build contains **229** entries and excludes tests,
   tooling, CI metadata, implementation plans, verification evidence and
   credential/site-identifier patterns. Independently verified archive SHA-256:
-  `6e3c8ae0f45050faa0020a723902366c2bb42afa77c75f6321e1047031ffe468`.
+  `81312304309ed9177ac578b1704fa55facd9fc926171248accc4f7e4c474370c`.
 
 The 0.2.10 DeepSeek supporting-evidence correction was verified locally and
 against the configured isolated production provider on 2026-08-03.

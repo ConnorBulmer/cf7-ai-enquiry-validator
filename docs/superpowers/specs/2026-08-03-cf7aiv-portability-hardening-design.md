@@ -163,10 +163,11 @@ original capture window, rather than a moving newest-row window.
 
 ### Configuration supplied to JavaScript
 
-`IntakeHooks::enqueue()` adds the configured GA4 Measurement ID to the public
-attribution configuration. It exposes no API secret or other credential. An
-empty or invalid Measurement ID disables GA cookie identity capture but does
-not affect other attribution fields.
+`IntakeHooks::enqueue()` adds one unique configured Google Measurement ID from
+the direct GA4 or existing server-GTM route to the public attribution
+configuration. It exposes no API secret or other credential. Missing, invalid,
+or different IDs across the two routes disable GA cookie identity capture but
+do not affect other attribution fields.
 
 For a valid ID, JavaScript derives the Google session-cookie suffix from the ID
 by removing the leading `G-` and mapping characters outside
