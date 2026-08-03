@@ -54,6 +54,34 @@ made no external AI, analytics, or advertising request.
   mutation, stable synthetic identity, safe success/failure receipts, and
   token/tag redaction.
 
+### Mosaic Media Training live verification
+
+- Backed up the live `0.2.14` plugin outside `public_html`, uploaded the locally
+  verified archive, matched SHA-256, and atomically activated `0.2.15`.
+- Readback confirms plugin `0.2.15` active, installed/expected schema `10`, live
+  automation, Action Scheduler available, and Microsoft enabled with
+  `dry_run: false` after transport acceptance.
+- The guarded `cf7aiv_transport_test` returned successful provider acceptance,
+  `retryable: false`, no error, and no warning. Its event name does not match
+  the business EventGoal action `qualified_training_enquiry`.
+- Microsoft API readback retained one active UET tag and the dedicated active
+  `AI Qualified Training Enquiry` goal with Unique count, GBP variable value,
+  exclusion from bidding, and `NoRecentConversions` after the diagnostic.
+- Both the deterministic and configured-DeepSeek isolated live pipeline tests
+  passed with PII-free AI context/envelopes, strong-match eligibility, one
+  idempotent delivery record, and `production_state_touched: false`.
+- Live database aggregates show both Microsoft mappings published/enabled at
+  100 GBP, no Microsoft delivery failures, and all CF7AIV scheduled actions
+  complete.
+- Public rendering at 390, 768, and 1440 CSS pixels had no horizontal overflow;
+  one CF7 form exposed 20 injected plugin fields and the attribution script.
+  The UET loader and one configured action script loaded once each. With no
+  consent and after explicit denial, neither plugin nor UET attribution cookies
+  were created; the ephemeral source-link token remained available.
+- The recent WordPress debug-log window contained no plugin PHP warning, parse,
+  or fatal entry. Browser console errors were isolated to Cloudflare Turnstile
+  rejecting the automated browser challenge, not CF7AIV code.
+
 ## Previous 0.2.13 portability verification
 
 The 0.2.13 portability hardening candidate was verified in a disposable local
