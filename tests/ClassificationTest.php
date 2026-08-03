@@ -24,6 +24,7 @@ function add_filter(string $hook, mixed $callback, int $priority = 10, int $acce
 function do_action(string $hook, mixed ...$arguments): void { $GLOBALS['cf7aiv_fired_actions'][] = [$hook, $arguments]; }
 function plugin_dir_url(string $file): string { return 'https://example.test/wp-content/plugins/cf7-ai-enquiry-validator/'; }
 function as_enqueue_async_action(): int { return 1; }
+function get_date_from_gmt(string $date, string $format = 'Y-m-d H:i:s'): string { return gmdate($format, strtotime($date . ' UTC')); }
 
 define('ABSPATH', __DIR__ . '/');
 define('ARRAY_A', 'ARRAY_A');
@@ -757,13 +758,33 @@ cf7aiv_classification_assert($retryStore->failures[0]['transient'] === true && $
 final class CF7AIVTestCFDB7Wpdb {
 	public string $prefix = 'wp_';
 	/** @var list<string> */ public array $queries = [];
+	/** @var list<array{template:string,arguments:list<mixed>}> */ public array $preparedCalls = [];
+	/** @var list<string> */ public array $escapedLikes = [];
 	/** @param list<array<string,mixed>> $rows */ public function __construct(public array $rows) {}
 	public function prepare(string $sql, mixed ...$arguments): string {
+		$this->preparedCalls[] = ['template' => $sql, 'arguments' => $arguments];
 		foreach ($arguments as $argument) { $sql = preg_replace('/%[ds]/', is_int($argument) ? (string) $argument : "'" . str_replace("'", "''", (string) $argument) . "'", $sql, 1) ?? $sql; }
 		return $sql;
 	}
+	public function esc_like(string $value): string { $this->escapedLikes[] = $value; return addcslashes($value, '_%\\'); }
 	public function get_var(string $sql): mixed { $this->queries[] = $sql; return str_contains($sql, 'SHOW TABLES') ? 'wp_db7_forms' : null; }
-	public function get_results(string $sql, mixed $format = null): array { $this->queries[] = $sql; return $this->rows; }
+	public function get_results(string $sql, mixed $format = null): array {
+		$this->queries[] = $sql;
+		$rows = $this->rows;
+		if (preg_match('/form_post_id = (\d+)/', $sql, $match) === 1) {
+			$rows = array_values(array_filter($rows, static fn (array $row): bool => (int) ($row['form_post_id'] ?? 0) === (int) $match[1]));
+		}
+		if (preg_match("/form_value LIKE '([^']+)'/", $sql, $match) === 1) {
+			$needle = trim(str_replace(['\\_', '\\%', '\\\\'], ['_', '%', '\\'], $match[1]), '%');
+			$rows = array_values(array_filter($rows, static fn (array $row): bool => str_contains((string) ($row['form_value'] ?? ''), $needle)));
+		}
+		if (preg_match("/form_date BETWEEN '([^']+)' AND '([^']+)'/", $sql, $match) === 1) {
+			$rows = array_values(array_filter($rows, static fn (array $row): bool => (string) ($row['form_date'] ?? '') >= $match[1] && (string) ($row['form_date'] ?? '') <= $match[2]));
+		}
+		usort($rows, static fn (array $left, array $right): int => (int) ($right['form_id'] ?? 0) <=> (int) ($left['form_id'] ?? 0));
+		if (preg_match('/LIMIT (\d+)/', $sql, $match) === 1) { $rows = array_slice($rows, 0, (int) $match[1]); }
+		return $rows;
+	}
 	public function get_row(string $sql, mixed $format = null): ?array {
 		$this->queries[] = $sql;
 		foreach ($this->rows as $row) { if (str_contains($sql, 'form_id = ' . (int) $row['form_id'])) { return $row; } }
@@ -836,18 +857,50 @@ cf7aiv_classification_assert($v2HighStore->success['evidenceDecision']->state ==
 
 $submissionToken = '8df0c91b-9ef6-4704-a190-55e34ad61f50';
 $rawFields = ['cf7aiv_submission_id' => $submissionToken, 'your-name' => 'Private Person', 'your-email' => 'private@example.test', 'message' => 'We need residential care soon.'];
-$GLOBALS['wpdb'] = new CF7AIVTestCFDB7Wpdb([
-	['form_id' => 91, 'form_post_id' => 5, 'form_value' => serialize(array_merge($rawFields, ['cf7aiv_submission_id' => $submissionToken . '-decoy'])), 'form_date' => '2026-07-22 12:00:01'],
-	['form_id' => 90, 'form_post_id' => 5, 'form_value' => serialize($rawFields), 'form_date' => '2026-07-22 12:00:00'],
-]);
+$cfdb7Rows = [
+	['form_id' => 93, 'form_post_id' => 99, 'form_value' => serialize($rawFields), 'form_date' => '2026-08-03 10:20:30'],
+	['form_id' => 92, 'form_post_id' => 5, 'form_value' => serialize(['another_field' => $submissionToken]), 'form_date' => '2026-08-03 10:20:02'],
+	['form_id' => 91, 'form_post_id' => 5, 'form_value' => serialize(array_merge($rawFields, ['cf7aiv_submission_id' => $submissionToken . '-decoy'])), 'form_date' => '2026-08-03 10:20:01'],
+	['form_id' => 90, 'form_post_id' => 5, 'form_value' => serialize($rawFields), 'form_date' => '2026-08-03 10:20:00'],
+];
+for ($newerId = 200; $newerId <= 300; $newerId++) {
+	$cfdb7Rows[] = ['form_id' => $newerId, 'form_post_id' => 5, 'form_value' => serialize(['message' => 'Unrelated row ' . $newerId]), 'form_date' => '2026-08-03 10:21:00'];
+}
+$GLOBALS['wpdb'] = new CF7AIVTestCFDB7Wpdb($cfdb7Rows);
 $cfdb7 = new CF7AIV\Sources\CFDB7Source();
-cf7aiv_classification_assert($cfdb7->findReferenceBySubmissionId($submissionToken) === '90', 'CFDB7 lookup must match the canonical submission token exactly, never a partial serialized value.');
+cf7aiv_classification_assert($cfdb7->findReferenceBySubmissionId($submissionToken, 5, '2026-08-03 10:20:30') === '90', 'CFDB7 lookup must find the exact form/time/token row despite more than 100 newer unrelated rows.');
 $lookupSql = implode("\n", $GLOBALS['wpdb']->queries);
-cf7aiv_classification_assert(str_contains($lookupSql, 'ORDER BY form_id DESC LIMIT 50'), 'CFDB7 source-link lookup must be bounded to recent rows.');
-cf7aiv_classification_assert(! str_contains($lookupSql, $submissionToken), 'Submission token must not be interpolated into source-link SQL.');
+cf7aiv_classification_assert(str_contains($lookupSql, 'form_post_id = 5'), 'CFDB7 source-link candidates must be constrained to the captured form.');
+cf7aiv_classification_assert(str_contains($lookupSql, "form_value LIKE '%{$submissionToken}%'") && $GLOBALS['wpdb']->escapedLikes === [$submissionToken], 'CFDB7 source-link candidates must use an escaped full-token LIKE predicate.');
+cf7aiv_classification_assert(str_contains($lookupSql, "form_date BETWEEN '2026-08-03 10:10:30' AND '2026-08-03 10:30:30'"), 'CFDB7 source-link candidates must use the original capture time plus/minus ten minutes.');
+cf7aiv_classification_assert(str_contains($lookupSql, 'ORDER BY form_id DESC LIMIT 20'), 'CFDB7 source-link candidate results must be bounded to 20 rows.');
+$lookupPrepare = array_values(array_filter($GLOBALS['wpdb']->preparedCalls, static fn (array $call): bool => str_contains($call['template'], 'form_value LIKE')))[0] ?? [];
+cf7aiv_classification_assert(! str_contains((string) ($lookupPrepare['template'] ?? ''), $submissionToken) && in_array('%' . $submissionToken . '%', $lookupPrepare['arguments'] ?? [], true), 'CFDB7 token matching must use a prepared placeholder rather than SQL interpolation.');
+
+$invalidWpdb = new CF7AIVTestCFDB7Wpdb($cfdb7Rows);
+$GLOBALS['wpdb'] = $invalidWpdb;
+cf7aiv_classification_assert($cfdb7->findReferenceBySubmissionId('bad!', 5, '2026-08-03 10:20:30') === null, 'An invalid source-link token must fail closed.');
+cf7aiv_classification_assert($cfdb7->findReferenceBySubmissionId($submissionToken, 0, '2026-08-03 10:20:30') === null, 'A non-positive captured form ID must fail closed.');
+cf7aiv_classification_assert($invalidWpdb->queries === [], 'Invalid token or form inputs must not query CFDB7.');
+
+$invalidTimeWpdb = new CF7AIVTestCFDB7Wpdb($cfdb7Rows);
+$GLOBALS['wpdb'] = $invalidTimeWpdb;
+cf7aiv_classification_assert($cfdb7->findReferenceBySubmissionId($submissionToken, 5, 'not-a-time') === '90', 'An invalid legacy capture time must still resolve by exact form and token.');
+$invalidTimeSql = implode("\n", $invalidTimeWpdb->queries);
+cf7aiv_classification_assert(! str_contains($invalidTimeSql, 'form_date BETWEEN') && str_contains($invalidTimeSql, 'form_post_id = 5') && str_contains($invalidTimeSql, 'LIMIT 20'), 'An invalid capture time must omit only the date predicate.');
+
+foreach ([60, 120, 240] as $retryDelay) {
+	$retryLookupWpdb = new CF7AIVTestCFDB7Wpdb($cfdb7Rows);
+	$GLOBALS['wpdb'] = $retryLookupWpdb;
+	cf7aiv_classification_assert($cfdb7->findReferenceBySubmissionId($submissionToken, 5, '2026-08-03 10:20:30') === '90', "A {$retryDelay}-second delayed lookup must still resolve the original row.");
+	cf7aiv_classification_assert(str_contains(implode("\n", $retryLookupWpdb->queries), "form_date BETWEEN '2026-08-03 10:10:30' AND '2026-08-03 10:30:30'"), "A {$retryDelay}-second delayed lookup must retain the original capture window.");
+}
+
+$GLOBALS['wpdb'] = new CF7AIVTestCFDB7Wpdb($cfdb7Rows);
 
 $genericStore = new CF7AIVTestItemStore([
 	'id' => 13, 'source_type' => 'cf7', 'source_reference' => null, 'form_id' => 5,
+	'created_at' => '2026-08-03 10:20:30',
 	'attribution_encrypted' => CF7AIV\Infrastructure\Crypto::encrypt(json_encode(['submission_id' => $submissionToken], JSON_THROW_ON_ERROR)),
 	'is_calibration' => 0, 'is_historical' => 0, 'attribution_ready' => 1,
 	'email_hash' => null, 'phone_hash' => null, 'consent_permitted' => true,
