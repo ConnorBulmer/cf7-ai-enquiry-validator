@@ -167,17 +167,87 @@ try {
 }
 cf7aiv_delivery_assert($insecureServerGtmRejected, 'Existing-sGTM delivery must enforce HTTPS.');
 
-$msTransport = new CF7AIVDeliveryTransport([new CF7AIV\Infrastructure\HttpResponse(200, '{"eventId":"remote-1"}')]);
+$microsoftResponseCases = [
+	[200, '', true, false],
+	[202, '{}', true, false],
+	[400, '{"errors":[{"code":"InvalidEvent","field":"data[0].eventName","message":"token=secret raw@example.test"}]}', false, false],
+	[401, '{"message":"Bearer hidden-secret"}', false, false],
+	[408, '', false, true],
+	[425, '', false, true],
+	[429, '', false, true],
+	[500, '', false, true],
+];
+foreach ($microsoftResponseCases as [$status, $body, $successful, $retryable]) {
+	$result = CF7AIV\Destinations\MicrosoftUetResponseClassifier::classify(
+		new CF7AIV\Infrastructure\HttpResponse($status, $body),
+		'local-stable-event',
+	);
+	cf7aiv_delivery_assert(
+		[$result->successful, $result->retryable] === [$successful, $retryable],
+		"Microsoft HTTP {$status} must have the correct delivery classification.",
+	);
+	cf7aiv_delivery_assert(
+		! str_contains((string) $result->error, 'hidden-secret')
+		&& ! str_contains((string) $result->error, 'raw@example.test')
+		&& ! str_contains((string) $result->error, 'token=secret'),
+		'Microsoft response errors must never retain provider bodies, secrets, or identity.',
+	);
+	if ($successful) {
+		cf7aiv_delivery_assert($result->remoteId === 'local-stable-event', 'Accepted Microsoft responses must retain the stable local event ID as their receipt.');
+	}
+}
+foreach (['errors', 'partialErrors', 'operationErrors'] as $errorKey) {
+	$body = json_encode([$errorKey => [['code' => 'Rejected', 'field' => 'data[0].eventName', 'message' => 'private@example.test token=private']]], JSON_THROW_ON_ERROR);
+	$result = CF7AIV\Destinations\MicrosoftUetResponseClassifier::classify(new CF7AIV\Infrastructure\HttpResponse(200, $body), 'local-stable-event');
+	cf7aiv_delivery_assert(! $result->successful && ! $result->retryable, "Microsoft 2xx {$errorKey} must be treated as an explicit event rejection.");
+	cf7aiv_delivery_assert(str_contains((string) $result->error, 'Rejected') && str_contains((string) $result->error, 'data[0].eventName'), 'Microsoft validation failures may retain only a bounded safe code and field.');
+	cf7aiv_delivery_assert(! str_contains((string) $result->error, 'private@example.test'), 'Microsoft validation messages must not retain provider message text.');
+}
+$malformedMicrosoft = CF7AIV\Destinations\MicrosoftUetResponseClassifier::classify(new CF7AIV\Infrastructure\HttpResponse(200, '{not-json'), 'local-stable-event');
+cf7aiv_delivery_assert($malformedMicrosoft->successful && $malformedMicrosoft->remoteId === 'local-stable-event', 'Malformed optional Microsoft success bodies must not crash or replace the stable local receipt.');
+
+$msTransport = new CF7AIVDeliveryTransport([new CF7AIV\Infrastructure\HttpResponse(200, '{}')]);
 $msResult = (new CF7AIV\Destinations\MicrosoftUetDestination($msTransport, '12345', 'uet-token', true, false))->send($event);
 $msCall = $msTransport->requests[0]; $msBody = json_decode($msCall['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
+$msEvent = $msBody['data'][0] ?? [];
 cf7aiv_delivery_assert($msCall['url'] === 'https://capi.uet.microsoft.com/v1/12345/events' && $msCall['arguments']['headers']['Authorization'] === 'Bearer uet-token', 'Microsoft UET CAPI must use the tag endpoint and bearer authorization.');
-cf7aiv_delivery_assert($msBody['eventType'] === 'custom' && $msBody['eventId'] === $event->eventId && $msBody['userData']['msclkid'] === 'safe-click-id', 'Microsoft event must include stable ID, custom event, and click identifier.');
-cf7aiv_delivery_assert($msBody['adStorageConsent'] === 'D' && ! isset($msBody['userData']['em'], $msBody['userData']['ph']), 'Microsoft must transmit actual denied consent and suppress hashes without user-data consent.');
-cf7aiv_delivery_assert($msResult->remoteId === 'remote-1', 'Microsoft response IDs must be retained.');
+cf7aiv_delivery_assert(
+	count($msBody['data'] ?? []) === 1
+	&& ($msBody['continueOnValidationError'] ?? null) === false
+	&& ($msEvent['eventType'] ?? '') === 'custom'
+	&& ($msEvent['eventId'] ?? '') === $event->eventId
+	&& ($msEvent['customData']['transactionId'] ?? '') === $event->eventId,
+	'Microsoft CAPI must wrap one event and use one stable identity for event and transaction deduplication.',
+);
+cf7aiv_delivery_assert(
+	$msEvent['eventName'] === $event->eventName
+	&& is_int($msEvent['eventTime'])
+	&& $msEvent['customData']['value'] === $event->value
+	&& $msEvent['customData']['currency'] === $event->currency
+	&& $msEvent['userData']['msclkid'] === 'safe-click-id',
+	'Microsoft event must preserve the mapped conversion fields, time, and permitted click identifier.',
+);
+cf7aiv_delivery_assert($msEvent['adStorageConsent'] === 'D' && ! isset($msEvent['userData']['em'], $msEvent['userData']['ph']), 'Microsoft must transmit actual denied consent and suppress hashes without user-data consent.');
+cf7aiv_delivery_assert($msResult->remoteId === $event->eventId, 'Microsoft success receipts must retain the local stable event identity.');
 $msGrantedTransport = new CF7AIVDeliveryTransport([new CF7AIV\Infrastructure\HttpResponse(204, '')]);
 (new CF7AIV\Destinations\MicrosoftUetDestination($msGrantedTransport, '12345', 'uet-token', true, false))->send($grantedEvent);
 $msGrantedBody = json_decode($msGrantedTransport->requests[0]['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
-cf7aiv_delivery_assert(isset($msGrantedBody['userData']['em'], $msGrantedBody['userData']['ph']), 'Microsoft enhanced hashes require both separate enablement and granted user-data consent.');
+$msGrantedEvent = $msGrantedBody['data'][0] ?? [];
+cf7aiv_delivery_assert(isset($msGrantedEvent['userData']['em'], $msGrantedEvent['userData']['ph']), 'Microsoft enhanced hashes require both separate enablement and granted user-data consent.');
+$msDefaultTransport = new CF7AIVDeliveryTransport([new CF7AIV\Infrastructure\HttpResponse(204, '')]);
+(new CF7AIV\Destinations\MicrosoftUetDestination($msDefaultTransport, '12345', 'uet-token', false, false))->send($grantedEvent);
+$msDefaultJson = $msDefaultTransport->requests[0]['arguments']['body'];
+$msDefaultBody = json_decode($msDefaultJson, true, 64, JSON_THROW_ON_ERROR);
+$msDefaultEvent = $msDefaultBody['data'][0] ?? [];
+cf7aiv_delivery_assert(
+	! str_contains($msDefaultJson, 'email_sha256')
+	&& ! str_contains($msDefaultJson, 'phone_sha256')
+	&& ! isset($msDefaultEvent['userData']['em'], $msDefaultEvent['userData']['ph']),
+	'Microsoft enhanced matching must remain absent by default.',
+);
+foreach (['PRIVATE enquiry text', 'Ada Private', 'ada@example.test', '+447700900123', 'REMOTE_ADDR', 'HTTP_USER_AGENT'] as $forbidden) {
+	cf7aiv_delivery_assert(! str_contains($msDefaultJson, $forbidden), 'Microsoft payloads must exclude raw identity, form content, IP, and user agent fields.');
+}
 
 $webhookTransport = new CF7AIVDeliveryTransport([new CF7AIV\Infrastructure\HttpResponse(204, '')]);
 $webhook = new CF7AIV\Destinations\WebhookDestination($webhookTransport, 'https://hooks.example.test/conversion', 'webhook-secret', false, 1721643000);

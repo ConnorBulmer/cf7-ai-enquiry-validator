@@ -3,7 +3,6 @@ declare(strict_types=1);
 namespace CF7AIV\Destinations;
 
 use CF7AIV\Contracts\DestinationInterface;
-use CF7AIV\Delivery\ResponseClassifier;
 use CF7AIV\Domain\ConversionEvent;
 use CF7AIV\Domain\DeliveryResult;
 use CF7AIV\Infrastructure\HttpTransportInterface;
@@ -21,13 +20,12 @@ final class MicrosoftUetDestination implements DestinationInterface {
 			if (isset($event->userData['email_sha256'])) { $userData['em'] = $event->userData['email_sha256']; }
 			if (isset($event->userData['phone_sha256'])) { $userData['ph'] = $event->userData['phone_sha256']; }
 		}
-		$body = ['eventType' => 'custom', 'eventId' => $event->eventId, 'eventName' => $event->eventName, 'eventTime' => (int) strtotime($event->occurredAt), 'userData' => $userData, 'customData' => ['value' => $event->value, 'currency' => $event->currency], 'adStorageConsent' => ($event->consent['ad_storage'] ?? 'unknown') === 'granted' ? 'G' : 'D'];
+		$providerEvent = ['eventType' => 'custom', 'eventId' => $event->eventId, 'eventName' => $event->eventName, 'eventTime' => (int) strtotime($event->occurredAt), 'userData' => $userData, 'customData' => ['value' => $event->value, 'currency' => $event->currency, 'transactionId' => $event->eventId], 'adStorageConsent' => ($event->consent['ad_storage'] ?? 'unknown') === 'granted' ? 'G' : 'D'];
+		$body = ['data' => [$providerEvent], 'continueOnValidationError' => false];
 		$url = 'https://capi.uet.microsoft.com/v1/' . rawurlencode($this->tagId) . '/events';
 		$arguments = ['headers' => ['Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $this->token], 'body' => json_encode($body, JSON_THROW_ON_ERROR), 'timeout' => 10];
 		if ($this->dryRun) { $safe = $arguments; $safe['headers']['Authorization'] = 'Bearer [redacted]'; return new DeliveryResult(false, false, null, null, ['url' => $url, 'arguments' => $safe], [], true); }
-		try { $response = $this->transport->post($url, $arguments); } catch (Throwable $error) { return ResponseClassifier::transportFailure($error); }
-		$result = ResponseClassifier::classify($response); $remoteId = null;
-		if ($result->successful) { $decoded = json_decode($response->body, true); if (is_array($decoded) && is_scalar($decoded['eventId'] ?? null)) { $remoteId = substr((string) $decoded['eventId'], 0, 191); } }
-		return new DeliveryResult($result->successful, $result->retryable, $remoteId, $result->error);
+		try { $response = $this->transport->post($url, $arguments); } catch (Throwable $error) { return MicrosoftUetResponseClassifier::transportFailure($error); }
+		return MicrosoftUetResponseClassifier::classify($response, $event->eventId);
 	}
 }

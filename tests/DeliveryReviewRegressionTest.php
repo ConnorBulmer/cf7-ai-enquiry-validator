@@ -76,7 +76,9 @@ review_check(($afterDelivered['acquired'] ?? true) === false, 'Delivered records
 final class ReviewTransport implements CF7AIV\Infrastructure\HttpTransportInterface { public array $requests = []; public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse { $this->requests[] = compact('url', 'arguments'); return new CF7AIV\Infrastructure\HttpResponse(204, ''); } }
 $msTransport = new ReviewTransport(); (new CF7AIV\Destinations\MicrosoftUetDestination($msTransport, '123', 'token'))->send($canonicalEvent);
 $msBody = json_decode($msTransport->requests[0]['arguments']['body'], true, 32, JSON_THROW_ON_ERROR);
-review_check(is_int($msBody['eventTime'] ?? null) && $msBody['eventTime'] === strtotime($canonicalEvent->occurredAt), 'Microsoft eventTime must be an integer Unix timestamp in seconds.');
+$msEvent = $msBody['data'][0] ?? [];
+review_check(is_int($msEvent['eventTime'] ?? null) && $msEvent['eventTime'] === strtotime($canonicalEvent->occurredAt), 'Microsoft eventTime must be an integer Unix timestamp in seconds.');
+review_check(($msEvent['eventId'] ?? '') === $canonicalEvent->eventId && ($msEvent['customData']['transactionId'] ?? '') === $canonicalEvent->eventId, 'Microsoft retries must retain one canonical event and transaction identity.');
 
 if ($failures !== []) { throw new RuntimeException(implode("\n", $failures)); }
 echo "PASS DeliveryReviewRegressionTest\n";
