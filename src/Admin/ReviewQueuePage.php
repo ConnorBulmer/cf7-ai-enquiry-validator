@@ -17,7 +17,7 @@ final class ReviewQueuePage {
 		$state = substr(preg_replace('/[^a-z_\-]/', '', (string) ($_GET['review_state'] ?? '')) ?? '', 0, 32);
 		$rows = self::rows($page, $state);
 
-		echo '<div class="wrap cf7aiv-admin"><h1>Review Queue</h1>';
+		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>Review Queue</h1><p>Review classifications, correct outcomes, and control approved delivery.</p></div>';
 		if (($_GET['review_error'] ?? '') === '1') {
 			$currentState = $state !== '' ? $state : 'review';
 			echo '<div class="notice notice-error"><p>Approve-and-dispatch was not completed. Current review state: ' . self::e($currentState) . '.</p></div>';
@@ -122,7 +122,7 @@ final class ReviewQueuePage {
 		wp_nonce_field('cf7aiv_review');
 		echo '<label for="cf7aiv-item-action">Action</label><select id="cf7aiv-item-action" name="review_action"><option value="confirm">Confirm prediction</option><option value="change_tier">Correct tier and outcome</option><option value="approve_no_send">Approve without send</option><option value="approve_dispatch">Approve and dispatch</option><option value="reject">Reject</option><option value="reanalyse">Reanalyse</option></select>';
 		echo '<label for="cf7aiv-corrected-tier">Corrected tier</label><input id="cf7aiv-corrected-tier" name="tier_id"><label for="cf7aiv-corrected-outcome">Corrected outcome</label><input id="cf7aiv-corrected-outcome" name="outcome_id">';
-		echo '<label for="cf7aiv-example-summary">Non-identifying example summary</label><textarea id="cf7aiv-example-summary" name="example_summary"></textarea><button type="submit" class="button button-primary">Apply review</button></form></section>';
+		echo '<label for="cf7aiv-example-summary">Non-identifying example summary</label><textarea id="cf7aiv-example-summary" name="example_summary"></textarea><p class="cf7aiv-actions"><button type="submit" class="button button-primary">Apply review</button></p></form></section>';
 	}
 
 	private static function sourceDetail(int $id): void {

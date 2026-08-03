@@ -138,7 +138,7 @@ final class AdminPages {
 		$calibrationForm .= '</select><label for="cf7aiv-health-from">From</label><input id="cf7aiv-health-from" type="date" name="date_from" value="' . self::e($dateFrom) . '" required>';
 		$calibrationForm .= '<label for="cf7aiv-health-to">To</label><input id="cf7aiv-health-to" type="date" name="date_to" value="' . self::e($dateTo) . '" required>';
 		$calibrationForm .= '<label for="cf7aiv-health-maximum">Maximum</label><input id="cf7aiv-health-maximum" type="number" name="maximum" value="25" min="1" max="500" required>';
-		$calibrationForm .= '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><button type="submit" class="button">Schedule calibration</button></form>';
+		$calibrationForm .= '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><p class="cf7aiv-actions"><button type="submit" class="button">Schedule calibration</button></p></form>';
 		$sourceBody = $sourceRows === [] ? AdminUi::emptyState('No submission sources were detected.') : AdminUi::keyValueTable('Submission source health', $sourceRows);
 		$pausedBody = $pausedRows === [] ? AdminUi::emptyState('No destinations are paused.') : AdminUi::keyValueTable('Paused destinations', $pausedRows);
 		$deliveryBody = $deliveryTable === '' ? AdminUi::emptyState('No delivery errors were recorded.') : AdminUi::tableRegion('Sanitized delivery errors', $deliveryTable);

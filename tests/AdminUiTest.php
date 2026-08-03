@@ -50,6 +50,10 @@ ui_assert(
 	(bool) preg_match('/\.cf7aiv-admin \.card,\s*\.cf7aiv-admin \.cf7aiv-panel\s*\{[^}]*min-width:\s*0;/s', $css),
 	'Plugin admin cards must override WordPress minimum widths so responsive grid items can shrink.'
 );
+ui_assert(
+	(bool) preg_match('/\.cf7aiv-admin \.cf7aiv-actions \.button,\s*\.cf7aiv-admin \.cf7aiv-toolbar \.button,\s*\.cf7aiv-admin \.cf7aiv-safety-action\s*\{[^}]*min-height:\s*44px;/s', $css),
+	'Buttons in action and toolbar wrappers must retain the scoped 44px minimum target-size contract.'
+);
 ui_assert(! preg_match('/(^|})\s*(?:html|body|\.wrap|\.card|table|input|select|textarea|button)\b/m', $css), 'Admin selectors must not target global WordPress or public elements.');
 ui_assert(! str_contains($css, '!important'), 'Admin CSS must avoid unverified important overrides.');
 

@@ -283,6 +283,8 @@ admin_assert(str_contains($healthPage, 'Available') && str_contains($healthPage,
 admin_assert(str_contains($healthPage, '<caption>Read-only checks</caption>'), 'Read-only checks must be structured.');
 admin_assert(str_contains($healthPage, 'cf7aiv-table-region') && str_contains($healthPage, 'aria-label="Sanitized delivery errors"'), 'Delivery logs must scroll locally in a labelled region.');
 admin_assert(str_contains($healthPage, '&lt;script&gt;') && ! str_contains($healthPage, '<script>'), 'Sanitised delivery error text must remain escaped.');
+admin_assert(! str_contains($healthPage, 'private implementation value'), 'Tracking Health must render only paused destination names and never associative private values.');
+admin_assert(str_contains($healthPage, '<p class="cf7aiv-actions"><button type="submit" class="button">Schedule calibration</button></p></form>'), 'Tracking Health calibration submit must use the shared action target-size wrapper inside its existing form.');
 $GLOBALS['admin_health_sources']=[];
 $GLOBALS['admin_options']['cf7aiv_paused_destinations']=[];
 $GLOBALS['wpdb']->deliveryRows=[];
@@ -317,6 +319,19 @@ admin_assert(str_contains($integrations,'name="confirmation"')&&str_contains($in
 admin_assert(method_exists(CF7AIV\Cli\Commands::class,'microsoft_test'),'WP-CLI must expose the guarded Microsoft transport-test command.');
 admin_assert(str_contains($integrations,'name="cf7aiv[ui][advanced_mode]" value="0"')&&str_contains($integrations,'name="cf7aiv[ui][advanced_mode]" value="1"')&&str_contains($integrations,'Advanced mode'),'Integrations must expose a functional Advanced-mode toggle with an unchecked value.');
 admin_assert(str_contains($integrations,'Google conversion route')&&str_contains($integrations,'Recommended for most users')&&!str_contains($integrations,'server_gtm_api_secret'),'Simple Integrations must recommend direct GA4 without exposing existing-sGTM credentials.');
+$microsoftPanelPosition = strpos($integrations, '<section class="card cf7aiv-integration-panel"><h2>Microsoft UET</h2>');
+$webhookPanelPosition = strpos($integrations, '<section class="card cf7aiv-integration-panel"><h2>Webhook</h2>');
+admin_assert(
+	$microsoftPanelPosition !== false
+	&& $webhookPanelPosition !== false
+	&& $microsoftPanelPosition < $webhookPanelPosition,
+	'Microsoft UET and webhook configuration must render as distinct native panels in their existing order.'
+);
+admin_assert(
+	preg_match('/<section class="card cf7aiv-integration-panel"><h2>Microsoft UET<\/h2>(?:(?!<\/section>).)*name="cf7aiv\[destinations\]\[microsoft_uet\]\[tag_id\]"(?:(?!<\/section>).)*<\/section>/s', $integrations) === 1
+	&& preg_match('/<section class="card cf7aiv-integration-panel"><h2>Webhook<\/h2>(?:(?!<\/section>).)*name="cf7aiv\[destinations\]\[webhook\]\[url\]"(?:(?!<\/section>).)*<\/section>/s', $integrations) === 1,
+	'Microsoft UET and webhook panels must retain their exact destination field boundaries.'
+);
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['ui']['advanced_mode']=true;
 ob_start();CF7AIV\Admin\IntegrationsPage::render();$advancedIntegrations=ob_get_clean();
 admin_assert(
@@ -344,10 +359,31 @@ admin_assert(str_contains($reviewQueue,'name="review_revisions[91]" value="7"'),
 admin_assert(str_contains($reviewQueue, 'cf7aiv-toolbar cf7aiv-filter-toolbar'), 'Review filtering must have a dedicated toolbar.');
 admin_assert(str_contains($reviewQueue, 'cf7aiv-toolbar cf7aiv-bulk-toolbar'), 'Bulk review must have a separate toolbar.');
 admin_assert(str_contains($reviewQueue, 'aria-label="Review queue results"') && str_contains($reviewQueue, 'tabindex="0"'), 'Review results must use a labelled local scroll region.');
+$sharedAdminPages = [
+	'Overview' => [$overview, '<h1>AI Enquiry Validator', 'cf7aiv-metric-grid'],
+	'Review Queue' => [$reviewQueue, '<h1>Review Queue</h1>', 'cf7aiv-decision-legend'],
+	'Policy Lab' => [$policy, '<h1>Policy Lab</h1>', 'cf7aiv_save_guided_policy'],
+	'Integrations' => [$integrations, '<h1>Integrations</h1>', 'cf7aiv_save_settings'],
+	'Tracking Health' => [$healthPage, '<h1>Tracking Health &amp; Logs</h1>', 'cf7aiv_backfill'],
+	'Setup' => [$setup, '<h1>AI Enquiry Validator Setup</h1>', 'cf7aiv_setup_scan'],
+];
+foreach ($sharedAdminPages as $pageLabel => [$pageHtml, $heading, $workflow]) {
+	admin_assert(
+		str_contains($pageHtml, '<div class="cf7aiv-page-header"><h1>')
+		&& str_contains($pageHtml, $heading)
+		&& str_contains($pageHtml, $workflow),
+		"{$pageLabel} must use the shared page header while retaining its h1 and workflow."
+	);
+}
+admin_assert(str_contains($reviewQueue, 'Review classifications, correct outcomes, and control approved delivery.'), 'Review Queue must describe its review and delivery purpose concisely.');
 $_GET=['detail_item'=>91,'_wpnonce'=>'nonce'];
 ob_start();CF7AIV\Admin\AdminPages::reviewQueue();$simpleReviewDetail=ob_get_clean();unset($_GET);
 admin_assert(str_contains($simpleReviewDetail,'value="change_tier"')&&str_contains($simpleReviewDetail,'name="tier_id"')&&str_contains($simpleReviewDetail,'name="outcome_id"')&&!str_contains($simpleReviewDetail,'private-source-reference')&&!str_contains($simpleReviewDetail,'Original source detail'),'Simple item detail must support tier/outcome correction without rendering raw source.');
 admin_assert(str_contains($simpleReviewDetail,'name="review_revision" value="7"'),'Per-item review must post the exact revision the administrator viewed.');
+admin_assert(
+	preg_match('/<form method="post"[^>]*><input type="hidden" name="action" value="cf7aiv_review">.*?<p class="cf7aiv-actions"><button type="submit" class="button button-primary">Apply review<\/button><\/p><\/form>/s', $simpleReviewDetail) === 1,
+	'Per-item review submit must use the shared action target-size wrapper inside its existing form.'
+);
 $GLOBALS['admin_nonce_valid']=false;$_GET=['detail_item'=>91,'_wpnonce'=>'bad'];
 ob_start();CF7AIV\Admin\AdminPages::reviewQueue();$blockedSimpleReviewDetail=ob_get_clean();unset($_GET);$GLOBALS['admin_nonce_valid']=true;
 admin_assert(!str_contains($blockedSimpleReviewDetail,'value="change_tier"'),'Simple per-item review controls must be view-nonce guarded.');

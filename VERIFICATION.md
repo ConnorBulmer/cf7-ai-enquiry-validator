@@ -1,12 +1,45 @@
-# Release verification — 0.2.16
+# Release verification — 0.2.16 final candidate
 
-The 0.2.16 WordPress-native administration refresh was verified locally, in
-the disposable WordPress matrix, and on the live Mosaic Media Training site on
-2026-08-03. Local automation used synthetic fixtures only. Controlled live
-acceptance used non-personal synthetic data and retained no credentials,
-private enquiries, account identifiers, or raw provider responses.
+The current 0.2.16 final-review candidate was verified locally and in the
+disposable WordPress matrix on 2026-08-03. Its administration markup changes
+produce archive bytes that differ from the archive previously accepted on the
+live Mosaic Media Training site. The current candidate is **not deployed** and
+is pending fresh live acceptance. Local automation used synthetic fixtures
+only and retained no credentials, private enquiries, account identifiers, or
+raw provider responses.
 
-## 0.2.16 Mosaic Media Training live acceptance
+## Current final-candidate status
+
+- Candidate archive: `cf7-ai-enquiry-validator-0.2.16.zip`, **232** entries
+  under one canonical `cf7-ai-enquiry-validator/` root, SHA-256
+  `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
+- The selected source list and reopened archive contain the same 232 relative
+  paths, and every archive entry is byte-for-byte equal to its selected source
+  file. The generated checksum matches independently.
+- The final-review changes add the shared header treatment to all six
+  administration pages, separate Microsoft UET and webhook configuration
+  panels, and shared 44px action treatment for Health calibration and per-item
+  Review Queue submits. They do not change form names, nonce or POST
+  boundaries, guarded actions, release identity, or schema.
+- Fresh gates passed: **26/26** standalone PHP tests, **154/154** non-vendor
+  PHP lint checks, both JavaScript checks, `ReleasePackageTest`, and all four
+  serial disposable WordPress matrix cells with pre-browser, **4/4** browser,
+  and post-browser assertions in every cell.
+- Archive inspection found **0** top-level `.superpowers` entries, **0**
+  Windows-unsafe/reserved paths, **0** credential matches, **0**
+  private/production-PII matches, and **0** site-identifier matches. A broader
+  email-pattern review classified only expected public third-party vendor
+  attribution metadata, not private or site data.
+- This candidate has not been uploaded, installed, or accepted on production.
+  Fresh live acceptance and a new deployed archive/install hash comparison are
+  required before it can be called live.
+
+## Historical live acceptance — superseded 0.2.16 archive
+
+The evidence in this section applies only to the earlier archive whose SHA-256
+is recorded below. It remains historical deployment evidence and is
+superseded for the current final candidate; it does not claim that the current
+candidate hash is live.
 
 - The exact `cf7-ai-enquiry-validator-0.2.16.zip` archive was uploaded outside
   `public_html`, matched SHA-256
@@ -103,6 +136,16 @@ private enquiries, account identifiers, or raw provider responses.
 
 ## 0.2.16 WordPress-native administration verification
 
+- Final-review presentation RED: `php tests/AdminTest.php` exited `1` in turn
+  for the missing Health calibration action wrapper, distinct Microsoft UET
+  and webhook panels, Review Queue shared header, Integrations shared header,
+  and per-item review action wrapper before each minimal markup correction.
+- Final-review presentation GREEN: `AdminTest.php`, `AdminUiTest.php`,
+  `AdminPrivacyTest.php`, `MicrosoftUetTestServiceTest.php`, and
+  `DeliveryTest.php` pass. The integrated contracts cover the shared header and
+  retained h1/workflow on all six pages, distinct destination-panel field
+  boundaries, scoped 44px actions, and omission of associative paused values
+  from Tracking Health.
 - Release-identity RED: `php tests/ReleasePackageTest.php` exited `1` because
   the requested `0.2.16` still encountered plugin header `0.2.15`.
 - Release-identity GREEN: plugin header, `CF7AIV\VERSION`, and `Stable tag` all
@@ -139,11 +182,19 @@ private enquiries, account identifiers, or raw provider responses.
   - `ReleasePackager::verifyArchive()`: **PASS**;
   - independently computed checksum matches the generated SHA-256 file:
     **PASS**;
-  - source-diff and reopened-archive credential, private-fixture,
-    site-identifier, and Windows-unsafe/reserved-path matches: **0** in every
-    category;
+  - the Task 9 release-candidate/distributable scan excludes non-packaged
+    `VERIFICATION.md` evidence; in that scope, portable source/runtime delta
+    and reopened-ZIP credential, private-fixture, site-identifier, and
+    Windows-unsafe/reserved-path matches are **0** in every category;
+  - the final tracked Task 10 evidence delta contains only required,
+    non-secret site evidence in `VERIFICATION.md`. That evidence file is not
+    distributable; the portable source/runtime delta and ZIP contain **0**
+    site-identifier matches;
+  - current final-candidate selected paths: **232**, reopened archive paths:
+    **232**, exact archive/source byte mismatches: **0**, top-level
+    `.superpowers` entries: **0**, and private/production-PII matches: **0**;
   - SHA-256:
-    `9e6a15f3b4e0705068ca2745b5bcbe0edf7b909631b80732c0d322d222d123bc`.
+    `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
 
 ## Previous 0.2.15 Microsoft UET CAPI verification
 

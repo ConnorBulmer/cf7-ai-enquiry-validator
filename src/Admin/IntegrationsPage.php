@@ -18,7 +18,7 @@ final class IntegrationsPage {
 		$advanced = ! empty($settings['ui']['advanced_mode']);
 		$selectedProvider = (string) ($providers['selected'] ?? 'deepseek');
 		$verificationSupported = self::verificationSupported($selectedProvider);
-		echo '<div class="wrap cf7aiv-admin"><h1>Integrations</h1><p>All credentials are write-only. Blank secret fields retain the currently stored encrypted value.</p>';
+		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>Integrations</h1><p>All credentials are write-only. Blank secret fields retain the currently stored encrypted value.</p></div>';
 		$testStatus = is_scalar($_GET['microsoft_test'] ?? null) ? (string) $_GET['microsoft_test'] : '';
 		$testNotices = [
 			'success' => 'Microsoft accepted the controlled zero-value transport event.',
@@ -59,8 +59,10 @@ final class IntegrationsPage {
 			echo '<p class="description">This route assumes an existing tagging server with its GA4 client, Conversion Linker, native Google Ads Conversion Tracking tag, Conversion ID and label, and a trigger limited to the mapped qualified event. Map the stable transaction ID for deduplication and use destination key <code>server_gtm</code>. The plugin does not provision Google Cloud and does not use the Google Ads API.</p>';
 		}
 		echo '</section>';
-		echo '<section class="card cf7aiv-integration-panel"><h2>Other destinations</h2>';
+		echo '<section class="card cf7aiv-integration-panel"><h2>Microsoft UET</h2>';
 		self::destinationFields('microsoft_uet', 'Microsoft UET', (array) ($destinations['microsoft_uet'] ?? []), ['tag_id' => 'Tag ID'], 'microsoft_uet_token');
+		echo '</section>';
+		echo '<section class="card cf7aiv-integration-panel"><h2>Webhook</h2>';
 		self::destinationFields('webhook', 'Webhook', (array) ($destinations['webhook'] ?? []), ['url' => 'HTTPS URL'], 'webhook_secret', true);
 		echo '</section>';
 		echo '<section class="card cf7aiv-integration-panel"><h2>Retention and uninstall</h2><div class="cf7aiv-form-grid"><label>Retention days <input type="number" min="1" max="3650" name="cf7aiv[privacy][retention_days]" value="' . (int) ($privacy['retention_days'] ?? 90) . '"></label>';
