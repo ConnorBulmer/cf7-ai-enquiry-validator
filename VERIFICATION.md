@@ -1,15 +1,14 @@
-# Release verification — 0.2.16 deterministic archive candidate
+# Release verification — 0.2.16 deterministic archive
 
-The 0.2.16 release packager was corrected and verified locally on 2026-08-04.
-Every ZIP entry now receives the fixed ZIP-safe UTC mtime
-`1980-01-01 00:00:00` (`315532800`) instead of inheriting checkout-specific
-source mtimes. No production system was accessed during this correction. The
-new deterministic archive is a pending release artifact; it has not been
-uploaded, installed, or accepted on the live Mosaic Media Training site.
+The 0.2.16 release packager was corrected and verified locally on 2026-08-04,
+then the exact deterministic archive was installed and accepted on the live
+Mosaic Media Training site. Every ZIP entry receives the fixed ZIP-safe UTC
+mtime `1980-01-01 00:00:00` (`315532800`) instead of inheriting
+checkout-specific source mtimes.
 
-## Pending deterministic-artifact status
+## Deterministic archive live acceptance — current live source
 
-- Pending archive: `cf7-ai-enquiry-validator-0.2.16.zip`, **232** entries under
+- Current live source archive: `cf7-ai-enquiry-validator-0.2.16.zip`, **232** entries under
   one canonical `cf7-ai-enquiry-validator/` root, SHA-256
   `c48c02222071bf6c3849e47edb3f8925cd396f1b2926d39d787758935e61e3f4`.
 - TDD RED on parent `fca8770`: the same seven-file temporary fixture was built
@@ -27,7 +26,7 @@ uploaded, installed, or accepted on the live Mosaic Media Training site.
   directories, with included `README.md` touched to
   `2001-02-03T04:05:06Z` between builds and restored afterward. Both ZIPs are
   **396359** bytes, both generated checksum files are byte-identical, and both
-  archive SHA-256 values equal the pending hash above.
+  archive SHA-256 values equal the current live-source hash above.
 - Both reopened archives contain the same **232** selected relative paths with
   **0** path differences, **0** source/archive content mismatches, **0**
   archive-pair content mismatches, and **0** entries outside the fixed epoch.
@@ -38,20 +37,71 @@ uploaded, installed, or accepted on the live Mosaic Media Training site.
   232 ordinal/Linux path-sorted lowercase per-file SHA-256 lines in exact
   `hash  ./relative/path` form, UTF-8 without BOM, LF-terminated. It matches
   the installed manifest recorded by the prior live acceptance because file
-  paths and uncompressed contents are unchanged; this does **not** make the new
-  deterministic ZIP live.
+  paths and uncompressed contents are unchanged.
 - Fresh local gates pass: **26/26** standalone PHP tests, **154/154** tracked
   non-vendor PHP lint checks, and both JavaScript checks. The pre-existing
   fail-closed migration retry diagnostic is still emitted by
   `DedupRegressionTest.php`, which exits successfully.
+- The exact archive was uploaded outside `public_html`, read back as **396359**
+  bytes with mode `0600`, and independently matched the required SHA-256 before
+  installation. A detached PHP 8.3 WP-CLI force-install wrapper created and
+  flushed its receipt before invoking WordPress. The preserved mode-`0600`
+  receipt records one start marker, the required archive SHA-256, UTC start
+  `2026-08-03T23:30:51Z`, numeric install RC `0`, plugin `0.2.16`, schema `10`,
+  UTC end `2026-08-03T23:31:13Z`, and one end marker.
+- Fresh rollback evidence remains outside `public_html` at
+  `/home/sites/25b/3/3f7a206908/backups/20260803-232809Z-cf7aiv-0.2.16-deterministic-predeploy`.
+  The mode-`0700` directory retains the exact 232-file pre-install plugin copy,
+  equal live/copy manifests, a mode-`0600` server-only snapshot of the three
+  allow-listed settings/secrets/schema rows, a safe state baseline, and the
+  install receipt. All three option rows were present and non-empty; no value
+  was printed or downloaded.
+- Post-install readback confirms the plugin is active at `0.2.16`, installed
+  and expected schema are `10`, and the installed 232-file canonical manifest
+  remains
+  `33d76e0d322102b8237114a147b86c845ab12585f8075df9badca762207614ab`.
+  This exactly matches both the deterministic archive contents and the
+  pre-install installed tree.
+- The complete server-side state baseline compared byte-for-byte equal after
+  installation. Setup/live lifecycle, live automation, verification off,
+  consent respect, enhanced matching off, 90-day retention, every destination
+  enabled/dry-run/live/validation flag, all three option bytes/autoload fields,
+  four published/enabled mappings, one classified/review item, zero deliveries,
+  zero paused destinations, and four completed plugin actions were unchanged.
+  Status and Health each completed with framed RC `0`. The read-only dry-run
+  correctly reported that the live configuration is not a dry-run-safe state
+  and explicitly sent no AI or destination request.
+- The 20i/StackCP response dropped after the detached install dispatch and
+  before the caller's end frame. That response was treated as unknown, not as
+  success; no install was repeated. A separate framed read proved the complete
+  persisted receipt and RC `0`. A later combined read-only post-check also
+  dropped after version/schema output, so status, health, dry-run,
+  manifest/state, and public checks were repeated only as short, serial,
+  base64-safe framed calls; each returned its end marker and RC `0`.
+- No DeepSeek, GA4, Microsoft, webhook, form submission, or other live provider
+  or destination action was repeated. The existing controlled-provider,
+  qualified-mapping, end-to-end, privacy, duplicate-suppression, and **18/18**
+  authenticated admin/browser evidence carries forward because all 232
+  installed paths and uncompressed file bytes are identical to the previously
+  accepted tree; only ZIP entry metadata and therefore the outer ZIP hash
+  changed.
+- Fresh public read-only checks for `/` and `/media-training-courses/` both
+  returned HTTP `200`, contained Contact Form 7 and attribution markers, and
+  contained zero plugin-admin CSS or fatal markers. No form was submitted.
+  The existing Turnstile limitation remains: automated acceptance cannot prove
+  accepted mail flow or a stored submission without a valid challenge token,
+  and no Turnstile or site setting was weakened or changed.
+- After all acceptance checks, only the exact uploaded deterministic ZIP was
+  removed and its absence was proved. The rollback copy, manifests, server-only
+  snapshots, state baseline, and install receipt remain preserved.
 
-## Historical live acceptance — current live source archive
+## Historical live acceptance — superseded non-deterministic archive
 
-- The archive that remains the current live source at the time of this local
-  verification is `cf7-ai-enquiry-validator-0.2.16.zip`, SHA-256
+- The archive previously used as the live installation source was
+  `cf7-ai-enquiry-validator-0.2.16.zip`, SHA-256
   `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
-  It is historical deployment evidence and is not the pending deterministic
-  archive described above.
+  It is historical deployment evidence and is superseded by the deterministic
+  archive recorded above.
   The remote upload matched this required hash before installation. After full
   acceptance, only that exact temporary ZIP was removed and its absence was
   proved.
@@ -284,11 +334,14 @@ candidate hash is live.
     non-secret site evidence in `VERIFICATION.md`. That evidence file is not
     distributable; the portable source/runtime delta and ZIP contain **0**
     site-identifier matches;
-  - current final-candidate selected paths: **232**, reopened archive paths:
+  - historical non-deterministic candidate selected paths: **232**, reopened archive paths:
     **232**, exact archive/source byte mismatches: **0**, top-level
     `.superpowers` entries: **0**, and private/production-PII matches: **0**;
-  - SHA-256:
-    `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
+  - historical non-deterministic SHA-256:
+    `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`,
+    now superseded by the deterministic current live-source archive above;
+    packaged paths, uncompressed bytes, and the canonical content manifest are
+    unchanged.
 
 ## Previous 0.2.15 Microsoft UET CAPI verification
 
