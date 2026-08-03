@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.13
+Stable tag: 0.2.14
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.14 =
+* Wraps each Microsoft UET Conversion API event in the documented data batch and disables partial validation continuation.
+* Uses one stable event and transaction identity across retries and safely classifies Microsoft batch, authentication, rate-limit, transient, and malformed-body responses.
+* Adds an exact-confirmation Microsoft transport test that sends one zero-value, consent-denied, identifier-free diagnostic event without changing production settings.
+* Keeps Microsoft account IDs, UET tag details, credentials, and conversion-goal configuration outside reusable plugin source; schema remains version 10.
 
 = 0.2.13 =
 * Keeps operational submission tokens local to each form and browser-page lifecycle, rotating only the submitted form after sent or failed mail while retaining the token through validation failures.

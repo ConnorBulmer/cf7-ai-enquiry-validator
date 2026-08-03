@@ -69,7 +69,38 @@ For Maximize Conversions, set the genuinely qualified-lead conversion action to 
 
 ### Microsoft UET CAPI
 
-Configure the UET tag ID and `CF7AIV_MICROSOFT_UET_TOKEN`. Keep the destination dry-run, verify event name/currency/value and consent behavior, then publish its mapping deliberately. Enhanced identity is optional and requires granted `ad_user_data`.
+Use one browser UET tag installed through the site's consent-aware tag manager.
+Do not add a second inline UET snippet when the tag manager already loads the
+same tag, because duplicate tags can double-count browser events.
+
+1. Enter the existing UET tag ID and its Conversion API authentication key in
+   the write-only Microsoft fields. A `CF7AIV_MICROSOFT_UET_TOKEN` constant is
+   also supported when the site's credential policy requires constants.
+2. Keep Microsoft enabled in dry-run while creating and reviewing a published
+   Microsoft mapping. The mapping event name must exactly match the Microsoft
+   EventGoal action; value and currency must reflect the site's approved model.
+3. Create the Microsoft EventGoal separately and keep it excluded from bidding
+   until genuine attributed conversions have been reviewed.
+4. Run the controlled endpoint test:
+
+   ```text
+   wp cf7aiv microsoft_test --confirm=SEND_ZERO_VALUE_MICROSOFT_TEST
+   ```
+
+   It sends one `cf7aiv_transport_test` event with zero GBP, denied advertising
+   consent, a synthetic event/transaction ID, and no click ID or identity. Do
+   not configure the business EventGoal to match this diagnostic name.
+5. Confirm provider acceptance, safe retry/error handling, and that the
+   diagnostic event did not increment the business goal.
+6. Verify denied and granted consent states in a fresh browser, then disable
+   dry-run only after unqualified, missing-identifier, duplicate, and qualified
+   test paths behave as intended.
+
+Normal Microsoft delivery requires a consent-permitted `msclkid`. The only
+alternative is separately enabled enhanced matching with granted
+`ad_user_data` and a permitted pre-hashed email or telephone value. Enhanced
+matching is off by default. The plugin does not add IP address, user-agent, raw
+identity, or form-message fields to Microsoft events.
 
 ### Signed webhook
 

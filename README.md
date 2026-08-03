@@ -73,6 +73,16 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.14 Microsoft UET Conversion API hardening
+
+Version 0.2.14 sends Microsoft events inside the documented `data` batch,
+uses one stable event/transaction identity across retries, safely classifies
+provider batch and transport failures, and adds an exact-confirmation,
+zero-value Microsoft transport test. The diagnostic event is consent-denied
+and contains no click ID or enhanced identity. Account IDs, UET tag details,
+credentials, and conversion-goal configuration remain outside reusable source.
+Schema remains version 10, so no migration is required.
+
 ### Version 0.2.13 cross-site portability hardening
 
 Version 0.2.13 scopes operational source-link tokens to each form and page,
@@ -247,7 +257,7 @@ Full provider/destination and GA4-to-Google-Ads instructions are in [Setup](docs
 | --- | --- | --- | --- |
 | Direct GA4 | Simplest Google Ads route | GA client ID; recent session ID gives stronger session attribution | Send a GA4 key event, link GA4 to Google Ads, then import the selected event |
 | Existing server-side GTM | Advanced users with a tagging server | Google click/client/session context as configured in the container | Sends GA4-shaped requests to the existing first-party tagging endpoint; the container owns its Google Ads tag |
-| Microsoft UET CAPI | Microsoft Advertising conversion goals | `msclkid` and/or separately enabled consented hashes | Uses the Microsoft Advertising CAPI token and preserves actual consent |
+| Microsoft UET CAPI | Microsoft Advertising conversion goals | Consent-permitted `msclkid`, or separately enabled consented hashes | Uses the UET tag Conversion API authentication key, preserves actual consent, and sends one stable event/transaction identity |
 | Signed webhook | CRM, Make, server-side GTM or custom receiver | Depends on the receiver | PII-free normalized envelope signed with HMAC-SHA256 |
 
 Mappings are versioned independently from policies. Each mapping defines its
@@ -329,7 +339,7 @@ scanner's page and character limits. Copy-paste CPT and builder examples are in
 
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.13 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.14 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -386,7 +396,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.13 --output-dir=dist
+php tools/build-release.php --tag=v0.2.14 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -404,16 +414,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.13`:
+For version `0.2.14`:
 
 ```bash
-git tag v0.2.13
-git push origin v0.2.13
+git tag v0.2.14
+git push origin v0.2.14
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.13.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.14.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.

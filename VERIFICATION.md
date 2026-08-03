@@ -1,4 +1,49 @@
-# Release verification — 0.2.13 candidate
+# Release verification — 0.2.14 candidate
+
+The 0.2.14 Microsoft UET Conversion API hardening candidate was verified
+locally on 2026-08-03. Automated verification used synthetic fixtures only and
+made no external AI, analytics, or advertising request.
+
+## 0.2.14 Microsoft UET CAPI verification
+
+- TDD RED: `DeliveryTest.php` failed because the existing Microsoft request had
+  no top-level `data` batch or stable `transactionId`.
+- TDD RED: the Microsoft response-classifier regression failed because the
+  provider-specific classifier did not exist.
+- TDD RED: `MicrosoftUetTestServiceTest.php` failed because the guarded service
+  did not exist; `AdminTest.php` then failed because no secured Microsoft test
+  form/action existed.
+- GREEN: `DeliveryTest.php`, `DeliveryReviewRegressionTest.php`,
+  `MicrosoftUetTestServiceTest.php`, `AdminTest.php`, and `FoundationTest.php`
+  all pass after the minimal contract and test-surface changes.
+- Complete sorted standalone PHP suite: **25/25 PASS**. The pre-existing
+  fail-closed migration retry diagnostic may be emitted by the in-memory test,
+  but the test exits successfully.
+- JavaScript attribution suite: **PASS**; JavaScript syntax check: **PASS**.
+- Complete local PHP lint excluding generated `dist`: **247/247 PASS**.
+- Release identities are all `0.2.14`; schema remains `10`; release tag
+  contract is `v0.2.14`.
+- Release build: `php tools/build-release.php --tag=v0.2.14 --output-dir=dist`
+  - archive: `cf7-ai-enquiry-validator-0.2.14.zip`;
+  - entries: **231** under one canonical `cf7-ai-enquiry-validator` root;
+  - unsafe entries: **0**;
+  - credential/site-pattern matches in reopened archive: **0**;
+  - checksum file matches the reopened archive: **PASS**;
+  - SHA-256:
+    `0689e2c946f06feecde429673cccc892cf16c2175a8e9bfb27b0002f8f630cf4`.
+- The Microsoft contract suite covers one-event `data` envelopes,
+  `continueOnValidationError: false`, mapped name/value/currency, integer event
+  time, stable event/transaction identity, consented click data, enhanced
+  matching off by default, consent-gated hashes, dry-run redaction, accepted
+  empty/malformed optional success bodies, explicit batch rejection, permanent
+  400/401 failures, retryable 408/425/429/5xx failures, timeouts, and bounded
+  provider code/field diagnostics with no raw body retention.
+- The controlled transport suite proves exact confirmation, required encrypted
+  configuration, one live zero-value request, denied advertising consent,
+  empty user data, no click/identity fields, no settings mutation, stable
+  synthetic identity, safe success/failure receipts, and token/tag redaction.
+
+## Previous 0.2.13 portability verification
 
 The 0.2.13 portability hardening candidate was verified in a disposable local
 WordPress matrix on 2026-08-03. No production site, provider, analytics

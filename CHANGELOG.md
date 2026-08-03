@@ -2,6 +2,21 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.14 — 2026-08-03
+
+- Conformed Microsoft UET Conversion API delivery to the documented top-level
+  `data` batch and fail-closed `continueOnValidationError` contract.
+- Reused the deterministic event ID as `customData.transactionId` so retries
+  preserve one event/transaction identity for deduplication.
+- Added Microsoft-specific response classification for explicit batch errors,
+  permanent authentication/validation failures, retryable rate limits and
+  transient failures without storing raw provider bodies.
+- Added a guarded administrator and WP-CLI Microsoft transport test that sends
+  one zero-value, consent-denied, identifier-free diagnostic event and does not
+  alter destination settings or mappings.
+- Kept enhanced matching off by default and added no IP address, user agent, or
+  raw identity collection. Schema remains version 10 with no migration.
+
 ## 0.2.13 — 2026-08-03
 
 - Scoped operational submission tokens to each form and browser-page lifecycle;
