@@ -1,4 +1,32 @@
-# Release verification — 0.2.10
+# Release verification — 0.2.13 candidate
+
+The 0.2.13 portability hardening candidate was verified in a disposable local
+WordPress matrix on 2026-08-03. No production site, provider, analytics
+property, advertising account, submission content or credential was used.
+
+## 0.2.13 disposable WordPress portability matrix
+
+- Matrix: WordPress 6.9/PHP 8.1.34 and WordPress 7.0/PHP 8.3.31, each with
+  Contact Form 7 6.1.6 plus either Flamingo 2.6.3 or CFDB7 1.4.0.
+- Result: **4/4 cells PASS**, comprising **8/8 real-browser Playwright tests**
+  and pre/post WordPress-loaded runtime assertions in every cell.
+- Real Contact Form 7 AJAX coverage proves two forms receive distinct
+  page-local attempt tokens; successful and failed-mail attempts rotate only
+  the submitted form; invalid attempts retain their token; and a reload creates
+  a fresh token.
+- Real cookie coverage proves the configured `G-TEST123` property selects its
+  exact GA session cookie while ignoring an unrelated property cookie. The
+  JavaScript suite separately covers custom prefixes and fail-closed ambiguous
+  pairs.
+- Both persistent-source modes load successfully. CFDB7 resolves an exact
+  form/time/token candidate even with 101 newer unrelated rows.
+- The installed schema remains `10`; successful and failed-mail submissions
+  both create classification items for asynchronous processing.
+- Playwright is lockfile-pinned at 1.62.1; `npm audit` reports zero known
+  vulnerabilities.
+- Every cell ran under a unique Compose project and loopback port. Final
+  checks found no retained `cf7aiv-portability` containers, volumes or
+  networks.
 
 The 0.2.10 DeepSeek supporting-evidence correction was verified locally and
 against the configured isolated production provider on 2026-08-03.

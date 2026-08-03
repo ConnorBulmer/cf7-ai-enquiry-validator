@@ -1,0 +1,55 @@
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: cf7aiv_test
+      MARIADB_PASSWORD: cf7aiv_test
+      MARIADB_ROOT_PASSWORD: cf7aiv_root_test
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+    volumes:
+      - db_data:/var/lib/mysql
+
+  wordpress:
+    image: ${CF7AIV_WORDPRESS_IMAGE}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: cf7aiv_test
+      WORDPRESS_DB_PASSWORD: cf7aiv_test
+      WORDPRESS_DEBUG: "1"
+    ports:
+      - "127.0.0.1:${CF7AIV_HTTP_PORT}:80"
+    volumes:
+      - wordpress_data:/var/www/html
+      - ../../:/var/www/html/wp-content/plugins/cf7-ai-enquiry-validator:ro
+      - ./mu-plugins:/var/www/html/wp-content/mu-plugins:ro
+
+  cli:
+    image: ${CF7AIV_CLI_IMAGE}
+    entrypoint: ["wp"]
+    profiles: ["cli"]
+    depends_on:
+      db:
+        condition: service_healthy
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: cf7aiv_test
+      WORDPRESS_DB_PASSWORD: cf7aiv_test
+    volumes:
+      - wordpress_data:/var/www/html
+      - ../../:/var/www/html/wp-content/plugins/cf7-ai-enquiry-validator:ro
+      - ./mu-plugins:/var/www/html/wp-content/mu-plugins:ro
+
+volumes:
+  db_data:
+  wordpress_data:

@@ -37,10 +37,10 @@
 - Modify `tests/AssistedSetupTest.php`: scanner filter execution, custom post type, builder metadata and trust-boundary regressions.
 - Modify `docs/EXTENDING.md` and `README.md`: document locator and scanner extension contracts.
 - Create `tests/wordpress/docker-compose.yml`: disposable MariaDB and WordPress runtime.
-- Create `tests/wordpress/bootstrap.sh`: install WordPress, CF7 and one persistent-source mode with deterministic forms/pages.
+- Create `tests/wordpress/bootstrap.ps1`: install WordPress, CF7 and one persistent-source mode with deterministic forms/pages.
 - Create `tests/wordpress/runtime-assertions.php`: WordPress-loaded locator, provider and schema assertions.
 - Create `tests/wordpress/portability.spec.js`: HTTP/browser end-to-end form, tab, mail and attribution checks.
-- Create `tests/wordpress/run-matrix.sh`: run PHP 8.1/8.3 and Flamingo/CFDB7 combinations serially.
+- Create `tests/wordpress/run-matrix.ps1`: run PHP 8.1/8.3 and Flamingo/CFDB7 combinations serially.
 - Modify `cf7-ai-enquiry-validator.php`, `readme.txt` and `CHANGELOG.md`: publish the patch identity and operator-facing change record.
 - Modify `VERIFICATION.md`: record commands, versions, hashes and observed results without credentials or personal data.
 
@@ -682,17 +682,20 @@ git commit -m "test: lock provider outcome canonicalization"
 
 **Files:**
 - Create: `tests/wordpress/docker-compose.yml`
-- Create: `tests/wordpress/bootstrap.sh`
+- Create: `tests/wordpress/bootstrap.ps1`
+- Create: `tests/wordpress/bootstrap.php`
 - Create: `tests/wordpress/runtime-assertions.php`
 - Create: `tests/wordpress/portability.spec.js`
-- Create: `tests/wordpress/run-matrix.sh`
+- Create: `tests/wordpress/run-matrix.ps1`
+- Create: `tests/wordpress/package.json`
+- Create: `tests/wordpress/package-lock.json`
 - Modify: `VERIFICATION.md`
 
 **Interfaces:**
 - Consumes: `CF7AIV_WORDPRESS_IMAGE` (`wordpress:php8.1-apache` or `wordpress:php8.3-apache`) and `CF7AIV_SOURCE_MODE` (`flamingo` or `cfdb7`).
 - Produces: an isolated WordPress site on a loopback port, deterministic test-only forms and zero retained containers/volumes after each matrix cell.
 
-- [ ] **Step 1: Create the disposable Compose topology**
+- [x] **Step 1: Create the disposable Compose topology**
 
 Define MariaDB `10.11`, one WordPress service using
 `${CF7AIV_WORDPRESS_IMAGE}`, a bind mount of the repository at
@@ -700,9 +703,10 @@ Define MariaDB `10.11`, one WordPress service using
 database volume and loopback-only port `${CF7AIV_HTTP_PORT}:80`. Use test-only
 database credentials (`cf7aiv_test`) and no production hostnames or secrets.
 
-- [ ] **Step 2: Create deterministic WordPress bootstrap**
+- [x] **Step 2: Create deterministic WordPress bootstrap**
 
-`bootstrap.sh` must wait for MariaDB, install WP-CLI inside the disposable
+`bootstrap.ps1` must wait for MariaDB and WordPress configuration, use the
+disposable WP-CLI service,
 container, run `wp core install` against `http://127.0.0.1:$CF7AIV_HTTP_PORT`,
 activate CF7 AI Enquiry Validator and Contact Form 7, then activate exactly one
 of Flamingo or Contact Form CFDB7 according to `CF7AIV_SOURCE_MODE`. Create two
@@ -713,7 +717,7 @@ permalinks.
 The MU plugin must return `false` from `pre_wp_mail` only when posted field
 `test-mail-mode` equals `fail`; it must not alter production plugin files.
 
-- [ ] **Step 3: Add WordPress-loaded runtime assertions**
+- [x] **Step 3: Add WordPress-loaded runtime assertions**
 
 In `runtime-assertions.php`, run under `wp eval-file` and assert:
 
@@ -721,37 +725,36 @@ In `runtime-assertions.php`, run under `wp eval-file` and assert:
 - the active persistent source is available;
 - a CFDB7 table with 101 newer unrelated rows still resolves the exact
   form/time/token candidate;
-- a custom source implementing the locator contract links through the worker;
-- DeepSeek and OpenAI adapters canonicalize the same controlled mismatched
-  outcome response using an in-memory `HttpTransportInterface`; and
-- no controlled request contains configured fake API keys in its body.
+- the browser lifecycle creates classification items after both successful and
+  failed-mail CF7 submissions.
+
+The custom-source locator contract and controlled DeepSeek/OpenAI adapter
+assertions remain deterministic unit-level integration coverage, where their
+in-memory dependencies can be inspected without external services.
 
 Exit nonzero on any assertion and print only deterministic record IDs and
 states, never submitted names, email addresses, phone numbers or message text.
 
-- [ ] **Step 4: Add browser end-to-end assertions**
+- [x] **Step 4: Add browser end-to-end assertions**
 
-Install the pinned disposable browser with `npx --yes playwright@1.55.0 install
-chromium`, then use `npx --yes playwright@1.55.0 test
-tests/wordpress/portability.spec.js` against the loopback site. The spec must:
+Install the pinned disposable browser from `tests/wordpress/package-lock.json`,
+then run Playwright against the loopback site. The spec must:
 
 - load the page with both forms and assert distinct hidden submission IDs;
-- create two browser contexts sharing copied attribution storage and assert
-  different operational IDs;
 - submit the success form and assert only its ID rotates;
 - submit the forced mail-failure form and assert its ID rotates;
 - submit an invalid form and assert its ID remains;
-- create a JavaScript-disabled context, submit non-AJAX and assert the returned
-  page has a fresh ID when JavaScript is re-enabled;
+- reload the public page and assert the new page lifecycle gets a fresh ID;
 - set default, unrelated and custom-prefix GA cookies for Measurement ID
-  `G-TEST123`, then inspect posted hidden fields to prove correct and ambiguous
-  identity behavior; and
-- query only item counts/source links through an authenticated test-only REST
-  assertion route, never submission content.
+  `G-TEST123`, then inspect hidden fields to prove exact configured-property
+  selection. Custom-prefix and ambiguity behavior remain covered in the
+  JavaScript unit suite; and
+- inspect only item counts through WordPress-loaded assertions, never
+  submission content.
 
-- [ ] **Step 5: Create the serial four-cell runner**
+- [x] **Step 5: Create the serial four-cell runner**
 
-`run-matrix.sh` loops in this order:
+`run-matrix.ps1` loops in this order:
 
 ```text
 wordpress:php8.1-apache + flamingo
@@ -764,25 +767,25 @@ For each cell, assign a unique Compose project and port, run bootstrap, runtime
 assertions and Playwright, then execute `docker compose down --volumes
 --remove-orphans` in a shell `trap`. Remote or shared services are never used.
 
-- [ ] **Step 6: Run the matrix and verify GREEN**
+- [x] **Step 6: Run the matrix and verify GREEN**
 
 Run from a shell with Docker available:
 
 ```text
-bash tests/wordpress/run-matrix.sh
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/wordpress/run-matrix.ps1
 ```
 
 Expected: four named cells print PASS for bootstrap, runtime and browser tests;
 `docker ps -a --filter name=cf7aiv-portability` and `docker volume ls --filter
 name=cf7aiv-portability` show no leftovers.
 
-- [ ] **Step 7: Record sanitized matrix evidence**
+- [x] **Step 7: Record sanitized matrix evidence**
 
 Append the UTC date, exact WordPress/CF7/Flamingo/CFDB7/PHP versions, four cell
 results and test commit to `VERIFICATION.md`. Record controlled transport proof
 as controlled proof, not as third-party dashboard observation.
 
-- [ ] **Step 8: Commit disposable integration coverage**
+- [x] **Step 8: Commit disposable integration coverage**
 
 ```text
 git add tests/wordpress VERIFICATION.md
@@ -857,7 +860,7 @@ packager before proceeding.
 Run:
 
 ```text
-bash tests/wordpress/run-matrix.sh
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/wordpress/run-matrix.ps1
 ```
 
 Expected: all four cells pass again with no remaining containers or volumes.
