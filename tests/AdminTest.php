@@ -295,6 +295,8 @@ ob_start();CF7AIV\Admin\AdminPages::policyLab();$policy=ob_get_clean();
 ob_start();CF7AIV\Admin\AdminPages::setup();$setup=ob_get_clean();
 admin_assert(str_contains($policy, 'cf7aiv-page-header') && str_contains($policy, 'cf7aiv-actions'), 'Policy Lab must use shared native structure.');
 admin_assert(str_contains($setup, 'cf7aiv-page-header') && str_contains($setup, 'cf7aiv-actions'), 'Setup must use shared native structure.');
+admin_assert(str_contains($policy, 'class="card'), 'Policy Lab must retain native card panels.');
+admin_assert(str_contains($setup, 'class="card'), 'Setup must retain native card panels.');
 foreach (['cf7aiv_save_guided_policy','cf7aiv_policy_publish'] as $action) {
 	admin_assert(str_contains($policy, 'value="' . $action . '"'), "Policy Lab must retain {$action}.");
 }

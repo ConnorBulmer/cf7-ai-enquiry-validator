@@ -42,6 +42,10 @@ ui_assert(is_string($css), 'Admin stylesheet must be readable.');
 foreach (['.cf7aiv-admin {', '.cf7aiv-admin .cf7aiv-metric-grid', '.cf7aiv-admin .cf7aiv-table-region', '.cf7aiv-admin :focus-visible', '@media (max-width: 782px)', '@media (forced-colors: active)'] as $fragment) {
 	ui_assert(str_contains($css, $fragment), "Admin stylesheet must contain {$fragment}.");
 }
+ui_assert(
+	(bool) preg_match('/\.cf7aiv-admin \.cf7aiv-form-grid\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(auto-fit, minmax\(190px, 1fr\)\);[^}]*gap:\s*var\(--cf7aiv-space-4\);[^}]*\}/s', $css),
+	'Form grids must define scoped desktop grid display, columns, and spacing.'
+);
 ui_assert(! preg_match('/(^|})\s*(?:html|body|\.wrap|\.card|table|input|select|textarea|button)\b/m', $css), 'Admin selectors must not target global WordPress or public elements.');
 ui_assert(! str_contains($css, '!important'), 'Admin CSS must avoid unverified important overrides.');
 
