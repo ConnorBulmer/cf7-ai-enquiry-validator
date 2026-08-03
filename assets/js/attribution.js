@@ -187,7 +187,7 @@
 		var consent = consentState();
 		if (!consent.statistics && !consent.marketing) {
 			deleteStored();
-			return null;
+			return { submission_id: submissionId };
 		}
 		var stored = filterStored(readStored(), consent);
 		var params = new URLSearchParams(location.search);
@@ -239,6 +239,7 @@
 		var consent = consentState();
 		if (!consent.statistics && !consent.marketing) {
 			deleteStored();
+			submissionId = createSubmissionId();
 			return;
 		}
 		var values = filterStored(readStored(), consent);

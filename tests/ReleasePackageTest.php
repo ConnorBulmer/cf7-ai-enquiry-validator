@@ -69,12 +69,12 @@ try {
 cf7aiv_release_assert($invalidTagRejected, 'A release tag without the required v prefix must be rejected.');
 
 $pluginRoot = dirname(__DIR__);
-$metadata = ReleasePackager::validateMetadata($pluginRoot, '0.2.10');
+$metadata = ReleasePackager::validateMetadata($pluginRoot, '0.2.11');
 cf7aiv_release_assert(
 	$metadata === [
-		'plugin_header' => '0.2.10',
-		'version_constant' => '0.2.10',
-		'stable_tag' => '0.2.10',
+		'plugin_header' => '0.2.11',
+		'version_constant' => '0.2.11',
+		'stable_tag' => '0.2.11',
 	],
 	'The real plugin header, constant, and stable tag must agree with the release version.',
 );

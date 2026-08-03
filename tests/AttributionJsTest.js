@@ -93,7 +93,8 @@ const fields = {
 	const page = makeHarness({ fields });
 	page.emit('DOMContentLoaded');
 	check(page.payload() === null && !page.hasCookie(), 'no consent signal must not persist attribution in localStorage or the plugin cookie');
-	check(Object.values(page.inputs).every((input) => input.value === ''), 'no consent signal must leave injected attribution fields empty');
+	check(page.inputs.cf7aiv_submission_id.value !== '', 'no consent signal must still inject an ephemeral operational source-link token');
+	check(trackingFieldsEmpty(page), 'no consent signal must leave tracking attribution fields empty');
 }
 
 // wp_has_consent is permissive when the Consent API has no configured type;
@@ -135,7 +136,8 @@ const fields = {
 	const page = makeHarness({ storage: { cf7aiv_attribution: stale }, cookies: { cf7aiv_attribution: encodeURIComponent(stale) }, dataLayer: consent(false, false), fields });
 	page.emit('DOMContentLoaded');
 	check(page.payload() === null && !page.hasCookie(), 'explicit denial must delete stale plugin attribution storage');
-	check(Object.values(page.inputs).every((input) => input.value === ''), 'explicit denial must clear injected attribution fields');
+	check(page.inputs.cf7aiv_submission_id.value !== '' && page.inputs.cf7aiv_submission_id.value !== 'stale-submission', 'explicit denial must replace any stale stored source-link token with a fresh ephemeral token');
+	check(trackingFieldsEmpty(page), 'explicit denial must clear injected tracking attribution fields');
 }
 
 // A collector that treats analytics consent as advertising consent must fail these checks.
@@ -281,7 +283,21 @@ function foreachMalformedGaCookie(cases) {
 	window.dataLayer.push(...consent(false, false));
 	page.emit('wp_listen_for_consent_change', { detail: { statistics: 'deny', marketing: 'deny' } });
 	check(page.payload() === null && !page.hasCookie(), 'consent withdrawal must remove disallowed attribution storage');
-	check(Object.values(page.inputs).every((input) => input.value === ''), 'consent withdrawal must clear hidden attribution fields');
+	check(page.inputs.cf7aiv_submission_id.value !== '', 'consent withdrawal must preserve an ephemeral operational source-link token');
+	check(trackingFieldsEmpty(page), 'consent withdrawal must clear hidden tracking attribution fields');
+}
+
+{
+	const page = makeHarness({ fields });
+	page.emit('DOMContentLoaded');
+	const first = page.inputs.cf7aiv_submission_id.value;
+	page.emit('submit', { target: formTarget(page) });
+	page.emit('wpcf7beforesubmit', { target: formTarget(page) });
+	check(page.inputs.cf7aiv_submission_id.value === first, 'repeated no-consent submit hooks must keep one operational source-link token for the submission');
+	page.emit('wpcf7mailsent');
+	page.emit('wpcf7beforesubmit', { target: formTarget(page) });
+	check(page.inputs.cf7aiv_submission_id.value !== '' && page.inputs.cf7aiv_submission_id.value !== first, 'a completed no-consent submission must rotate its operational source-link token before the next submission');
+	check(page.payload() === null && !page.hasCookie() && trackingFieldsEmpty(page), 'no-consent token rotation must not create attribution storage or populate tracking fields');
 }
 
 {
@@ -301,6 +317,10 @@ function formTarget(page) {
 		const match = selector.match(/^\[name="(.+)"\]$/);
 		return match ? page.inputs[match[1]] || null : null;
 	} };
+}
+
+function trackingFieldsEmpty(page) {
+	return Object.entries(page.inputs).every(([name, input]) => name === 'cf7aiv_submission_id' || input.value === '');
 }
 
 if (failures.length) {
