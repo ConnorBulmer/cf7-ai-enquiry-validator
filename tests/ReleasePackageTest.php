@@ -95,6 +95,8 @@ try {
 	cf7aiv_release_write($fixtureRoot, 'tests/example.php', "<?php\n");
 	cf7aiv_release_write($fixtureRoot, 'tools/build.php', "<?php\n");
 	cf7aiv_release_write($fixtureRoot, '.superpowers/sdd/review.md', "# Local review evidence\n");
+	cf7aiv_release_write($fixtureRoot, '.worktrees/admin-refresh-0.2.16/cf7-ai-enquiry-validator.php', "<?php\n");
+	cf7aiv_release_write($fixtureRoot, 'src/.worktrees/runtime.php', "<?php\n");
 	cf7aiv_release_write($fixtureRoot, 'docs/superpowers/specs/design.md', "# Design\n");
 	cf7aiv_release_write($fixtureRoot, 'VERIFICATION.md', "# Evidence\n");
 	cf7aiv_release_write($fixtureRoot, '.env', "SECRET=not-for-release\n");
@@ -106,15 +108,24 @@ try {
 		'Top-level Superpowers plans and evidence must not be selected for a release archive.',
 	);
 	cf7aiv_release_assert(
+		! in_array('.worktrees/admin-refresh-0.2.16/cf7-ai-enquiry-validator.php', $files, true),
+		'Top-level Git worktree checkouts must not be selected for a release archive.',
+	);
+	cf7aiv_release_assert(
+		in_array('src/.worktrees/runtime.php', $files, true),
+		'A nested directory named .worktrees must retain the packager\'s top-level-only exclusion semantics.',
+	);
+	cf7aiv_release_assert(
 		$files === [
 			'README.md',
 			'cf7-ai-enquiry-validator.php',
 			'docs/SETUP.md',
 			'readme.txt',
+			'src/.worktrees/runtime.php',
 			'src/runtime.php',
 			'vendor/action-scheduler/action-scheduler.php',
 		],
-		'The distributable file list must include runtime/docs/vendor content and exclude repository, test, tool, evidence, environment, and output files.',
+		'The distributable file list must include runtime/docs/vendor content and exclude repository, test, tool, evidence, environment, output, and worktree files.',
 	);
 
 	$mismatchRejected = false;
@@ -128,7 +139,7 @@ try {
 	$result = ReleasePackager::build($fixtureRoot, 'v9.8.7', $fixtureOutput);
 	cf7aiv_release_assert(
 		$result['version'] === '9.8.7'
-		&& $result['entries'] === 6
+		&& $result['entries'] === 7
 		&& is_file($result['zip'])
 		&& is_file($result['checksum']),
 		'The packager must return a complete release receipt and create both assets.',
@@ -147,11 +158,20 @@ try {
 		'Top-level Superpowers plans and evidence must not be packaged.',
 	);
 	cf7aiv_release_assert(
+		! in_array('cf7-ai-enquiry-validator/.worktrees/admin-refresh-0.2.16/cf7-ai-enquiry-validator.php', $entries, true),
+		'Top-level Git worktree checkouts must not be packaged.',
+	);
+	cf7aiv_release_assert(
+		in_array('cf7-ai-enquiry-validator/src/.worktrees/runtime.php', $entries, true),
+		'A nested directory named .worktrees must remain packaged.',
+	);
+	cf7aiv_release_assert(
 		$entries === [
 			'cf7-ai-enquiry-validator/README.md',
 			'cf7-ai-enquiry-validator/cf7-ai-enquiry-validator.php',
 			'cf7-ai-enquiry-validator/docs/SETUP.md',
 			'cf7-ai-enquiry-validator/readme.txt',
+			'cf7-ai-enquiry-validator/src/.worktrees/runtime.php',
 			'cf7-ai-enquiry-validator/src/runtime.php',
 			'cf7-ai-enquiry-validator/vendor/action-scheduler/action-scheduler.php',
 		],

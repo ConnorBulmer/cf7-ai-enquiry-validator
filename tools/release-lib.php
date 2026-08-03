@@ -217,7 +217,7 @@ final class ReleasePackager {
 		$relative = str_replace('\\', '/', $relative);
 		$segments = explode('/', $relative);
 		$top = $segments[0] ?? '';
-		if (in_array($top, ['.git', '.github', '.idea', '.superpowers', '.vscode', 'coverage', 'dist', 'node_modules', 'tests', 'tools'], true)) {
+		if (in_array($top, ['.git', '.github', '.idea', '.superpowers', '.vscode', '.worktrees', 'coverage', 'dist', 'node_modules', 'tests', 'tools'], true)) {
 			return true;
 		}
 		if ($relative === 'docs/superpowers' || str_starts_with($relative, 'docs/superpowers/')) {
