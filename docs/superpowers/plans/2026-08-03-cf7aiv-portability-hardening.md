@@ -805,7 +805,7 @@ git commit -m "test: add disposable WordPress portability matrix"
 - Produces: exact version identity `0.2.13` and release tag contract `v0.2.13`.
 - Consumes: every automated and real-WordPress test from Tasks 1-7.
 
-- [ ] **Step 1: Update all version identities and user-facing changes**
+- [x] **Step 1: Update all version identities and user-facing changes**
 
 Change the plugin header, `CF7AIV\VERSION` and stable tag to `0.2.13`. Add a
 `0.2.13` changelog entry covering form-local tokens, both mail terminal events,
@@ -813,7 +813,7 @@ generic source locators, qualified CFDB7 lookup, configured GA cookie pairing,
 scanner extension filters and provider regression coverage. State that no
 schema migration is required.
 
-- [ ] **Step 2: Run every standalone PHP test**
+- [x] **Step 2: Run every standalone PHP test**
 
 Run in PowerShell:
 
@@ -826,7 +826,7 @@ Get-ChildItem tests\*Test.php | Sort-Object Name | ForEach-Object {
 
 Expected: every test prints its PASS marker and the loop exits zero.
 
-- [ ] **Step 3: Lint every tracked non-vendor PHP file**
+- [x] **Step 3: Lint every tracked non-vendor PHP file**
 
 Run:
 
@@ -839,7 +839,7 @@ git ls-files '*.php' | Where-Object { $_ -notlike 'vendor/*' } | ForEach-Object 
 
 Expected: every file reports no syntax errors.
 
-- [ ] **Step 4: Run JavaScript, release and identifier checks**
+- [x] **Step 4: Run JavaScript, release and identifier checks**
 
 Run:
 
@@ -855,7 +855,7 @@ runtime, test-fixture or release-document hits; any changelog/history-only hit
 must be removed from distributable content or explicitly excluded by the
 packager before proceeding.
 
-- [ ] **Step 5: Re-run the disposable WordPress matrix at the release commit**
+- [x] **Step 5: Re-run the disposable WordPress matrix at the release commit**
 
 Run:
 
@@ -865,7 +865,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/wordpress/run-matrix.p
 
 Expected: all four cells pass again with no remaining containers or volumes.
 
-- [ ] **Step 6: Build and inspect the release artifact**
+- [x] **Step 6: Build and inspect the release artifact**
 
 Create a fresh temporary directory outside the repository and run in
 PowerShell:
@@ -882,7 +882,7 @@ assert no `tests/`,
 `tools/`, `.github/`, `docs/superpowers/`, `VERIFICATION.md` or credential
 pattern exists inside its single `cf7-ai-enquiry-validator/` root.
 
-- [ ] **Step 7: Update verification evidence and commit the patch identity**
+- [x] **Step 7: Update verification evidence and commit the patch identity**
 
 Record exact pass counts, runtime versions, matrix cells, artifact filename and
 SHA-256 in `VERIFICATION.md`, then commit:

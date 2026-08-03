@@ -73,6 +73,15 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.13 cross-site portability hardening
+
+Version 0.2.13 scopes operational source-link tokens to each form and page,
+binds GA identity to the configured property, generalizes persistent source
+locators, and qualifies bounded CFDB7 matching by form, time and exact token.
+It also extends the bounded public-site scanner through explicit filters and
+adds real WordPress browser coverage across PHP 8.1/8.3 and Flamingo/CFDB7.
+Schema remains version 10, so no migration is required.
+
 ### Version 0.2.12 deterministic evidence dimensions
 
 Version 0.2.12 assigns the published policy dimension locally from each allowed
@@ -318,7 +327,7 @@ scanner's page and character limits. Copy-paste CPT and builder examples are in
 
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.12 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.13 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -375,7 +384,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.12 --output-dir=dist
+php tools/build-release.php --tag=v0.2.13 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -393,16 +402,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.12`:
+For version `0.2.13`:
 
 ```bash
-git tag v0.2.12
-git push origin v0.2.12
+git tag v0.2.13
+git push origin v0.2.13
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.12.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.13.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.

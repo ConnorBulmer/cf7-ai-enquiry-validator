@@ -2,6 +2,20 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.13 — 2026-08-03
+
+- Scoped operational submission tokens to each form and browser-page lifecycle;
+  sent and failed-mail terminal events rotate only the submitted form, while
+  validation failures retain the active attempt token.
+- Bound GA client/session identity to the configured Measurement ID, including
+  custom cookie prefixes, and fail closed when multiple pairs are plausible.
+- Added a reusable persistent-source locator contract and a form/time/token
+  qualified, bounded CFDB7 lookup that remains correct under high row volume.
+- Extended bounded public site-profile scanning through explicit filters and
+  locked provider evidence canonicalization with controlled adapter tests.
+- Added a disposable WordPress 6.9/7.0, PHP 8.1/8.3, Flamingo/CFDB7 browser
+  matrix. Schema remains version 10; no migration is required.
+
 ## 0.2.12 — 2026-08-03
 
 - Assigned the published policy dimension locally from each allowed evidence

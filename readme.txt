@@ -2,9 +2,9 @@
 Contributors: cf7aiv-contributors
 Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.12
+Stable tag: 0.2.13
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.13 =
+* Keeps operational submission tokens local to each form and browser-page lifecycle, rotating only the submitted form after sent or failed mail while retaining the token through validation failures.
+* Selects GA client/session identity only for the configured GA4 property and fails closed when multiple plausible cookie pairs exist.
+* Adds a reusable persistent-source locator contract, qualified bounded CFDB7 lookup, extensible bounded site-profile scanning, and provider evidence regressions for cross-site portability.
+* Adds a disposable WordPress 6.9/7.0, PHP 8.1/8.3, Flamingo/CFDB7 browser matrix; schema remains version 10 with no migration required.
 
 = 0.2.12 =
 * Assigns the published policy dimension locally from each allowed evidence code instead of trusting redundant provider metadata.
