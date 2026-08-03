@@ -131,20 +131,36 @@ add_filter('cf7aiv_site_profile_posts', static function (array $posts): array {
 	return $extended;
 });
 add_filter('cf7aiv_site_profile_post_content', static function (string $content, mixed $post): string {
-	return ((int) $post->ID === 44) ? $content . ' Builder service details [contact-form-7 id="34"]' : $content;
+	return ((int) $post->ID === 44) ? 'Builder service details [contact-form-7 id="34"] ' . str_repeat('X', 250000) : $content;
 }, 10, 2);
-add_filter('cf7aiv_site_profile_post_form_ids', static fn (array $ids, mixed $post, string $content): array => ((int) $post->ID === 44 && str_contains($content, 'Builder service details')) ? [...$ids, 34, -1, 34] : $ids, 10, 3);
+add_filter('cf7aiv_site_profile_post_form_ids', static function (array $ids, mixed $post, string $content): array {
+	if ((int) $post->ID !== 44 || ! str_contains($content, 'Builder service details')) { return $ids; }
+	$GLOBALS['setup_builder_content_input_length'] = strlen($content);
+	return [...$ids, ...range(1, 500), 34, -1, 34];
+}, 10, 3);
 $extendedProfile = (new SiteProfileScanner(null, static fn (): array => [[
 	'id' => 34,
 	'title' => 'Builder enquiry',
+	'page_ids' => [],
+	'fields' => [['name' => 'service', 'type' => 'text', 'label' => 'Service', 'options' => []]],
+], [
+	'id' => 101,
+	'title' => 'Out-of-bound reference',
+	'page_ids' => [],
+	'fields' => [['name' => 'service', 'type' => 'text', 'label' => 'Service', 'options' => []]],
+], [
+	'id' => 500,
+	'title' => 'Far out-of-bound reference',
 	'page_ids' => [],
 	'fields' => [['name' => 'service', 'type' => 'text', 'label' => 'Service', 'options' => []]],
 ]]))->scan();
 setup_assert(($GLOBALS['setup_get_posts_arguments']['post_type'] ?? []) === ['page', 'post', 'case_study'], 'Scanner post types must be filtered, sanitized, and de-duplicated before the public query.');
 $extendedJson = (string) json_encode($extendedProfile);
 setup_assert(str_contains($extendedJson, 'Builder service details') && str_contains($extendedJson, 'Public case study'), 'Builder-managed public content from a selected custom post type must enter the bounded profile.');
+setup_assert(($GLOBALS['setup_builder_content_input_length'] ?? PHP_INT_MAX) <= 100000, 'Builder-managed content must be bounded before form-reference filters and normalization process it.');
 setup_assert(! str_contains($extendedJson, 'DRAFT-PRIVATE-MARKER') && ! str_contains($extendedJson, 'PROTECTED-PRIVATE-MARKER') && ! str_contains($extendedJson, 'REMOTE-CONTENT-MARKER') && ! str_contains($extendedJson, 'UNSELECTED-TYPE-MARKER'), 'Filtered posts must still reject draft, protected, remote, and unselected post-type content.');
 setup_assert(($extendedProfile['forms'][0]['page_ids'] ?? []) === [44], 'Builder form references must create one positive de-duplicated form/page association.');
+setup_assert(($extendedProfile['forms'][1]['page_ids'] ?? []) === [] && ($extendedProfile['forms'][2]['page_ids'] ?? []) === [], 'Builder form-reference filters must not make the scanner process an unbounded ID list.');
 setup_assert(count($extendedProfile['pages']) <= 50 && array_sum(array_map(static fn (array $page): int => strlen($page['text']), $extendedProfile['pages'])) <= 40000, 'Filtered scanner content must retain page and total character bounds.');
 foreach ($scannerFilterHooks as $hook) { unset($GLOBALS['setup_filters'][$hook]); }
 

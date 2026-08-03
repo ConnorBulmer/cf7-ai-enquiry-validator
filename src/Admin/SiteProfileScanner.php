@@ -9,7 +9,9 @@ use Closure;
 final class SiteProfileScanner {
 	private const PAGE_LIMIT = 50;
 	private const PAGE_CHARACTER_LIMIT = 2000;
+	private const PAGE_INPUT_CHARACTER_LIMIT = 100000;
 	private const TOTAL_CHARACTER_LIMIT = 40000;
+	private const FORM_REFERENCE_LIMIT = 100;
 	private readonly ?Closure $pageLoader;
 	private readonly ?Closure $formLoader;
 
@@ -121,10 +123,10 @@ final class SiteProfileScanner {
 		$url = (string) $this->read($page, ['permalink', 'url'], '');
 		if ($url === '' && function_exists('get_permalink')) { $url = (string) get_permalink($id); }
 		if (! $this->isLocalUrl($url)) { return null; }
-		$content = (string) $this->read($page, ['post_content', 'text', 'content'], '');
+		$content = $this->cut((string) $this->read($page, ['post_content', 'text', 'content'], ''), self::PAGE_INPUT_CHARACTER_LIMIT);
 		if (function_exists('apply_filters')) {
 			$filteredContent = apply_filters('cf7aiv_site_profile_post_content', $content, $page);
-			if (is_string($filteredContent)) { $content = $filteredContent; }
+			if (is_string($filteredContent)) { $content = $this->cut($filteredContent, self::PAGE_INPUT_CHARACTER_LIMIT); }
 		}
 		$text = $this->normalize($content);
 		$text = $this->cut($text, min(self::PAGE_CHARACTER_LIMIT, $remaining));
@@ -142,7 +144,15 @@ final class SiteProfileScanner {
 	/** @return list<int> */
 	private function positiveIds(mixed $values): array {
 		if (! is_array($values)) { return []; }
-		return array_values(array_unique(array_filter(array_map('intval', $values), static fn (int $id): bool => $id > 0)));
+		$ids = [];
+		foreach ($values as $value) {
+			if (! is_scalar($value)) { continue; }
+			$id = (int) $value;
+			if ($id <= 0 || in_array($id, $ids, true)) { continue; }
+			$ids[] = $id;
+			if (count($ids) >= self::FORM_REFERENCE_LIMIT) { break; }
+		}
+		return $ids;
 	}
 
 	/** @return array{id:int,title:string,fields:list<array{name:string,type:string,label:string,options:list<string>}>,page_ids:list<int>}|null */

@@ -99,7 +99,7 @@ final class AttributionCookie {
 	 */
 	private static function mergeValues(array $query, array $persisted, array $server): array {
 		$values = [];
-		$allowed = array_unique(array_values(FieldNames::map()));
+		$allowed = array_values(array_diff(array_unique(array_values(FieldNames::map())), ['submission_id']));
 		foreach ($allowed as $key) {
 			if (isset($persisted[$key]) && is_scalar($persisted[$key])) {
 				$value = trim((string) $persisted[$key]);
@@ -177,7 +177,9 @@ final class AttributionCookie {
 		try {
 			$decoded = json_decode($cookies[self::NAME], true);
 			if (! is_array($decoded)) { $decoded = json_decode(rawurldecode($cookies[self::NAME]), true); }
-			return is_array($decoded) ? $decoded : [];
+			if (! is_array($decoded)) { return []; }
+			unset($decoded['submission_id']);
+			return $decoded;
 		} catch (\Throwable) { return []; }
 	}
 

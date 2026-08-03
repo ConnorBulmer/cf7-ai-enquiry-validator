@@ -76,9 +76,12 @@ add_filter(
 `cf7aiv_site_profile_posts` may augment the local objects returned by
 `get_posts()`. Every extension result is rechecked for selected post type,
 published status, empty password and a same-host permalink. The scanner then
-reapplies its maximum 50 pages, 2,000 characters per page and 40,000 total
-characters. These filters must return local WordPress data; they must not load
-remote URLs, files, submissions, identity fields or secrets.
+reapplies its maximum 50 pages, 100,000 input characters and 2,000 output
+characters per page, 40,000 total output characters, and 100 positive unique
+form references per page. Content is bounded before normalization and before it
+is passed to the form-reference filter. These filters must return local
+WordPress data; they must not load remote URLs, files, submissions, identity
+fields or secrets.
 
 ## AI providers
 

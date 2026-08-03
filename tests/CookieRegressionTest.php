@@ -91,6 +91,7 @@ namespace {
 		'gclid' => 'persisted_GOOGLE-456',
 		'msclkid' => '0123456789abcdef0123456789abcdef',
 		'utm_source' => 'persisted-source',
+		'submission_id' => 'legacy-persisted-operational-token',
 		'first_landing_page' => 'https://example.test/original-landing',
 	]);
 	$_GET = [
@@ -106,6 +107,7 @@ namespace {
 
 	$purePayload = CF7AIV\Intake\AttributionCookie::buildServerValues($_GET, $_COOKIE, $_SERVER);
 	cookie_assert($purePayload['gclid'] === 'fresh_GOOGLE-123' && $purePayload['utm_source'] === 'fresh-source', 'The pure fallback helper must merge validated fresh attribution over stored values.');
+	cookie_assert(! array_key_exists('submission_id', $purePayload), 'The pure fallback helper must discard legacy persisted operational tokens.');
 	cookie_assert($purePayload['current_page'] === 'https://example.test/contact/?gclid=fresh_GOOGLE-123&utm_source=fresh-source', 'The pure fallback helper must derive the current URL.');
 	$pureJson = CF7AIV\Intake\AttributionCookie::rawCookieJson($purePayload);
 	cookie_assert(str_starts_with($pureJson, '{') && json_decode($pureJson, true) === $purePayload, 'The raw cookie helper must return directly parseable, unencoded JSON.');
@@ -116,6 +118,7 @@ namespace {
 	cookie_assert(str_starts_with($write['value'], '{'), 'setcookie must receive raw JSON rather than pre-encoded JSON.');
 	$payload = json_decode($write['value'], true);
 	cookie_assert(is_array($payload), 'The cookie must parse after a single browser decode.');
+	cookie_assert(! array_key_exists('submission_id', $payload), 'The server fallback must never renew a legacy persisted operational token.');
 	cookie_assert($payload['gclid'] === 'fresh_GOOGLE-123', 'Fresh valid click IDs must override persisted values.');
 	cookie_assert($payload['msclkid'] === '0123456789abcdef0123456789abcdef', 'Invalid fresh click IDs must not erase valid persisted values.');
 	cookie_assert($payload['utm_source'] === 'fresh-source' && $payload['utm_campaign'] === 'summer-care', 'Fresh UTMs must override and extend persisted UTMs.');

@@ -64,6 +64,7 @@ The plugin stores source references and encrypted attribution/consent snapshots,
 * Selects GA client/session identity only for the configured GA4 property and fails closed when multiple plausible cookie pairs exist.
 * Adds a reusable persistent-source locator contract, qualified bounded CFDB7 lookup, extensible bounded site-profile scanning, and provider evidence regressions for cross-site portability.
 * Adds a disposable WordPress 6.9/7.0, PHP 8.1/8.3, Flamingo/CFDB7 browser matrix; schema remains version 10 with no migration required.
+* Removes legacy operational tokens from PHP fallback cookies and bounds builder content and form-reference extension inputs before processing.
 
 = 0.2.12 =
 * Assigns the published policy dimension locally from each allowed evidence code instead of trusting redundant provider metadata.

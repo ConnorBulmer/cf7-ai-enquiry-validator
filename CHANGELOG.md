@@ -15,6 +15,8 @@ All notable changes to CF7 AI Enquiry Validator are documented here. The project
   locked provider evidence canonicalization with controlled adapter tests.
 - Added a disposable WordPress 6.9/7.0, PHP 8.1/8.3, Flamingo/CFDB7 browser
   matrix. Schema remains version 10; no migration is required.
+- Removed legacy operational tokens from the PHP attribution fallback and
+  bounded builder-filter content and form references before scanner processing.
 
 ## 0.2.12 — 2026-08-03
 
