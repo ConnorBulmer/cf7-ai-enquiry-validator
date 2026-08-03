@@ -92,20 +92,59 @@ final class AdminPages {
 			$log['last_error'] = AdminSafe::log((string) ($log['last_error'] ?? ''));
 		}
 		unset($log);
+		$sourceRows = [];
+		foreach ((array) ($health['sources'] ?? []) as $sourceKey => $source) {
+			$source = (array) $source;
+			$sourceRows[] = [
+				'label' => (string) $sourceKey,
+				'value' => ! empty($source['available'])
+					? 'Available — ' . (int) ($source['count'] ?? 0) . ' records'
+					: 'Unavailable',
+			];
+		}
+		$checkLabels = [
+			'landing_navigation' => 'Landing navigation',
+			'form_presence' => 'Form presence',
+			'saved_attribution' => 'Saved attribution',
+		];
+		$checkRows = [];
+		foreach ($checkLabels as $key => $label) {
+			$checkRows[] = ['label' => $label, 'value' => (($health['checks'][$key] ?? '') === 'read_only' ? 'Read only' : 'Unavailable')];
+		}
+		$pausedRows = [];
+		foreach ((array) ($health['paused_destinations'] ?? []) as $key => $value) {
+			$destination = is_int($key) && is_scalar($value) ? (string) $value : (string) $key;
+			$pausedRows[] = ['label' => $destination, 'value' => 'Paused'];
+		}
+		$deliveryTable = '';
+		if (is_array($logs) && $logs !== []) {
+			$deliveryTable = '<table class="widefat striped"><caption>Sanitized delivery errors</caption><thead><tr><th scope="col">ID</th><th scope="col">Destination</th><th scope="col">State</th><th scope="col">Last error</th><th scope="col">Updated</th></tr></thead><tbody>';
+			foreach ($logs as $log) {
+				$log = (array) $log;
+				$deliveryTable .= '<tr><td>' . self::e((string) ($log['id'] ?? '')) . '</td><td>' . self::e((string) ($log['destination_key'] ?? '')) . '</td><td>' . self::e((string) ($log['state'] ?? '')) . '</td><td>' . self::e((string) ($log['last_error'] ?? '')) . '</td><td>' . self::e((string) ($log['updated_at'] ?? '')) . '</td></tr>';
+			}
+			$deliveryTable .= '</tbody></table>';
+		}
 		$dateTo = gmdate('Y-m-d');
 		$dateFrom = gmdate('Y-m-d', strtotime('-1 year'));
-		echo '<div class="wrap cf7aiv-admin"><h1>Tracking Health &amp; Logs</h1><p>Health tests are read-only and never create Ads conversions.</p><pre>' . self::e((string) json_encode($health)) . '</pre>';
-		echo '<h2>Historical stratified calibration</h2><form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_backfill">';
+		$calibrationForm = '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_backfill">';
+		ob_start();
 		wp_nonce_field('cf7aiv_backfill');
-		echo '<label for="cf7aiv-health-source">Source</label><select id="cf7aiv-health-source" name="source">';
+		$calibrationForm .= (string) ob_get_clean();
+		$calibrationForm .= '<label for="cf7aiv-health-source">Source</label><select id="cf7aiv-health-source" name="source">';
 		foreach (array_keys((array) ($health['sources'] ?? [])) as $sourceKey) {
-			echo '<option value="' . self::e((string) $sourceKey) . '">' . self::e((string) $sourceKey) . '</option>';
+			$calibrationForm .= '<option value="' . self::e((string) $sourceKey) . '">' . self::e((string) $sourceKey) . '</option>';
 		}
-		echo '</select><label for="cf7aiv-health-from">From</label><input id="cf7aiv-health-from" type="date" name="date_from" value="' . self::e($dateFrom) . '" required>';
-		echo '<label for="cf7aiv-health-to">To</label><input id="cf7aiv-health-to" type="date" name="date_to" value="' . self::e($dateTo) . '" required>';
-		echo '<label for="cf7aiv-health-maximum">Maximum</label><input id="cf7aiv-health-maximum" type="number" name="maximum" value="25" min="1" max="500" required>';
-		echo '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><button type="submit" class="button">Schedule calibration</button></form>';
-		echo '<h2>Sanitized delivery errors</h2><pre>' . self::e((string) json_encode($logs)) . '</pre></div>';
+		$calibrationForm .= '</select><label for="cf7aiv-health-from">From</label><input id="cf7aiv-health-from" type="date" name="date_from" value="' . self::e($dateFrom) . '" required>';
+		$calibrationForm .= '<label for="cf7aiv-health-to">To</label><input id="cf7aiv-health-to" type="date" name="date_to" value="' . self::e($dateTo) . '" required>';
+		$calibrationForm .= '<label for="cf7aiv-health-maximum">Maximum</label><input id="cf7aiv-health-maximum" type="number" name="maximum" value="25" min="1" max="500" required>';
+		$calibrationForm .= '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><button type="submit" class="button">Schedule calibration</button></form>';
+		$sourceBody = $sourceRows === [] ? AdminUi::emptyState('No submission sources were detected.') : AdminUi::keyValueTable('Submission source health', $sourceRows);
+		$pausedBody = $pausedRows === [] ? AdminUi::emptyState('No destinations are paused.') : AdminUi::keyValueTable('Paused destinations', $pausedRows);
+		$deliveryBody = $deliveryTable === '' ? AdminUi::emptyState('No delivery errors were recorded.') : AdminUi::tableRegion('Sanitized delivery errors', $deliveryTable);
+		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>Tracking Health &amp; Logs</h1><p>Health tests are read-only and never create Ads conversions.</p></div>';
+		echo '<div class="cf7aiv-panel-grid">' . AdminUi::panel('Submission source health', $sourceBody, 'cf7aiv-health-sources-panel') . AdminUi::panel('Read-only checks', AdminUi::keyValueTable('Read-only checks', $checkRows), 'cf7aiv-health-checks-panel') . AdminUi::panel('Paused destinations', $pausedBody, 'cf7aiv-health-paused-panel') . AdminUi::panel('Historical stratified calibration', $calibrationForm, 'cf7aiv-health-calibration-panel') . '</div>';
+		echo AdminUi::panel('Sanitized delivery errors', $deliveryBody, 'cf7aiv-health-delivery-panel') . '</div>';
 	}
 
 	public static function setup(): void {

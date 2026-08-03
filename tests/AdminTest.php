@@ -208,11 +208,11 @@ admin_assert(count($backfilled)===2 && $backfilled[0]['is_calibration'] && $back
 admin_assert(!str_contains(json_encode($backfilled),'PRIVATE')&&!str_contains(json_encode($backfilled),'private@example.test'), 'Backfill must not copy raw source fields into plugin records.');
 
 final class AdminOpsWpdb {
-	public string $prefix='wp_'; public array $queries=[]; public array $renderRows=[]; public array $qualityRows=[]; public array $metricRows=[]; public array $acceptedSuggestions=[]; public bool $draftPolicy=true; public bool $publishedV2=false; public array $mappingRow=['id'=>1,'status'=>'draft','enabled'=>0];
+	public string $prefix='wp_'; public array $queries=[]; public array $renderRows=[]; public array $qualityRows=[]; public array $metricRows=[]; public array $deliveryRows=[]; public array $acceptedSuggestions=[]; public bool $draftPolicy=true; public bool $publishedV2=false; public array $mappingRow=['id'=>1,'status'=>'draft','enabled'=>0];
 	public function prepare(string $sql,mixed ...$args):string{$this->queries[]=['prepare',$sql,$args];return $sql;}
 	public function query(string $sql):int{$this->queries[]=['query',$sql];if(str_contains($sql,"SET status='published'")){$this->mappingRow['status']='published';$this->mappingRow['enabled']=0;return 1;}if(str_contains($sql,'SET enabled=CASE')){$this->mappingRow['enabled']=1;}if(str_contains($sql,'SET enabled=0')&&str_contains($sql,'WHERE id=')){$this->mappingRow['enabled']=0;}return 2;}
 	public function get_row(string $sql,mixed $format=null):?array{$this->queries[]=['get_row',$sql];return str_contains($sql,'cf7aiv_mappings')?$this->mappingRow:null;}
-	public function get_results(string $sql,mixed $format=null):array{if(str_contains($sql,'cf7aiv_policies')&&str_contains($sql,"status='published'")){$definition=CF7AIV\Classification\StarterPolicy::definition();$definition['ai_whitelist']=['actual-message','actual-subject'];return [['definition_json'=>json_encode($definition)]];}if(str_contains($sql,"cf7aiv_setup_suggestions")&&str_contains($sql,"status='accepted'")){return $this->acceptedSuggestions;}if(str_contains($sql,'SELECT state AS label')){return $this->metricRows['state']??[];}if(str_contains($sql,'SELECT tier_id AS label')){return $this->metricRows['tier_id']??[];}if(str_contains($sql,'SELECT reason_code AS label')){return $this->metricRows['reason_code']??[];}if(str_contains($sql,'reviewed_at IS NOT NULL')){return $this->qualityRows;}if(str_contains($sql,'FROM wp_cf7aiv_items item')){return $this->renderRows;}if(str_contains($sql,'provider_usage_json')){return array_map(static fn(array $row):array=>['provider_usage_json'=>$row['provider_usage_json']??null],$this->renderRows);}return [];}
+	public function get_results(string $sql,mixed $format=null):array{if(str_contains($sql,'cf7aiv_policies')&&str_contains($sql,"status='published'")){$definition=CF7AIV\Classification\StarterPolicy::definition();$definition['ai_whitelist']=['actual-message','actual-subject'];return [['definition_json'=>json_encode($definition)]];}if(str_contains($sql,"cf7aiv_setup_suggestions")&&str_contains($sql,"status='accepted'")){return $this->acceptedSuggestions;}if(str_contains($sql,'SELECT id,destination_key,state,last_error,updated_at FROM wp_cf7aiv_deliveries')){return $this->deliveryRows;}if(str_contains($sql,'SELECT state AS label')){return $this->metricRows['state']??[];}if(str_contains($sql,'SELECT tier_id AS label')){return $this->metricRows['tier_id']??[];}if(str_contains($sql,'SELECT reason_code AS label')){return $this->metricRows['reason_code']??[];}if(str_contains($sql,'reviewed_at IS NOT NULL')){return $this->qualityRows;}if(str_contains($sql,'FROM wp_cf7aiv_items item')){return $this->renderRows;}if(str_contains($sql,'provider_usage_json')){return array_map(static fn(array $row):array=>['provider_usage_json'=>$row['provider_usage_json']??null],$this->renderRows);}return [];}
 	public function get_var(string $sql):mixed{if(str_contains($sql,"status='draft'")&&str_contains($sql,'cf7aiv_policies')){return $this->draftPolicy?1:0;}if(str_contains($sql,"status='published'")&&str_contains($sql,"cf7aiv-policy/v2")){return $this->publishedV2?1:0;}return 0;}
 	public function insert(string $table,array $data):bool{$this->queries[]=['insert',$table,$data];return true;}
 	public function update(string $table,array $data,array $where):int{$this->queries[]=['update',$table,$data,$where];return 1;}
@@ -257,6 +257,37 @@ admin_assert(str_contains($populatedOverview,'Human-reviewed quality')&&str_cont
 $GLOBALS['admin_options']['cf7aiv_paused_destinations']=['list-paused-destination'];
 ob_start();CF7AIV\Admin\AdminPages::overview();$listPausedOverview=ob_get_clean();
 admin_assert(str_contains($listPausedOverview,'<th scope="row">list-paused-destination</th><td>Paused</td>'),'Paused destinations must accept list-shaped options without exposing their indexes.');
+
+final class AdminHealthSource implements CF7AIV\Contracts\SubmissionSourceInterface {
+	public function __construct(private string $sourceKey, private bool $isAvailable, private ?int $recordCount = null) {}
+	public function key(): string { return $this->sourceKey; }
+	public function get(string $reference): ?array { return null; }
+	public function iterate(array $arguments = []): iterable { return []; }
+	public function available(): bool { return $this->isAvailable; }
+	public function count(): ?int { return $this->recordCount; }
+}
+$GLOBALS['admin_health_sources']=[
+	'available-source'=>new AdminHealthSource('available-source',true,4),
+	'unavailable-source'=>new AdminHealthSource('unavailable-source',false),
+];
+add_filter('cf7aiv_submission_sources',static fn(array $sources):array=>$GLOBALS['admin_health_sources'],100);
+$GLOBALS['admin_options']['cf7aiv_paused_destinations']=['paused-destination'=>'private implementation value'];
+$GLOBALS['wpdb']->deliveryRows=[
+	['id'=>21,'destination_key'=>'ga4','state'=>'failed','last_error'=>'<script>alert(1)</script>','updated_at'=>'2026-07-22 10:05:00'],
+	['id'=>22,'destination_key'=>'webhook','state'=>'pending','last_error'=>'Temporary connection issue','updated_at'=>'2026-07-22 10:04:00'],
+];
+ob_start();CF7AIV\Admin\AdminPages::health();$healthPage=ob_get_clean();
+admin_assert(! str_contains($healthPage, '<pre>'), 'Tracking Health must not expose raw JSON presentation.');
+admin_assert(str_contains($healthPage, '<caption>Submission source health</caption>'), 'Source health must use a semantic table.');
+admin_assert(str_contains($healthPage, 'Available') && str_contains($healthPage, 'Unavailable'), 'Availability must be stated in text.');
+admin_assert(str_contains($healthPage, '<caption>Read-only checks</caption>'), 'Read-only checks must be structured.');
+admin_assert(str_contains($healthPage, 'cf7aiv-table-region') && str_contains($healthPage, 'aria-label="Sanitized delivery errors"'), 'Delivery logs must scroll locally in a labelled region.');
+admin_assert(str_contains($healthPage, '&lt;script&gt;') && ! str_contains($healthPage, '<script>'), 'Sanitised delivery error text must remain escaped.');
+$GLOBALS['admin_health_sources']=[];
+$GLOBALS['admin_options']['cf7aiv_paused_destinations']=[];
+$GLOBALS['wpdb']->deliveryRows=[];
+ob_start();CF7AIV\Admin\AdminPages::health();$emptyHealthPage=ob_get_clean();
+admin_assert(str_contains($emptyHealthPage, 'No submission sources were detected.') && str_contains($emptyHealthPage, 'No destinations are paused.') && str_contains($emptyHealthPage, 'No delivery errors were recorded.'), 'Tracking Health must render explicit empty states.');
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$policyPage=ob_get_clean();admin_assert(str_contains($policyPage,'Tiers')&&str_contains($policyPage,'Audiences')&&str_contains($policyPage,'Exclusions')&&str_contains($policyPage,'Field whitelist')&&str_contains($policyPage,'Calibration summary'),'Policy Lab must expose guided policy dimensions and calibration summary.');
 ob_start();CF7AIV\Admin\IntegrationsPage::render();$integrations=ob_get_clean();foreach(['deepseek_api_key','openai_api_key','deepseek_base_url','openai_base_url','ga4_api_secret','microsoft_uet_token','webhook_secret','delete_on_uninstall','cf7aiv_automation_transition','cf7aiv_ga_transition','cf7aiv_mapping_publish','cf7aiv_mapping_enable','cf7aiv_mapping_disable','cf7aiv_save_consent','Return automation to shadow','Disable GA4 live / return to dry-run'] as $control){admin_assert(str_contains($integrations,$control),"Integrations must render functional control {$control}.");}admin_assert(!str_contains($integrations,'ga-secret'),'Integrations must never render stored secret values.');admin_assert(str_contains($integrations,'<div class="wrap cf7aiv-admin">'),'Integrations must use the shared admin wrapper.');foreach(['cf7aiv-mapping-key','cf7aiv-mapping-version','cf7aiv-mapping-tier','cf7aiv-mapping-destination','cf7aiv-mapping-event','cf7aiv-mapping-value','cf7aiv-mapping-currency','cf7aiv_mapping_publish-key','cf7aiv_mapping_publish-version','cf7aiv_mapping_enable-key','cf7aiv_mapping_enable-version','cf7aiv_mapping_disable-key','cf7aiv_mapping_disable-version'] as $mappingFieldId){admin_assert(str_contains($integrations,'for="'.$mappingFieldId.'"')&&str_contains($integrations,'id="'.$mappingFieldId.'"'),'Mapping fields need associated labels and stable IDs.');}foreach(['Destination mapping lifecycle','Automation lifecycle','GA4 delivery lifecycle'] as $lifecycleLegend){admin_assert(str_contains($integrations,'<legend>'.$lifecycleLegend.'</legend>'),"Integrations must group {$lifecycleLegend} controls.");}
 foreach(['cf7aiv_test_microsoft','SEND_ZERO_VALUE_MICROSOFT_TEST','Microsoft UET transport test'] as $control){admin_assert(str_contains($integrations,$control),"Integrations must render guarded Microsoft control {$control}.");}
