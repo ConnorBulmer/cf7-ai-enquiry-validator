@@ -14,22 +14,22 @@ final class SetupPage {
 		$stage = (string) ($settings['setup']['stage'] ?? 'setup');
 		$packs = (new PolicyPackRegistry())->all();
 
-		echo '<div class="wrap cf7aiv-admin"><h1>AI Enquiry Validator Setup</h1>';
+		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>AI Enquiry Validator Setup</h1>';
 		echo '<ol class="cf7aiv-stage-list" aria-label="Setup lifecycle">';
 		foreach (['setup' => 'Setup', 'testing' => 'Testing', 'live' => 'Live'] as $key => $label) {
 			echo '<li class="cf7aiv-status-badge' . ($stage === $key ? ' is-current' : '') . '"' . ($stage === $key ? ' aria-current="step"' : '') . '>' . self::e($label) . '</li>';
 		}
-		echo '</ol><p>Setup is skippable. Entering Testing or Live leaves automation in shadow mode until it is enabled separately in Integrations.</p>';
+		echo '</ol><p>Setup is skippable. Entering Testing or Live leaves automation in shadow mode until it is enabled separately in Integrations.</p></div>';
 
 		echo '<section class="card"><h2>1. Pack selection</h2><p>Choose the closest starting point. You can change every draft rule before publishing.</p>';
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_setup_scan">';
 		wp_nonce_field('cf7aiv_setup_scan');
-		echo '<label for="cf7aiv-pack">Starter pack</label><select id="cf7aiv-pack" name="pack_key">';
+		echo '<div class="cf7aiv-form-grid"><label for="cf7aiv-pack">Starter pack</label><select id="cf7aiv-pack" name="pack_key">';
 		foreach ($packs as $key => $pack) {
 			echo '<option value="' . self::e((string) $key) . '">' . self::e((string) ($pack['pack']['label'] ?? $key)) . '</option>';
 		}
-		echo '</select>';
-		echo '<h2>2. Optional: Analyse public site and forms</h2><p>Only public page copy and safe form structure are sent. Submission values are never scanned.</p><button type="submit" class="button">Analyse public site and forms</button></form></section>';
+		echo '</select></div>';
+		echo '<h2>2. Optional: Analyse public site and forms</h2><p>Only public page copy and safe form structure are sent. Submission values are never scanned.</p><p class="cf7aiv-actions"><button type="submit" class="button button-secondary">Analyse public site and forms</button></p></form></section>';
 
 		echo '<section class="card"><h2>3. Pending suggestions</h2><p>Every suggestion retains its public page, form, or starter-pack provenance. Nothing is accepted automatically.</p>';
 		$suggestions = self::pendingSuggestions();
@@ -41,14 +41,14 @@ final class SetupPage {
 			echo '<p><strong>Provenance:</strong> ' . self::e(implode(', ', self::jsonList($suggestion['provenance_json'] ?? '[]'))) . '</p>';
 			echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_setup_suggestion"><input type="hidden" name="suggestion_id" value="' . (int) ($suggestion['id'] ?? 0) . '">';
 			wp_nonce_field('cf7aiv_setup_suggestion');
-			echo '<label for="cf7aiv-suggestion-' . (int) ($suggestion['id'] ?? 0) . '">Suggested value</label><textarea id="cf7aiv-suggestion-' . (int) ($suggestion['id'] ?? 0) . '" name="edited_value" rows="3">' . self::e(self::jsonValue($suggestion['value_json'] ?? '')) . '</textarea>';
-			echo '<button class="button button-primary" name="suggestion_action" value="accept" type="submit">Accept or save edit</button> <button class="button" name="suggestion_action" value="reject" type="submit">Reject</button></form></article>';
+			echo '<div class="cf7aiv-form-grid"><label for="cf7aiv-suggestion-' . (int) ($suggestion['id'] ?? 0) . '">Suggested value</label><textarea id="cf7aiv-suggestion-' . (int) ($suggestion['id'] ?? 0) . '" name="edited_value" rows="3">' . self::e(self::jsonValue($suggestion['value_json'] ?? '')) . '</textarea></div>';
+			echo '<p class="cf7aiv-actions"><button class="button button-secondary" name="suggestion_action" value="accept" type="submit">Accept or save edit</button> <button class="button button-secondary" name="suggestion_action" value="reject" type="submit">Reject</button></p></form></article>';
 		}
 		echo '</section>';
 
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_save_guided_policy"><input type="hidden" name="return_page" value="setup">';
 		wp_nonce_field('cf7aiv_guided_policy');
-		echo '<section class="card"><h2>4. Guided business questions</h2>';
+		echo '<section class="card"><h2>4. Guided business questions</h2><div class="cf7aiv-form-grid">';
 		echo '<label for="cf7aiv-guided-pack">Starter pack</label><select id="cf7aiv-guided-pack" name="guided[pack_key]">';
 		$selectedPack = (string) ($settings['setup']['selected_pack'] ?? array_key_first($packs));
 		foreach ($packs as $key => $pack) {
@@ -60,9 +60,9 @@ final class SetupPage {
 		echo '<label for="cf7aiv-audiences">Who are the intended audiences? One per line.</label><textarea id="cf7aiv-audiences" name="guided[audiences]" rows="3"></textarea>';
 		echo '<label for="cf7aiv-primary">What makes an enquiry a primary opportunity?</label><textarea id="cf7aiv-primary" name="guided[primary_definition]" rows="3"></textarea>';
 		echo '<fieldset><legend>Exclusions</legend>' . self::guidedCheckboxes($packs, 'exclusion_catalog', 'guided[exclusion_codes][]') . '</fieldset>';
-		echo '<fieldset><legend>Field whitelist</legend>' . self::guidedCheckboxes($packs, 'ai_whitelist', 'guided[ai_whitelist][]') . '</fieldset></section>';
+		echo '<fieldset><legend>Field whitelist</legend>' . self::guidedCheckboxes($packs, 'ai_whitelist', 'guided[ai_whitelist][]') . '</fieldset></div></section>';
 
-		echo '<section class="card"><h2>5. Draft summary</h2><p>Saving validates these generic fields with the selected v2 pack and accepted suggestions. It creates a draft only.</p><button type="submit" class="button">Save guided draft</button></section></form>';
+		echo '<section class="card"><h2>5. Draft summary</h2><p>Saving validates these generic fields with the selected v2 pack and accepted suggestions. It creates a draft only.</p><p class="cf7aiv-actions"><button type="submit" class="button button-primary">Save guided draft</button></p></section></form>';
 		echo '<section class="card"><h2>Lifecycle</h2><p>Review the selected pack, accepted suggestions, business answers, evidence requirements, and exclusions in Policy Lab before publishing.</p>';
 		$transition = $stage === 'testing' ? 'live' : 'testing';
 		$transitionLabel = $stage === 'testing' ? 'Enter Live' : ($stage === 'live' ? 'Return to Testing' : 'Enter Testing');
@@ -71,7 +71,7 @@ final class SetupPage {
 		}
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_lifecycle_transition"><input type="hidden" name="transition" value="' . self::e($transition) . '">';
 		wp_nonce_field('cf7aiv_lifecycle_transition');
-		echo '<button type="submit" class="button button-primary">' . self::e($transitionLabel) . '</button></form></section>';
+		echo '<p class="cf7aiv-actions"><button type="submit" class="button cf7aiv-safety-action">' . self::e($transitionLabel) . '</button></p></form></section>';
 
 		if (self::draftExists()) {
 			$sample = max(1, min(500, (int) ($settings['calibration']['default_sample_size'] ?? 25)));
@@ -83,13 +83,13 @@ final class SetupPage {
 			echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_backfill">';
 			wp_nonce_field('cf7aiv_backfill');
 			echo '<input type="hidden" name="whitelist_fingerprint" value="' . self::e($snapshot['fingerprint']) . '">';
-			echo '<label for="cf7aiv-source">Stored source key</label><input id="cf7aiv-source" name="source" required>';
+			echo '<div class="cf7aiv-form-grid"><label for="cf7aiv-source">Stored source key</label><input id="cf7aiv-source" name="source" required>';
 			echo '<label for="cf7aiv-form-ids">Form IDs (optional, comma-separated)</label><input id="cf7aiv-form-ids" name="form_ids" inputmode="numeric">';
 			echo '<label for="cf7aiv-date-from">From</label><input id="cf7aiv-date-from" type="date" name="date_from" required>';
 			echo '<label for="cf7aiv-date-to">To</label><input id="cf7aiv-date-to" type="date" name="date_to" required>';
 			echo '<label for="cf7aiv-maximum">Sample size</label><input id="cf7aiv-maximum" type="number" name="maximum" min="1" max="500" value="' . $sample . '" required>';
-			echo '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label>';
-			echo '<button type="submit" class="button">Schedule historical calibration</button></form></section>';
+			echo '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label></div>';
+			echo '<p class="cf7aiv-actions"><button type="submit" class="button button-secondary">Schedule historical calibration</button></p></form></section>';
 		}
 		echo '</div>';
 	}
