@@ -20,7 +20,7 @@ against the configured isolated production provider on 2026-08-03.
 - Complete sorted PHP suite: **24/24 PASS**; JavaScript checks: **PASS**;
   tracked non-vendor PHP lint: **145/145 PASS**.
 - The verified 228-entry local archive SHA-256 is
-  `dbc1f73febcfa5838526b5b3eb70fbb362662a45050af8c6062eaee8bf2e64b9`.
+  `54cd309f20002a43e66ad6bf934e7ae13effe0b8d07f2d3284d5b50b436c91ea`.
 
 The 0.2.9 DeepSeek evidence-schema correction was verified locally on 2026-08-03.
 

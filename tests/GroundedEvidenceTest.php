@@ -269,6 +269,7 @@ grounded_assert(
 );
 grounded_assert(
 	str_contains($deepSystemPrompt, 'Do not stop after required evidence')
+		&& str_contains($deepSystemPrompt, 'distinct supporting evidence codes')
 		&& str_contains($deepSystemPrompt, 'minimum_supporting_evidence'),
 	'DeepSeek must be explicitly told to include grounded supporting evidence needed by the chosen tier instead of returning only its required evidence groups.',
 );
