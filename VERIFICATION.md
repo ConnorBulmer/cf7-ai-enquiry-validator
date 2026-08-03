@@ -1,4 +1,26 @@
-# Release verification — 0.2.9
+# Release verification — 0.2.10
+
+The 0.2.10 DeepSeek supporting-evidence correction was verified locally and
+against the configured isolated production provider on 2026-08-03.
+
+## 0.2.10 DeepSeek supporting-evidence verification
+
+- Release identities are all `0.2.10`; release tag is `v0.2.10`.
+- Production reproduction: 10/10 privacy-safe configured DeepSeek pipeline
+  runs returned the qualified tier but stopped at Needs review with
+  `supporting_evidence_missing`; no production item or destination was touched.
+- RED: the provider-wire regression failed because DeepSeek was not explicitly
+  told to continue past required evidence until the chosen tier's supporting
+  minimum was satisfied.
+- Hypothesis probe: the single additional instruction was injected in-memory
+  for 5 configured provider runs; all 5 produced Strong match, eligible,
+  private, idempotent isolated deliveries with no production-state mutation.
+- GREEN: the instruction is now part of v2 DeepSeek guidance. Deterministic
+  evidence evaluation and fail-closed behavior remain unchanged.
+- Complete sorted PHP suite: **24/24 PASS**; JavaScript checks: **PASS**;
+  tracked non-vendor PHP lint: **145/145 PASS**.
+- The verified 228-entry local archive SHA-256 is
+  `dbc1f73febcfa5838526b5b3eb70fbb362662a45050af8c6062eaee8bf2e64b9`.
 
 The 0.2.9 DeepSeek evidence-schema correction was verified locally on 2026-08-03.
 
