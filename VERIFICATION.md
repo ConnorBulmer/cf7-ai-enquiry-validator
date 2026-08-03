@@ -1,9 +1,67 @@
-# Release verification — 0.2.16 candidate
+# Release verification — 0.2.16
 
-The 0.2.16 WordPress-native administration refresh was verified locally and in
-the disposable WordPress matrix on 2026-08-03. Automated verification used
-synthetic fixtures only and made no external AI, analytics, advertising, or
-production-site request. Live evidence is intentionally deferred to Task 10.
+The 0.2.16 WordPress-native administration refresh was verified locally, in
+the disposable WordPress matrix, and on the live Mosaic Media Training site on
+2026-08-03. Local automation used synthetic fixtures only. Controlled live
+acceptance used non-personal synthetic data and retained no credentials,
+private enquiries, account identifiers, or raw provider responses.
+
+## 0.2.16 Mosaic Media Training live acceptance
+
+- The exact `cf7-ai-enquiry-validator-0.2.16.zip` archive was uploaded outside
+  `public_html`, matched SHA-256
+  `9e6a15f3b4e0705068ca2745b5bcbe0edf7b909631b80732c0d322d222d123bc`,
+  and was installed through PHP 8.3 WP-CLI. Readback confirmed the plugin is
+  active at `0.2.16` and the installed/expected schema remains `10`.
+- The canonical 232-file installed manifest matched the verified archive. Its
+  ordinal/Linux-sorted manifest SHA-256 was
+  `1d07d8d3f4055084d1a27fef879354c979c16d13be9f0486e209a6ae23eb22d0`.
+- A fresh rollback backup remains outside `public_html` at
+  `/home/sites/25b/3/3f7a206908/backups/20260803-185207Z-cf7aiv-0.2.16-predeploy`.
+  The exact prior plugin copy matched the pre-deployment live tree, and the
+  non-empty sensitive option snapshot remained server-side and hash-verified.
+- Instrumented version, schema, status, health, and read-only safety commands
+  returned complete output and exit zero. Automation, consent, destination
+  enabled/dry-run/live flags, mapping versions/statuses, scheduled hooks, and
+  paused destinations matched the pre-deployment inventory.
+- Deterministic and configured-DeepSeek isolated pipelines both returned a
+  grounded strong match, one isolated delivered record, and duplicate replay
+  suppression with PII-free AI context/envelopes and no production-state
+  mutation.
+- GA4 strict debug validation passed without collection. The confirmed
+  zero-value GA4 transport and Microsoft transport each produced one accepted,
+  non-retryable live request. Microsoft used denied consent, no click ID or
+  enhanced identity, and only its one-off synthetic anonymous identifier.
+- The existing qualified GA4 mapping produced one accepted event with its
+  configured positive GBP value, stable event/idempotency identity, one live
+  network call, and a suppressed repeat. Its delivery store was isolated in
+  memory, so no production item or delivery row was created.
+- Post-test relevant option rows exactly matched the server-side pre-deployment
+  snapshot. Mapping, hook, pause, and delivery aggregates were unchanged, and
+  no transient setting or production test record required cleanup.
+- Authenticated live administration acceptance covered Overview, Review Queue,
+  Policy Lab, Integrations, Tracking Health, and Setup at `1440x1000`,
+  `900x1000`, and `390x844` — **18/18 combinations PASS**. Every combination
+  had the expected heading and `.cf7aiv-admin` wrapper, loaded the live
+  `0.2.16` admin stylesheet, had zero document-level horizontal overflow, no
+  raw `<pre>` output, and no fatal marker. Cards/panels retained computed
+  `min-width: 0`; form grids computed as grid where present; Microsoft guidance
+  accurately described the guarded zero-value/consent/identifier behavior.
+- Fresh navigation across all six administration pages produced zero console
+  errors and zero page errors. Review Queue exposed one labelled, locally
+  scrolling table region with `tabindex="0"`, keyboard/programmatic focus,
+  and a visible solid 2px outline at all widths and in forced colours.
+- Live Tracking Health correctly showed two non-empty status empty states and
+  therefore no delivery-error table region; the disposable matrix separately
+  passed the populated, focusable Health table state. Setup exposed 30 visible
+  form controls with no missing accessible label, and its safety action was
+  44px high. The only non-WordPress-button control observed was WordPress
+  core's notice-dismiss control, not a plugin action.
+- Public HTTP checks for the home page and a representative course page
+  returned 200, rendered Contact Form 7 with the expected 20 plugin hidden
+  fields and attribution behavior, exposed no plugin administration CSS, and
+  contained no PHP fatal/parse/uncaught-exception marker. No public form was
+  submitted.
 
 ## 0.2.16 WordPress-native administration verification
 
