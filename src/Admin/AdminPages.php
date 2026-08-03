@@ -20,15 +20,53 @@ final class AdminPages {
 			? number_format((float) $quality['ads_precision'] * 100, 1) . "% ({$adsTrue} of {$adsPredicted} predicted Ads-eligible positives)"
 			: 'Unavailable (0 predicted Ads-eligible positives)';
 		$falsePositives = (int) ($quality['false_positives'] ?? 0);
+		$automationMode = (string) ($metrics['automation_mode'] ?? 'shadow');
+		$queueAge = is_numeric($metrics['queue_age_seconds'] ?? null) ? (int) $metrics['queue_age_seconds'] : null;
+		$distributionPanels = '';
+		foreach (['by_state' => ['Counts by state', 'No classified states yet.'], 'by_tier' => ['Counts by tier', 'No classified tiers yet.'], 'by_reason' => ['Counts by reason', 'No classification reasons yet.']] as $key => [$title, $empty]) {
+			$rows = (array) ($metrics[$key] ?? []);
+			$body = $rows === [] ? AdminUi::emptyState($empty) : AdminUi::labelCountTable($title, $rows);
+			$distributionPanels .= AdminUi::panel($title, $body, 'cf7aiv-distribution-panel');
+		}
+		$qualityRows = [
+			['label' => 'Reviewed enquiries', 'value' => (string) $reviewed],
+			['label' => 'Exact agreement', 'value' => $exactText],
+			['label' => 'Ads precision', 'value' => $adsText],
+			['label' => 'False positives', 'value' => (string) $falsePositives],
+		];
+		$perTierRows = [];
+		foreach ((array) ($quality['per_tier'] ?? []) as $tier => $counts) {
+			$counts = (array) $counts;
+			$perTierRows[] = ['label' => (string) $tier . ' (predicted)', 'total' => (int) ($counts['predicted'] ?? 0)];
+			$perTierRows[] = ['label' => (string) $tier . ' (reviewed)', 'total' => (int) ($counts['reviewed'] ?? 0)];
+		}
+		$qualityBody = $reviewed === 0
+			? AdminUi::emptyState('No human-reviewed enquiries yet.') . AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
+			: AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
+				. self::confusionMatrix((array) ($quality['confusion_matrix'] ?? []))
+				. ($perTierRows === [] ? AdminUi::emptyState('No reviewed tiers yet.') : AdminUi::labelCountTable('Reviewed per-tier counts', $perTierRows));
+		$pausedRows = [];
+		foreach ((array) ($metrics['paused_destinations'] ?? []) as $key => $value) {
+			$destination = is_int($key) && is_scalar($value) ? (string) $value : (string) $key;
+			$pausedRows[] = ['label' => $destination, 'value' => 'Paused'];
+		}
+		$pausedBody = $pausedRows === []
+			? AdminUi::emptyState('No destinations are paused.')
+			: AdminUi::keyValueTable('Paused destinations', $pausedRows);
 
-		echo '<div class="wrap cf7aiv-admin"><h1>AI Enquiry Validator — Overview</h1>';
-		echo '<p>Automation: ' . self::e((string) $metrics['automation_mode']) . '</p><p>Setup status: ' . ($metrics['setup_complete'] ? 'Complete' : 'Incomplete') . '</p>';
-		echo '<h2>Counts by state, tier, and reason</h2><p>These operational distributions are not quality or accuracy measures.</p><pre>' . self::e((string) json_encode([$metrics['by_state'], $metrics['by_tier'], $metrics['by_reason']])) . '</pre>';
-		echo '<h2>Human-reviewed quality</h2><p>' . $reviewed . ' reviewed.</p><p>Exact agreement: ' . self::e($exactText) . '.</p><p>Ads precision: ' . self::e($adsText) . '.</p>';
-		echo '<p>' . $falsePositives . ' false positive' . ($falsePositives === 1 ? '' : 's') . '.</p><h3>Reviewed confusion matrix and tier counts</h3><pre>' . self::e((string) json_encode([$quality['confusion_matrix'] ?? [], $quality['per_tier'] ?? []])) . '</pre>';
-		echo '<h2>Queue age</h2><p>' . self::e($metrics['queue_age_seconds'] === null ? 'No pending queue' : (string) $metrics['queue_age_seconds'] . ' seconds') . '</p>';
-		echo '<h2>Attribution readiness</h2><p>' . (int) $metrics['attribution_ready'] . ' / ' . (int) $metrics['attribution_total'] . '</p>';
-		echo '<h2>API errors</h2><p>' . (int) $metrics['api_errors'] . ' errors.</p><h2>Paused destinations</h2><pre>' . self::e((string) json_encode($metrics['paused_destinations'])) . '</pre>' . self::nav() . '</div>';
+		echo '<div class="wrap cf7aiv-admin">';
+		echo '<div class="cf7aiv-page-header"><h1>AI Enquiry Validator — Overview</h1><p>Monitor operational classifications, human-reviewed quality, and destination readiness.</p><p>'
+			. AdminUi::badge('Automation: ' . $automationMode, $automationMode === 'live' ? 'positive' : 'warning')
+			. ' ' . AdminUi::badge('Setup: ' . (! empty($metrics['setup_complete']) ? 'Complete' : 'Incomplete'), ! empty($metrics['setup_complete']) ? 'positive' : 'warning')
+			. '</p></div>';
+		echo '<div class="cf7aiv-metric-grid">'
+			. AdminUi::metric('Queue age', AdminUi::duration($queueAge), 'Oldest pending or review item.')
+			. AdminUi::metric('Attribution readiness', (int) ($metrics['attribution_ready'] ?? 0) . ' / ' . (int) ($metrics['attribution_total'] ?? 0), 'Items ready for attribution.')
+			. AdminUi::metric('API errors', (string) (int) ($metrics['api_errors'] ?? 0), 'Failed delivery attempts.')
+			. AdminUi::metric('Reviewed count', (string) $reviewed, 'Human-reviewed enquiries.')
+			. '</div>';
+		echo '<div class="cf7aiv-panel-grid">' . $distributionPanels . AdminUi::panel('Human-reviewed quality', $qualityBody, 'cf7aiv-quality-panel') . AdminUi::panel('Paused destinations', $pausedBody, 'cf7aiv-paused-destinations-panel') . '</div>';
+		echo self::nav() . '</div>';
 	}
 
 	public static function reviewQueue(): void {
@@ -84,7 +122,37 @@ final class AdminPages {
 		return function_exists('esc_html') ? esc_html($value) : htmlspecialchars($value, ENT_QUOTES);
 	}
 
+	/** @param array<string, array<string, int>> $matrix */
+	private static function confusionMatrix(array $matrix): string {
+		$outcomeMap = [];
+		foreach ($matrix as $predicted => $reviewed) {
+			$outcomeMap[(string) $predicted] = true;
+			foreach ((array) $reviewed as $outcome => $_count) {
+				$outcomeMap[(string) $outcome] = true;
+			}
+		}
+		$outcomes = array_keys($outcomeMap);
+		sort($outcomes, SORT_STRING);
+		if ($outcomes === []) {
+			return AdminUi::emptyState('No reviewed outcome data yet.');
+		}
+
+		$table = '<table class="widefat striped cf7aiv-compact-table"><caption>Reviewed confusion matrix</caption><thead><tr><th scope="col">Predicted outcome</th>';
+		foreach ($outcomes as $outcome) {
+			$table .= '<th scope="col">' . self::e($outcome) . '</th>';
+		}
+		$table .= '</tr></thead><tbody>';
+		foreach ($outcomes as $predicted) {
+			$table .= '<tr><th scope="row">' . self::e($predicted) . '</th>';
+			foreach ($outcomes as $reviewed) {
+				$table .= '<td>' . self::e((string) (int) ($matrix[$predicted][$reviewed] ?? 0)) . '</td>';
+			}
+			$table .= '</tr>';
+		}
+		return AdminUi::tableRegion('Reviewed confusion matrix', $table . '</tbody></table>');
+	}
+
 	private static function nav(): string {
-		return '<p><a href="admin.php?page=cf7aiv-review">Review Queue</a> · <a href="admin.php?page=cf7aiv-policy">Policy Lab</a> · <a href="admin.php?page=cf7aiv-integrations">Integrations</a> · <a href="admin.php?page=cf7aiv-health">Tracking Health &amp; Logs</a></p>';
+		return '<div class="cf7aiv-page-actions"><a href="admin.php?page=cf7aiv-review">Review Queue</a> &middot; <a href="admin.php?page=cf7aiv-policy">Policy Lab</a> &middot; <a href="admin.php?page=cf7aiv-integrations">Integrations</a> &middot; <a href="admin.php?page=cf7aiv-health">Tracking Health &amp; Logs</a></div>';
 	}
 }
