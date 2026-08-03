@@ -85,7 +85,25 @@ grounded_reject($wrongField, $request, 'Evidence must reference a whitelisted fi
 
 $wrongDimension = $valid;
 $wrongDimension['evidence'][0]['dimension'] = 'readiness';
-grounded_reject($wrongDimension, $request, 'Evidence dimensions must match the published evidence catalog.');
+$canonicalizedDimension = CF7AIV\Classification\ResultValidator::fromJson(json_encode($wrongDimension, JSON_THROW_ON_ERROR), $request);
+grounded_assert(
+	$canonicalizedDimension->evidence[0]->code === 'service_fit'
+		&& $canonicalizedDimension->evidence[0]->dimension === 'service_fit',
+	'Redundant provider dimensions must be replaced with the published dimension for an otherwise allowed, grounded evidence code.',
+);
+
+$codeEchoDimension = $valid;
+$codeEchoDimension['evidence'][1]['dimension'] = 'readiness_signal';
+$canonicalizedCodeEcho = CF7AIV\Classification\ResultValidator::fromJson(json_encode($codeEchoDimension, JSON_THROW_ON_ERROR), $request);
+grounded_assert(
+	$canonicalizedCodeEcho->evidence[1]->code === 'readiness_signal'
+		&& $canonicalizedCodeEcho->evidence[1]->dimension === 'readiness',
+	'A provider echoing readiness_signal as its dimension must still store the published readiness dimension.',
+);
+
+$unknownEvidenceCode = $valid;
+$unknownEvidenceCode['evidence'][0]['code'] = 'invented_evidence';
+grounded_reject($unknownEvidenceCode, $request, 'Evidence codes must remain restricted to the published evidence catalog.');
 
 $unknownOutcome = $valid;
 $unknownOutcome['outcome_id'] = 'invented_outcome';

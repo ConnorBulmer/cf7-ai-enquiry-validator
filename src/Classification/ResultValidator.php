@@ -105,7 +105,7 @@ final class ResultValidator {
 				if (! is_string($assertion[$key])) { throw new InvalidArgumentException("Classification evidence {$key} must be a string."); }
 			}
 			$expectedDimension = $request->allowedEvidence[$assertion['code']] ?? null;
-			if ($expectedDimension === null || $assertion['dimension'] !== $expectedDimension) {
+			if ($expectedDimension === null) {
 				throw new InvalidArgumentException('Classification evidence is not in the published catalog.');
 			}
 			if (! array_key_exists($assertion['field_key'], $request->context)
@@ -113,7 +113,7 @@ final class ResultValidator {
 				throw new InvalidArgumentException('Classification evidence is not grounded in its request field.');
 			}
 			$evidence[] = new EvidenceAssertion(
-				$assertion['dimension'],
+				$expectedDimension,
 				$assertion['code'],
 				$assertion['field_key'],
 				$assertion['excerpt'],
