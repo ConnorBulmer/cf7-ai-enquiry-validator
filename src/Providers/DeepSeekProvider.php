@@ -84,7 +84,8 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		}
 		return "\nEvidence code-to-dimension mapping: " . $mapping
 			. "\nEach evidence dimension must equal the value mapped from its code exactly."
-			. "\nEvidence pair examples: " . json_encode($pairs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+			. "\nEvidence pair examples: " . json_encode($pairs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
+			. "\nDo not stop after required evidence. For the chosen tier, include every grounded supporting evidence assertion present in the supplied context, using distinct supporting evidence codes until minimum_supporting_evidence is satisfied. If it cannot be satisfied, choose a tier whose evidence rules are satisfied or return insufficient information.";
 	}
 
 	protected function extractText(array $body): string {

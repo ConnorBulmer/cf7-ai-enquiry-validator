@@ -2,6 +2,15 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.10 — 2026-08-03
+
+- Instructed DeepSeek to include every available grounded supporting assertion
+  until the chosen tier's `minimum_supporting_evidence` is satisfied.
+- Prevented otherwise complete opportunities from stopping at Needs review
+  after the provider returned only the tier's required evidence groups.
+- Kept insufficient-evidence behavior fail-closed by requiring the provider to
+  select a satisfiable lower tier or return insufficient information.
+
 ## 0.2.9 — 2026-08-03
 
 - Added the exact published evidence code-to-dimension mapping and concrete JSON
