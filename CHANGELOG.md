@@ -2,6 +2,15 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.12 — 2026-08-03
+
+- Assigned the published policy dimension locally from each allowed evidence
+  code instead of trusting redundant provider-supplied dimension metadata.
+- Prevented intermittent fail-closed classifications when DeepSeek returned an
+  allowed code with a different independently allowed dimension value.
+- Preserved strict rejection of unknown evidence codes, non-whitelisted fields,
+  and excerpts that are not grounded in their named request field.
+
 ## 0.2.11 — 2026-08-03
 
 - Kept a fresh, operational CF7-to-CFDB7 source-link token in page memory when
