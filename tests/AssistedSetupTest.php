@@ -15,9 +15,19 @@ $GLOBALS['setup_fired_actions'] = [];
 $GLOBALS['setup_throw_action'] = null;
 $GLOBALS['setup_allowed'] = true;
 $GLOBALS['setup_nonce_valid'] = true;
+$GLOBALS['setup_filters'] = [];
 
 function add_action(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['setup_actions'][$hook] = $callback; }
-function add_filter(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void {}
+function add_filter(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['setup_filters'][$hook][] = compact('callback', 'priority', 'acceptedArgs'); }
+function apply_filters(string $hook, mixed $value, mixed ...$arguments): mixed {
+	$callbacks = $GLOBALS['setup_filters'][$hook] ?? [];
+	usort($callbacks, static fn (array $left, array $right): int => $left['priority'] <=> $right['priority']);
+	foreach ($callbacks as $registered) {
+		$callArguments = array_slice([$value, ...$arguments], 0, max(1, (int) $registered['acceptedArgs']));
+		$value = ($registered['callback'])(...$callArguments);
+	}
+	return $value;
+}
 function do_action(string $hook, mixed ...$arguments): void { $GLOBALS['setup_fired_actions'][] = [$hook, $arguments]; if ($GLOBALS['setup_throw_action'] === $hook) { throw new RuntimeException('Observer failure.'); } }
 function plugin_dir_url(string $file): string { return 'https://local.test/wp-content/plugins/cf7-ai-enquiry-validator/'; }
 function as_enqueue_async_action(): int { return 1; }
@@ -99,6 +109,70 @@ setup_assert(($GLOBALS['setup_get_posts_arguments']['post_status'] ?? '') === 'p
 setup_assert(($GLOBALS['setup_get_posts_arguments']['post_type'] ?? []) === ['page', 'post'], 'Standard scanner must query only public page and post types.');
 setup_assert(($GLOBALS['setup_get_posts_arguments']['posts_per_page'] ?? 0) === 50, 'Standard scanner must cap page queries at 50.');
 setup_assert($standardProfile['forms'][0]['page_ids'] === [81], 'Standard scanner must derive compact form page provenance without executing a shortcode.');
+
+$scannerFilterHooks = [
+	'cf7aiv_site_profile_post_types',
+	'cf7aiv_site_profile_posts',
+	'cf7aiv_site_profile_post_content',
+	'cf7aiv_site_profile_post_form_ids',
+];
+add_filter('cf7aiv_site_profile_post_types', static fn (array $types): array => [...$types, 'case_study', 'case_study']);
+add_filter('cf7aiv_site_profile_posts', static function (array $posts): array {
+	$extended = [
+		(object) ['ID' => 44, 'post_type' => 'case_study', 'post_status' => 'publish', 'post_password' => '', 'post_title' => 'Public case study', 'permalink' => 'https://local.test/case-study', 'post_content' => 'Base case study.'],
+		(object) ['ID' => 45, 'post_type' => 'case_study', 'post_status' => 'draft', 'post_password' => '', 'post_title' => 'Draft', 'permalink' => 'https://local.test/draft', 'post_content' => 'DRAFT-PRIVATE-MARKER'],
+		(object) ['ID' => 46, 'post_type' => 'case_study', 'post_status' => 'publish', 'post_password' => 'protected', 'post_title' => 'Protected', 'permalink' => 'https://local.test/protected', 'post_content' => 'PROTECTED-PRIVATE-MARKER'],
+		(object) ['ID' => 47, 'post_type' => 'case_study', 'post_status' => 'publish', 'post_password' => '', 'post_title' => 'Remote', 'permalink' => 'https://outside.test/remote', 'post_content' => 'REMOTE-CONTENT-MARKER'],
+		(object) ['ID' => 48, 'post_type' => 'private_type', 'post_status' => 'publish', 'post_password' => '', 'post_title' => 'Unselected type', 'permalink' => 'https://local.test/unselected', 'post_content' => 'UNSELECTED-TYPE-MARKER'],
+	];
+	for ($id = 100; $id < 160; $id++) {
+		$extended[] = (object) ['ID' => $id, 'post_type' => 'case_study', 'post_status' => 'publish', 'post_password' => '', 'post_title' => 'Bounded ' . $id, 'permalink' => 'https://local.test/bounded-' . $id, 'post_content' => str_repeat('B', 2500)];
+	}
+	return $extended;
+});
+add_filter('cf7aiv_site_profile_post_content', static function (string $content, mixed $post): string {
+	return ((int) $post->ID === 44) ? 'Builder service details [contact-form-7 id="34"] ' . str_repeat('X', 250000) : $content;
+}, 10, 2);
+add_filter('cf7aiv_site_profile_post_form_ids', static function (array $ids, mixed $post, string $content): array {
+	if ((int) $post->ID !== 44 || ! str_contains($content, 'Builder service details')) { return $ids; }
+	$GLOBALS['setup_builder_content_input_length'] = strlen($content);
+	return [...$ids, ...array_fill(0, 10000, 0), 101, 500, 34, -1, 34];
+}, 10, 3);
+$extendedProfile = (new SiteProfileScanner(null, static fn (): array => [[
+	'id' => 34,
+	'title' => 'Builder enquiry',
+	'page_ids' => [],
+	'fields' => [['name' => 'service', 'type' => 'text', 'label' => 'Service', 'options' => []]],
+], [
+	'id' => 101,
+	'title' => 'Out-of-bound reference',
+	'page_ids' => [],
+	'fields' => [['name' => 'service', 'type' => 'text', 'label' => 'Service', 'options' => []]],
+], [
+	'id' => 500,
+	'title' => 'Far out-of-bound reference',
+	'page_ids' => [],
+	'fields' => [['name' => 'service', 'type' => 'text', 'label' => 'Service', 'options' => []]],
+]]))->scan();
+setup_assert(($GLOBALS['setup_get_posts_arguments']['post_type'] ?? []) === ['page', 'post', 'case_study'], 'Scanner post types must be filtered, sanitized, and de-duplicated before the public query.');
+$extendedJson = (string) json_encode($extendedProfile);
+setup_assert(str_contains($extendedJson, 'Builder service details') && str_contains($extendedJson, 'Public case study'), 'Builder-managed public content from a selected custom post type must enter the bounded profile.');
+setup_assert(($GLOBALS['setup_builder_content_input_length'] ?? PHP_INT_MAX) <= 100000, 'Builder-managed content must be bounded before form-reference filters and normalization process it.');
+setup_assert(! str_contains($extendedJson, 'DRAFT-PRIVATE-MARKER') && ! str_contains($extendedJson, 'PROTECTED-PRIVATE-MARKER') && ! str_contains($extendedJson, 'REMOTE-CONTENT-MARKER') && ! str_contains($extendedJson, 'UNSELECTED-TYPE-MARKER'), 'Filtered posts must still reject draft, protected, remote, and unselected post-type content.');
+setup_assert(($extendedProfile['forms'][0]['page_ids'] ?? []) === [44], 'Builder form references must create one positive de-duplicated form/page association.');
+setup_assert(($extendedProfile['forms'][1]['page_ids'] ?? []) === [] && ($extendedProfile['forms'][2]['page_ids'] ?? []) === [], 'Builder form-reference filters must not make the scanner process an unbounded ID list.');
+setup_assert(count($extendedProfile['pages']) <= 50 && array_sum(array_map(static fn (array $page): int => strlen($page['text']), $extendedProfile['pages'])) <= 40000, 'Filtered scanner content must retain page and total character bounds.');
+foreach ($scannerFilterHooks as $hook) { unset($GLOBALS['setup_filters'][$hook]); }
+
+add_filter('cf7aiv_site_profile_post_types', static fn (array $types): string => 'invalid');
+add_filter('cf7aiv_site_profile_posts', static fn (array $posts): string => 'invalid');
+add_filter('cf7aiv_site_profile_post_content', static fn (string $content): array => ['invalid']);
+add_filter('cf7aiv_site_profile_post_form_ids', static fn (array $ids): string => 'invalid');
+$invalidFilterThrew = false;
+try { $invalidFilterProfile = (new SiteProfileScanner())->scan(); } catch (Throwable) { $invalidFilterThrew = true; $invalidFilterProfile = ['pages' => [], 'forms' => []]; }
+setup_assert(! $invalidFilterThrew && ($GLOBALS['setup_get_posts_arguments']['post_type'] ?? []) === ['page', 'post'], 'Invalid scanner filter return types must fail closed to the safe defaults without throwing.');
+setup_assert(count($invalidFilterProfile['pages']) === 1 && $invalidFilterProfile['forms'][0]['page_ids'] === [81], 'Invalid scanner filter returns must not erase the safe default public profile.');
+foreach ($scannerFilterHooks as $hook) { unset($GLOBALS['setup_filters'][$hook]); }
 
 class SetupMemoryRepository extends SetupSuggestionRepository {
 	/** @var list<array<string,mixed>> */

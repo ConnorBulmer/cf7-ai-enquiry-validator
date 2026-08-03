@@ -73,6 +73,17 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.13 cross-site portability hardening
+
+Version 0.2.13 scopes operational source-link tokens to each form and page,
+binds GA identity to one configured direct-GA4 or server-GTM property,
+generalizes persistent source locators, and qualifies bounded CFDB7 matching by
+form, time and exact token.
+It also extends the bounded public-site scanner through explicit filters and
+adds real WordPress 6.9/7.0.2 browser coverage across PHP 8.1/8.3 and
+Flamingo/CFDB7.
+Schema remains version 10, so no migration is required.
+
 ### Version 0.2.12 deterministic evidence dimensions
 
 Version 0.2.12 assigns the published policy dimension locally from each allowed
@@ -309,9 +320,16 @@ Retention defaults to 90 days. Privacy export/erasure removes dependent review s
 
 Sources, providers, destinations, and consent resolvers can be registered with public filters. Lifecycle actions fire after capture, classification, review, and recorded delivery attempts. See [Extending](docs/EXTENDING.md).
 
+The optional assisted-setup scanner also exposes bounded filters for public
+custom post types, local post objects, builder-managed public copy and embedded
+CF7 form IDs. It never fetches rendered page URLs, and every extension result
+is rechecked for published/password-free/local-origin eligibility plus the
+scanner's page and character limits. Copy-paste CPT and builder examples are in
+[Extending](docs/EXTENDING.md#assisted-site-profile-scanning).
+
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.12 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.13 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -368,7 +386,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.12 --output-dir=dist
+php tools/build-release.php --tag=v0.2.13 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -386,16 +404,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.12`:
+For version `0.2.13`:
 
 ```bash
-git tag v0.2.12
-git push origin v0.2.12
+git tag v0.2.13
+git push origin v0.2.13
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.12.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.13.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.

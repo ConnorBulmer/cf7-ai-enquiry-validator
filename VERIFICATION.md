@@ -1,4 +1,49 @@
-# Release verification — 0.2.10
+# Release verification — 0.2.13 candidate
+
+The 0.2.13 portability hardening candidate was verified in a disposable local
+WordPress matrix on 2026-08-03. No production site, provider, analytics
+property, advertising account, submission content or credential was used.
+
+## 0.2.13 disposable WordPress portability matrix
+
+- Release identities are all `0.2.13`; the WordPress compatibility declaration
+  is tested through 7.0 and the release tag contract is `v0.2.13`.
+- Complete sorted standalone PHP suite: **24/24 PASS**; JavaScript attribution
+  suite and syntax checks: **PASS**; tracked non-vendor PHP lint:
+  **149/149 PASS**; release-package contract and identifier scan: **PASS**.
+- Review RED/GREEN regressions prove the PHP fallback removes legacy
+  `submission_id`, scanner extensions process at most 100,000 content
+  characters and 100 raw form-reference entries per page, server-GTM-only configuration
+  supplies its Measurement ID, conflicting Google route IDs fail closed, and
+  both GS1 and GS2 GA session cookies parse for the configured property.
+- Matrix: WordPress 6.9/PHP 8.1.34 and WordPress 7.0.2/PHP 8.3.31, each with
+  Contact Form 7 6.1.6 plus either Flamingo 2.6.3 or CFDB7 1.4.0.
+- Result: **4/4 cells PASS**, comprising **8/8 real-browser Playwright tests**
+  and pre/post WordPress-loaded runtime assertions in every cell.
+- Real Contact Form 7 AJAX coverage proves two forms receive distinct
+  page-local attempt tokens; successful and failed-mail attempts rotate only
+  the submitted form; invalid attempts retain their token; and a reload creates
+  a fresh token.
+- Real cookie coverage proves the configured `G-TEST123` property selects its
+  exact GA session cookie while ignoring an unrelated property cookie. The
+  JavaScript suite separately covers custom prefixes and fail-closed ambiguous
+  pairs.
+- Both persistent-source modes load successfully. CFDB7 resolves an exact
+  form/time/token candidate even with 101 newer unrelated rows.
+- The installed schema remains `10`; successful and failed-mail submissions
+  both create classification items for asynchronous processing.
+- Playwright is lockfile-pinned at 1.62.1; `npm audit` reports zero known
+  vulnerabilities.
+- Every cell ran under a unique Compose project and loopback port. Final
+  checks found no retained `cf7aiv-portability` containers, volumes or
+  networks.
+- The matrix pins `wordpress:6.9-php8.1-apache` and
+  `wordpress:7.0.2-php8.3-apache`; runtime assertions verify the exact core
+  version rather than relying on mutable generic PHP image tags.
+- A fresh one-root release build contains **229** entries and excludes tests,
+  tooling, CI metadata, implementation plans, verification evidence and
+  credential/site-identifier patterns. Independently verified archive SHA-256:
+  `ffb9c0c28891781f135d03f878d3e96526d72834cf05f305b137f8af7d56ca95`.
 
 The 0.2.10 DeepSeek supporting-evidence correction was verified locally and
 against the configured isolated production provider on 2026-08-03.

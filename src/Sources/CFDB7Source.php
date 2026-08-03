@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace CF7AIV\Sources;
 
+use CF7AIV\Contracts\SubmissionReferenceLocatorInterface;
 use CF7AIV\Contracts\SubmissionSourceInterface;
 use CF7AIV\Intake\SourceNormalizer;
 
-final class CFDB7Source implements SubmissionSourceInterface {
+final class CFDB7Source implements SubmissionSourceInterface, SubmissionReferenceLocatorInterface {
 	public function key(): string { return 'cfdb7'; }
 
 	public function get(string $reference): ?array {
@@ -18,16 +19,24 @@ final class CFDB7Source implements SubmissionSourceInterface {
 		return is_array($row) ? $this->normalize($row, false) : null;
 	}
 
-	public function findReferenceBySubmissionId(string $submissionId, int $limit = 50): ?string {
+	public function findReferenceBySubmissionId(string $submissionId, int $formId, string $capturedAt): ?string {
 		global $wpdb;
 		$submissionId = trim($submissionId);
 		if (preg_match('/\A[A-Za-z0-9._~-]{8,128}\z/', $submissionId) !== 1
-			|| ! isset($wpdb->prefix) || ! method_exists($wpdb, 'get_results') || ! $this->available()) {
+			|| $formId < 1 || ! isset($wpdb->prefix) || ! method_exists($wpdb, 'get_results')
+			|| ! method_exists($wpdb, 'esc_like') || ! $this->available()) {
 			return null;
 		}
 		$table = $wpdb->prefix . 'db7_forms';
-		$limit = max(1, min(100, $limit));
-		$rows = $wpdb->get_results($wpdb->prepare("SELECT form_id, form_value FROM {$table} ORDER BY form_id DESC LIMIT %d", $limit), ARRAY_A);
+		$clauses = ['form_post_id = %d', 'form_value LIKE %s'];
+		$parameters = [$formId, '%' . $wpdb->esc_like($submissionId) . '%'];
+		$window = $this->captureWindow($capturedAt);
+		if ($window !== null) {
+			$clauses[] = 'form_date BETWEEN %s AND %s';
+			array_push($parameters, ...$window);
+		}
+		$sql = "SELECT form_id, form_value FROM {$table} WHERE " . implode(' AND ', $clauses) . ' ORDER BY form_id DESC LIMIT 20';
+		$rows = $wpdb->get_results($wpdb->prepare($sql, ...$parameters), ARRAY_A);
 		foreach (is_array($rows) ? $rows : [] as $row) {
 			if (! is_array($row) || (int) ($row['form_id'] ?? 0) < 1) { continue; }
 			$fields = $this->decodeFields($row['form_value'] ?? null);
@@ -37,6 +46,24 @@ final class CFDB7Source implements SubmissionSourceInterface {
 			}
 		}
 		return null;
+	}
+
+	/** @return array{string,string}|null */
+	private function captureWindow(string $capturedAt): ?array {
+		if (preg_match('/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\z/', $capturedAt) !== 1) { return null; }
+		$date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $capturedAt, new \DateTimeZone('UTC'));
+		$errors = \DateTimeImmutable::getLastErrors();
+		if ($date === false || ($errors !== false && ((int) $errors['warning_count'] > 0 || (int) $errors['error_count'] > 0))
+			|| $date->format('Y-m-d H:i:s') !== $capturedAt) {
+			return null;
+		}
+		$from = $date->modify('-10 minutes')->format('Y-m-d H:i:s');
+		$to = $date->modify('+10 minutes')->format('Y-m-d H:i:s');
+		if (function_exists('get_date_from_gmt')) {
+			$from = (string) get_date_from_gmt($from, 'Y-m-d H:i:s');
+			$to = (string) get_date_from_gmt($to, 'Y-m-d H:i:s');
+		}
+		return [$from, $to];
 	}
 
 	public function iterate(array $arguments = []): iterable {

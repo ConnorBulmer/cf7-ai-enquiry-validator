@@ -15,6 +15,74 @@ add_filter('cf7aiv_submission_sources', function (array $sources): array {
 
 `get()` returns the canonical `source`, `reference`, `form_id`, `submitted_at`, `fields`, `is_historical`, and `is_calibration` keys. Historical iteration must mark both flags true.
 
+Sources that can resolve a generic CF7 capture after their own persistent row
+becomes visible may also implement
+`CF7AIV\Contracts\SubmissionReferenceLocatorInterface`:
+
+```php
+public function findReferenceBySubmissionId(
+    string $submissionId,
+    int $formId,
+    string $capturedAt
+): ?string;
+```
+
+The same registered object must implement `SubmissionSourceInterface`. It must
+return its stable opaque source reference only after proving the complete
+submission token belongs to the supplied form and capture time, or `null` while
+the record is not visible. Registration order is deterministic: the first
+registered locator that proves a reference owns the link. Never return raw
+submission content from the locator or use partial token matching.
+
+## Assisted site-profile scanning
+
+The optional setup scanner reads only local, published, password-free content.
+Its default post types are `page` and `post`. A public custom post type can opt
+in without replacing the defaults:
+
+```php
+add_filter('cf7aiv_site_profile_post_types', function (array $postTypes): array {
+    $postTypes[] = 'case_study';
+    return $postTypes;
+});
+```
+
+Builders that keep public copy or CF7 references in post metadata can supply
+that data without making the scanner fetch a rendered URL:
+
+```php
+add_filter(
+    'cf7aiv_site_profile_post_content',
+    function (string $content, WP_Post $post): string {
+        $builderCopy = get_post_meta($post->ID, '_my_builder_public_copy', true);
+        return is_string($builderCopy) ? $content . ' ' . $builderCopy : $content;
+    },
+    10,
+    2
+);
+
+add_filter(
+    'cf7aiv_site_profile_post_form_ids',
+    function (array $formIds, WP_Post $post, string $content): array {
+        $builderFormId = (int) get_post_meta($post->ID, '_my_builder_cf7_id', true);
+        if ($builderFormId > 0) { $formIds[] = $builderFormId; }
+        return $formIds;
+    },
+    10,
+    3
+);
+```
+
+`cf7aiv_site_profile_posts` may augment the local objects returned by
+`get_posts()`. Every extension result is rechecked for selected post type,
+published status, empty password and a same-host permalink. The scanner then
+reapplies its maximum 50 pages, 100,000 input characters and 2,000 output
+characters per page, 40,000 total output characters, and 100 raw form-reference
+entries inspected per page. Content is bounded before normalization and before it
+is passed to the form-reference filter. These filters must return local
+WordPress data; they must not load remote URLs, files, submissions, identity
+fields or secrets.
+
 ## AI providers
 
 Implement `CF7AIV\Contracts\AIProviderInterface::classify(ClassificationRequest): ClassificationResult` and register with `cf7aiv_ai_providers`. Providers must use the already-redacted request, validate the fixed result contract, classify 429/timeouts/5xx as transient, and never log the body or API key.

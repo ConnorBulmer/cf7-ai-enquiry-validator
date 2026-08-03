@@ -5,7 +5,7 @@
 	var clickKeys = ['gclid', 'gbraid', 'wbraid', 'msclkid'];
 	var utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id'];
 	var consentKeys = ['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization'];
-	var submissionId = createSubmissionId();
+	var submissionIds = new WeakMap();
 
 	function createSubmissionId() {
 		return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(36).slice(2);
@@ -16,26 +16,42 @@
 		if (key === 'msclkid') return /^[a-f0-9]{32}$/i.test(value) ? value : '';
 		return /^[A-Za-z0-9._~-]{8,256}$/.test(value) ? value : '';
 	}
+	function cookieEntries() {
+		if (!document.cookie) return [];
+		return document.cookie.split(';').map(function (part) {
+			part = part.trim();
+			var separator = part.indexOf('=');
+			if (separator < 1) return null;
+			try {
+				return { name: part.slice(0, separator), value: decodeURIComponent(part.slice(separator + 1)) };
+			} catch (e) { return null; }
+		}).filter(function (entry) { return entry !== null; });
+	}
 	function readCookie(name) {
-		var prefix = name + '=';
-		var part = document.cookie.split('; ').find(function (item) { return item.indexOf(prefix) === 0; });
-		if (!part) return '';
-		try { return decodeURIComponent(part.slice(prefix.length)); } catch (e) { return ''; }
+		var matches = cookieEntries().filter(function (entry) { return entry.name === name; });
+		return matches.length === 1 ? matches[0].value : '';
 	}
 	function readStored() {
 		var raw = '';
 		try { raw = localStorage.getItem(storageName) || ''; } catch (e) {}
 		if (!raw) raw = readCookie(storageName);
-		try { return JSON.parse(raw) || {}; } catch (e) { return {}; }
+		try {
+			var stored = JSON.parse(raw) || {};
+			delete stored.submission_id;
+			return stored;
+		} catch (e) { return {}; }
 	}
 	function writeStored(value) {
-		var raw = JSON.stringify(value);
+		var persisted = Object.assign({}, value);
+		delete persisted.submission_id;
+		var raw = JSON.stringify(persisted);
 		try { localStorage.setItem(storageName, raw); } catch (e) {}
 		var age = Math.max(1, Number(cfg.retentionDays || 90)) * 86400;
 		document.cookie = storageName + '=' + encodeURIComponent(raw) + ';path=/;max-age=' + age + ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
 	}
 	function clearFields(root) {
 		Object.keys(cfg.fields || {}).forEach(function (field) {
+			if (cfg.fields[field] === 'submission_id') return;
 			var input = root.querySelector('[name="' + field + '"]');
 			if (input) input.value = '';
 		});
@@ -158,18 +174,24 @@
 		return values;
 	}
 	function gaIdentity() {
-		var result = {};
-		var ga = readCookie('_ga').match(/^GA\d+\.\d+\.(\d+\.\d+)$/);
-		if (ga) result.ga_client_id = ga[1];
-		document.cookie.split('; ').some(function (part) {
-			if (part.indexOf('_ga_') !== 0) return false;
-			var decoded = '';
-			try { decoded = decodeURIComponent(part.split('=').slice(1).join('=')); } catch (e) { return false; }
-			var match = decoded.match(/(?:^|\.)s(\d{6,20})(?:\.|$)/);
-			if (match) result.ga_session_id = match[1];
-			return !!match;
+		var measurement = typeof cfg.measurementId === 'string' ? cfg.measurementId.trim().toUpperCase() : '';
+		if (!/^G-[A-Z0-9]+$/.test(measurement)) return {};
+		var suffix = measurement.slice(2).replace(/[^A-Z0-9]/g, '_');
+		var ending = '_ga_' + suffix;
+		var entries = cookieEntries();
+		var pairs = [];
+		entries.forEach(function (entry) {
+			if (!entry.name.endsWith(ending)) return;
+			var prefix = entry.name.slice(0, -ending.length);
+			var clients = entries.filter(function (candidate) { return candidate.name === prefix + '_ga'; });
+			if (clients.length !== 1) return;
+			var clientMatch = clients[0].value.match(/^GA\d+\.\d+\.(\d+\.\d+)$/);
+			var sessionMatch = entry.value.match(/(?:^|[.$])s(\d{6,20})(?:[.$]|$)/);
+			if (clientMatch && sessionMatch) {
+				pairs.push({ ga_client_id: clientMatch[1], ga_session_id: sessionMatch[1] });
+			}
 		});
-		return result;
+		return pairs.length === 1 ? pairs[0] : {};
 	}
 	function captureConsent(target, consent) {
 		if (consent.source === 'wordpress') {
@@ -187,7 +209,7 @@
 		var consent = consentState();
 		if (!consent.statistics && !consent.marketing) {
 			deleteStored();
-			return { submission_id: submissionId };
+			return {};
 		}
 		var stored = filterStored(readStored(), consent);
 		var params = new URLSearchParams(location.search);
@@ -216,10 +238,25 @@
 			Object.assign(stored, gaIdentity());
 		}
 		captureConsent(stored, consent);
-		if (stored.submission_id) submissionId = stored.submission_id;
-		stored.submission_id = submissionId;
 		writeStored(stored);
 		return stored;
+	}
+	function formElement(target) {
+		if (!target) return null;
+		if (target.matches && target.matches('.wpcf7 form')) return target;
+		if (target.closest) {
+			var closest = target.closest('.wpcf7 form');
+			if (closest) return closest;
+		}
+		return target.querySelector ? target.querySelector('form') : null;
+	}
+	function submissionIdFor(form) {
+		var value = submissionIds.get(form);
+		if (!value) {
+			value = createSubmissionId();
+			submissionIds.set(form, value);
+		}
+		return value;
 	}
 	function populate(root, values) {
 		if (!values) {
@@ -231,27 +268,28 @@
 			if (input) input.value = values[cfg.fields[field]] || '';
 		});
 	}
+	function populateForm(form, values) {
+		if (!form) return;
+		var formValues = Object.assign({}, values || collect());
+		formValues.submission_id = submissionIdFor(form);
+		populate(form, formValues);
+	}
 	function populateAll() {
 		var values = collect();
-		document.querySelectorAll('.wpcf7 form').forEach(function (form) { populate(form, values); });
+		document.querySelectorAll('.wpcf7 form').forEach(function (form) { populateForm(form, values); });
 	}
-	function completeSubmission() {
-		var consent = consentState();
-		if (!consent.statistics && !consent.marketing) {
-			deleteStored();
-			submissionId = createSubmissionId();
-			return;
-		}
-		var values = filterStored(readStored(), consent);
-		delete values.submission_id;
-		submissionId = createSubmissionId();
-		writeStored(values);
+	function rotateSubmission(event) {
+		var form = formElement(event && event.target);
+		if (!form) return;
+		submissionIds.set(form, createSubmissionId());
+		populateForm(form);
 	}
 	document.addEventListener('DOMContentLoaded', populateAll);
 	document.addEventListener('submit', function (event) {
-		if (event.target && event.target.closest('.wpcf7')) populate(event.target, collect());
+		if (event.target && event.target.closest('.wpcf7')) populateForm(formElement(event.target));
 	}, true);
-	document.addEventListener('wpcf7beforesubmit', function (event) { populate(event.target, collect()); });
-	document.addEventListener('wpcf7mailsent', completeSubmission);
+	document.addEventListener('wpcf7beforesubmit', function (event) { populateForm(formElement(event.target)); });
+	document.addEventListener('wpcf7mailsent', rotateSubmission);
+	document.addEventListener('wpcf7mailfailed', rotateSubmission);
 	document.addEventListener('wp_listen_for_consent_change', populateAll);
 }());

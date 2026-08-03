@@ -5,6 +5,8 @@
 /.vscode/
 /coverage/
 /node_modules/
+/tests/wordpress/node_modules/
+/tests/wordpress/test-results/
 /.worktrees/
 *.cache
 *.log
