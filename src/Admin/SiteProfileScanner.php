@@ -20,19 +20,30 @@ final class SiteProfileScanner {
 
 	/** @return array{pages:list<array{id:int,title:string,url:string,text:string}>,forms:list<array{id:int,title:string,fields:list<array{name:string,type:string,label:string,options:list<string>}>,page_ids:list<int>}>} */
 	public function scan(): array {
-		$rawPages = $this->pageLoader === null ? $this->loadPages() : ($this->pageLoader)();
+		$postTypes = $this->postTypes();
+		$rawPages = $this->pageLoader === null ? $this->loadPages($postTypes) : ($this->pageLoader)();
+		$rawPages = $this->filterPosts($rawPages);
 		$pages = [];
 		$formPageIds = [];
 		$total = 0;
 		foreach (is_iterable($rawPages) ? $rawPages : [] as $page) {
 			if (count($pages) >= self::PAGE_LIMIT) { break; }
-			$normalized = $this->page($page, self::TOTAL_CHARACTER_LIMIT - $total);
-			if ($normalized === null) { continue; }
+			$pageData = $this->page($page, self::TOTAL_CHARACTER_LIMIT - $total, $postTypes);
+			if ($pageData === null) { continue; }
+			$normalized = $pageData['profile'];
 			$total += $this->length($normalized['text']);
 			$pages[] = $normalized;
-			$content = (string) $this->read($page, ['post_content', 'content'], '');
+			$content = $pageData['content'];
+			$discoveredFormIds = [];
 			if (preg_match_all('/\[contact-form-7\b[^\]]*\bid\s*=\s*["\']?(\d+)/i', $content, $matches)) {
-				foreach ($matches[1] as $formId) { $formPageIds[(int) $formId][] = $normalized['id']; }
+				$discoveredFormIds = $matches[1];
+			}
+			if (function_exists('apply_filters')) {
+				$filteredFormIds = apply_filters('cf7aiv_site_profile_post_form_ids', $discoveredFormIds, $page, $content);
+				if (is_array($filteredFormIds)) { $discoveredFormIds = $filteredFormIds; }
+			}
+			foreach ($this->positiveIds($discoveredFormIds) as $formId) {
+				$formPageIds[$formId][] = $normalized['id'];
 			}
 			if ($total >= self::TOTAL_CHARACTER_LIMIT) { break; }
 		}
@@ -49,11 +60,11 @@ final class SiteProfileScanner {
 		return ['pages' => $pages, 'forms' => $forms];
 	}
 
-	/** @return list<mixed> */
-	private function loadPages(): array {
-		if (! function_exists('get_posts')) { return []; }
+	/** @param list<string> $postTypes @return list<mixed> */
+	private function loadPages(array $postTypes): array {
+		if (! function_exists('get_posts') || $postTypes === []) { return []; }
 		$pages = get_posts([
-			'post_type' => ['page', 'post'],
+			'post_type' => $postTypes,
 			'post_status' => 'publish',
 			'has_password' => false,
 			'numberposts' => self::PAGE_LIMIT,
@@ -64,6 +75,33 @@ final class SiteProfileScanner {
 		return is_array($pages) ? $pages : [];
 	}
 
+	/** @return list<string> */
+	private function postTypes(): array {
+		$defaults = ['page', 'post'];
+		$types = $defaults;
+		if (function_exists('apply_filters')) {
+			$filtered = apply_filters('cf7aiv_site_profile_post_types', $types);
+			if (is_array($filtered)) { $types = $filtered; }
+		}
+		$normalized = [];
+		foreach ($types as $type) {
+			if (! is_scalar($type)) { continue; }
+			$value = strtolower((string) $type);
+			$value = function_exists('sanitize_key') ? sanitize_key($value) : (preg_replace('/[^a-z0-9_\-]/', '', $value) ?? '');
+			$value = substr($value, 0, 20);
+			if ($value !== '' && ! in_array($value, $normalized, true)) { $normalized[] = $value; }
+		}
+		return $normalized;
+	}
+
+	/** @return list<mixed> */
+	private function filterPosts(mixed $rawPages): array {
+		$pages = is_array($rawPages) ? array_values($rawPages) : (is_iterable($rawPages) ? array_values(iterator_to_array($rawPages, false)) : []);
+		if (! function_exists('apply_filters')) { return $pages; }
+		$filtered = apply_filters('cf7aiv_site_profile_posts', $pages);
+		return is_array($filtered) ? array_values($filtered) : $pages;
+	}
+
 	/** @return list<mixed> */
 	private function loadForms(): array {
 		if (! class_exists('WPCF7_ContactForm') || ! method_exists('WPCF7_ContactForm', 'find')) { return []; }
@@ -71,24 +109,40 @@ final class SiteProfileScanner {
 		return is_array($forms) ? $forms : [];
 	}
 
-	/** @return array{id:int,title:string,url:string,text:string}|null */
-	private function page(mixed $page, int $remaining): ?array {
+	/** @param list<string> $postTypes @return array{profile:array{id:int,title:string,url:string,text:string},content:string}|null */
+	private function page(mixed $page, int $remaining, array $postTypes): ?array {
 		$status = (string) $this->read($page, ['post_status', 'status'], 'publish');
 		$password = (string) $this->read($page, ['post_password', 'password'], '');
-		if ($status !== 'publish' || $password !== '' || $remaining <= 0) { return null; }
+		$postType = strtolower((string) $this->read($page, ['post_type', 'type'], 'page'));
+		$postType = function_exists('sanitize_key') ? sanitize_key($postType) : (preg_replace('/[^a-z0-9_\-]/', '', $postType) ?? '');
+		if ($status !== 'publish' || $password !== '' || $remaining <= 0 || ! in_array($postType, $postTypes, true)) { return null; }
 		$id = (int) $this->read($page, ['ID', 'id'], 0);
 		if ($id <= 0) { return null; }
 		$url = (string) $this->read($page, ['permalink', 'url'], '');
 		if ($url === '' && function_exists('get_permalink')) { $url = (string) get_permalink($id); }
 		if (! $this->isLocalUrl($url)) { return null; }
-		$text = $this->normalize((string) $this->read($page, ['post_content', 'text', 'content'], ''));
+		$content = (string) $this->read($page, ['post_content', 'text', 'content'], '');
+		if (function_exists('apply_filters')) {
+			$filteredContent = apply_filters('cf7aiv_site_profile_post_content', $content, $page);
+			if (is_string($filteredContent)) { $content = $filteredContent; }
+		}
+		$text = $this->normalize($content);
 		$text = $this->cut($text, min(self::PAGE_CHARACTER_LIMIT, $remaining));
 		return [
-			'id' => $id,
-			'title' => $this->cut($this->normalize((string) $this->read($page, ['post_title', 'title'], '')), 200),
-			'url' => $url,
-			'text' => $text,
+			'profile' => [
+				'id' => $id,
+				'title' => $this->cut($this->normalize((string) $this->read($page, ['post_title', 'title'], '')), 200),
+				'url' => $url,
+				'text' => $text,
+			],
+			'content' => $content,
 		];
+	}
+
+	/** @return list<int> */
+	private function positiveIds(mixed $values): array {
+		if (! is_array($values)) { return []; }
+		return array_values(array_unique(array_filter(array_map('intval', $values), static fn (int $id): bool => $id > 0)));
 	}
 
 	/** @return array{id:int,title:string,fields:list<array{name:string,type:string,label:string,options:list<string>}>,page_ids:list<int>}|null */

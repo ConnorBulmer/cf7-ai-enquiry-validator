@@ -309,6 +309,13 @@ Retention defaults to 90 days. Privacy export/erasure removes dependent review s
 
 Sources, providers, destinations, and consent resolvers can be registered with public filters. Lifecycle actions fire after capture, classification, review, and recorded delivery attempts. See [Extending](docs/EXTENDING.md).
 
+The optional assisted-setup scanner also exposes bounded filters for public
+custom post types, local post objects, builder-managed public copy and embedded
+CF7 form IDs. It never fetches rendered page URLs, and every extension result
+is rechecked for published/password-free/local-origin eligibility plus the
+scanner's page and character limits. Copy-paste CPT and builder examples are in
+[Extending](docs/EXTENDING.md#assisted-site-profile-scanning).
+
 ## v1 boundaries and v2 compatibility
 
 Version 0.2.12 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
