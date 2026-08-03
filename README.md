@@ -73,6 +73,19 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.16 WordPress-native administration refresh
+
+Version 0.2.16 replaces raw Overview and Tracking Health output with semantic
+summaries, status badges, descriptions, and accessible local table regions.
+Wide administration tables scroll within their own labelled regions while all
+six plugin screens remain responsive across desktop, tablet, and narrow
+viewports. Native WordPress controls and actions are grouped consistently,
+forced-colour and keyboard-focus coverage protects the refreshed interfaces,
+and the Microsoft transport-test disclosure now accurately describes its
+one-off synthetic anonymous ID. Release packaging excludes local top-level
+`.superpowers` plans and evidence. Schema remains version 10, so no migration
+is required.
+
 ### Version 0.2.15 Microsoft UET Conversion API validation hardening
 
 Version 0.2.15 sends Microsoft events inside the documented `data` batch,
@@ -341,7 +354,7 @@ scanner's page and character limits. Copy-paste CPT and builder examples are in
 
 ## v1 boundaries and v2 compatibility
 
-Version 0.2.15 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+Version 0.2.16 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
 
 ## Troubleshooting
 
@@ -398,7 +411,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.15 --output-dir=dist
+php tools/build-release.php --tag=v0.2.16 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -416,16 +429,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.15`:
+For version `0.2.16`:
 
 ```bash
-git tag v0.2.15
-git push origin v0.2.15
+git tag v0.2.16
+git push origin v0.2.16
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.15.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.16.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.

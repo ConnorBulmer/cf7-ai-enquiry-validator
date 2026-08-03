@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.15
+Stable tag: 0.2.16
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,13 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.16 =
+* Replaces raw Overview and Tracking Health output with semantic summaries, status badges, descriptions, and accessible local table regions.
+* Keeps wide administration tables locally scrollable and all six plugin screens responsive across desktop, tablet, and narrow viewports.
+* Groups native WordPress controls and actions consistently, adds forced-colour and focus coverage, and corrects the Microsoft synthetic-ID disclosure copy.
+* Excludes local top-level `.superpowers` plans and evidence from release archives.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.15 =
 * Parses Microsoft CAPI's documented nested validation-error envelope while retaining only bounded error codes and property paths.

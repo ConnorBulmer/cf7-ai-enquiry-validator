@@ -2,6 +2,22 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.16 — 2026-08-03
+
+- Replaced raw Overview and Tracking Health output with semantic summaries,
+  status badges, descriptions, and accessible local table regions.
+- Kept wide administration tables locally scrollable and made all six plugin
+  screens responsive across desktop, tablet, and narrow viewports.
+- Grouped native WordPress fields, controls, and actions consistently across
+  integration, policy, and setup workflows.
+- Added regression coverage for keyboard focus, forced colours, badge text,
+  document overflow, and the absence of raw preformatted status output.
+- Corrected the Microsoft transport-test disclosure to describe its required
+  one-off synthetic anonymous ID accurately.
+- Excluded local top-level `.superpowers` plans and evidence from release
+  archives.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.15 — 2026-08-03
 
 - Parsed Microsoft CAPI's documented nested `error.details` validation envelope

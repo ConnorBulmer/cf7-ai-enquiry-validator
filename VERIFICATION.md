@@ -1,10 +1,59 @@
-# Release verification — 0.2.15 candidate
+# Release verification — 0.2.16 candidate
 
-The 0.2.15 Microsoft UET Conversion API validation-hardening candidate was verified
-locally on 2026-08-03. Automated verification used synthetic fixtures only and
-made no external AI, analytics, or advertising request.
+The 0.2.16 WordPress-native administration refresh was verified locally and in
+the disposable WordPress matrix on 2026-08-03. Automated verification used
+synthetic fixtures only and made no external AI, analytics, advertising, or
+production-site request. Live evidence is intentionally deferred to Task 10.
 
-## 0.2.15 Microsoft UET CAPI verification
+## 0.2.16 WordPress-native administration verification
+
+- Release-identity RED: `php tests/ReleasePackageTest.php` exited `1` because
+  the requested `0.2.16` still encountered plugin header `0.2.15`.
+- Release-identity GREEN: plugin header, `CF7AIV\VERSION`, and `Stable tag` all
+  equal `0.2.16`; `Migration::VERSION` remains `10`.
+- Complete sorted standalone PHP suite: **26/26 PASS**. The pre-existing
+  fail-closed migration retry diagnostic may be emitted by the in-memory
+  `DedupRegressionTest.php`, but the test exits successfully.
+- Complete non-vendor PHP lint: **154/154 PASS**.
+- JavaScript attribution suite: **PASS**; JavaScript syntax check: **PASS**;
+  explicit 0.2.16 release-package check: **PASS**.
+- Disposable WordPress matrix: **4/4 cells PASS**, with pre-browser and
+  post-browser WordPress-loaded runtime assertions passing in every cell:
+  - WordPress 6.9 / PHP 8.1.34 / Flamingo: **4/4 browser tests PASS**;
+  - WordPress 6.9 / PHP 8.1.34 / CFDB7: **4/4 browser tests PASS**;
+  - WordPress 7.0.2 / PHP 8.3.31 / Flamingo: **4/4 browser tests PASS**;
+  - WordPress 7.0.2 / PHP 8.3.31 / CFDB7: **4/4 browser tests PASS**.
+- Browser coverage confirms all six administration headings, no page-level
+  overflow at 1440x1000, 900x1000, or 390x844, visible and focusable Review
+  Queue and Tracking Health table regions, non-empty controls and badge text in
+  forced colours, no raw preformatted Overview/Health output, accurate
+  Microsoft synthetic-anonymous-ID disclosure, and both preserved frontend
+  portability flows.
+- Matrix cleanup: **0** matching containers, **0** matching volumes, and **0**
+  matching networks; generated Playwright last-run evidence was removed.
+- Packaging-defect RED: the first archive selected **27** ignored top-level
+  `.superpowers` plan/review/evidence files (**259** total entries). A focused
+  release-package regression failed before the packager was changed.
+- Packaging-defect GREEN: the portable packager now excludes only the
+  top-level `.superpowers` development-evidence tree; focused and complete
+  release-package tests pass.
+- Release build: `php tools/build-release.php --tag=v0.2.16 --output-dir=dist`
+  - archive: `cf7-ai-enquiry-validator-0.2.16.zip`;
+  - entries: **232** under one `cf7-ai-enquiry-validator/` root;
+  - `ReleasePackager::verifyArchive()`: **PASS**;
+  - independently computed checksum matches the generated SHA-256 file:
+    **PASS**;
+  - source-diff and reopened-archive credential, private-fixture,
+    site-identifier, and Windows-unsafe/reserved-path matches: **0** in every
+    category;
+  - SHA-256:
+    `9e6a15f3b4e0705068ca2745b5bcbe0edf7b909631b80732c0d322d222d123bc`.
+
+## Previous 0.2.15 Microsoft UET CAPI verification
+
+The 0.2.15 Microsoft UET Conversion API validation-hardening candidate was
+verified locally on 2026-08-03. Automated verification used synthetic fixtures
+only and made no external AI, analytics, or advertising request.
 
 - Live diagnostic RED: Microsoft CAPI returned HTTP 400 `ValidationError` at
   `data[0].userData` because the original identifier-free diagnostic omitted

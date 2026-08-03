@@ -69,14 +69,14 @@ try {
 cf7aiv_release_assert($invalidTagRejected, 'A release tag without the required v prefix must be rejected.');
 
 $pluginRoot = dirname(__DIR__);
-$metadata = ReleasePackager::validateMetadata($pluginRoot, '0.2.15');
+$metadata = ReleasePackager::validateMetadata($pluginRoot, '0.2.16');
 cf7aiv_release_assert(
 	$metadata === [
-		'plugin_header' => '0.2.15',
-		'version_constant' => '0.2.15',
-		'stable_tag' => '0.2.15',
+		'plugin_header' => '0.2.16',
+		'version_constant' => '0.2.16',
+		'stable_tag' => '0.2.16',
 	],
-	'The real plugin header, constant, and stable tag must agree with the release version.',
+	'All release identities must agree on 0.2.16.',
 );
 
 $fixtureRoot = sys_get_temp_dir() . '/cf7aiv-release-fixture-' . bin2hex(random_bytes(6));
@@ -94,12 +94,17 @@ try {
 	cf7aiv_release_write($fixtureRoot, '.github/workflows/release.yml', "name: release\n");
 	cf7aiv_release_write($fixtureRoot, 'tests/example.php', "<?php\n");
 	cf7aiv_release_write($fixtureRoot, 'tools/build.php', "<?php\n");
+	cf7aiv_release_write($fixtureRoot, '.superpowers/sdd/review.md', "# Local review evidence\n");
 	cf7aiv_release_write($fixtureRoot, 'docs/superpowers/specs/design.md', "# Design\n");
 	cf7aiv_release_write($fixtureRoot, 'VERIFICATION.md', "# Evidence\n");
 	cf7aiv_release_write($fixtureRoot, '.env', "SECRET=not-for-release\n");
 	cf7aiv_release_write($fixtureRoot, 'dist/old.zip', "old\n");
 
 	$files = ReleasePackager::distributableFiles($fixtureRoot);
+	cf7aiv_release_assert(
+		! in_array('.superpowers/sdd/review.md', $files, true),
+		'Top-level Superpowers plans and evidence must not be selected for a release archive.',
+	);
 	cf7aiv_release_assert(
 		$files === [
 			'README.md',
@@ -137,6 +142,10 @@ try {
 	}
 	$zip->close();
 	sort($entries, SORT_STRING);
+	cf7aiv_release_assert(
+		! in_array('cf7-ai-enquiry-validator/.superpowers/sdd/review.md', $entries, true),
+		'Top-level Superpowers plans and evidence must not be packaged.',
+	);
 	cf7aiv_release_assert(
 		$entries === [
 			'cf7-ai-enquiry-validator/README.md',
