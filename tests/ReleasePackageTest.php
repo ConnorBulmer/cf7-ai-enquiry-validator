@@ -56,6 +56,24 @@ function cf7aiv_release_write_zip(string $path, array $entries): void {
 	}
 }
 
+/** @return array<string,int> */
+function cf7aiv_release_zip_mtimes(string $path): array {
+	$zip = new ZipArchive();
+	cf7aiv_release_assert($zip->open($path) === true, 'A release-test ZIP must be readable for timestamp inspection.');
+	$mtimes = [];
+	try {
+		for ($index = 0; $index < $zip->numFiles; $index++) {
+			$stat = $zip->statIndex($index);
+			cf7aiv_release_assert(is_array($stat) && isset($stat['name'], $stat['mtime']), 'Every release-test ZIP entry must expose a name and timestamp.');
+			$mtimes[(string) $stat['name']] = (int) $stat['mtime'];
+		}
+	} finally {
+		$zip->close();
+	}
+	ksort($mtimes, SORT_STRING);
+	return $mtimes;
+}
+
 $library = dirname(__DIR__) . '/tools/release-lib.php';
 require_once $library;
 
@@ -136,7 +154,37 @@ try {
 	}
 	cf7aiv_release_assert($mismatchRejected, 'Version disagreement must stop packaging with the expected version in the error.');
 
-	$result = ReleasePackager::build($fixtureRoot, 'v9.8.7', $fixtureOutput);
+	foreach ($files as $relative) {
+		$source = $fixtureRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+		cf7aiv_release_assert(touch($source, 946684800), "The first source mtime must be set for {$relative}.");
+	}
+	clearstatcache();
+	$firstResult = ReleasePackager::build($fixtureRoot, 'v9.8.7', $fixtureOutput . '/first-build');
+	foreach ($files as $relative) {
+		$source = $fixtureRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+		cf7aiv_release_assert(touch($source, 1577836800), "The changed source mtime must be set for {$relative}.");
+	}
+	clearstatcache();
+	$result = ReleasePackager::build($fixtureRoot, 'v9.8.7', $fixtureOutput . '/second-build');
+
+	$firstHash = hash_file('sha256', $firstResult['zip']);
+	$secondHash = hash_file('sha256', $result['zip']);
+	$firstChecksumBytes = file_get_contents($firstResult['checksum']);
+	$secondChecksumBytes = file_get_contents($result['checksum']);
+	$firstMtimes = cf7aiv_release_zip_mtimes($firstResult['zip']);
+	$secondMtimes = cf7aiv_release_zip_mtimes($result['zip']);
+	$fixedZipMtime = 315532800; // 1980-01-01 00:00:00 UTC, the earliest ZIP-safe epoch.
+	cf7aiv_release_assert(
+		is_string($firstHash)
+		&& hash_equals($firstHash, (string) $secondHash)
+		&& is_string($firstChecksumBytes)
+		&& hash_equals($firstChecksumBytes, (string) $secondChecksumBytes)
+		&& $firstMtimes === $secondMtimes
+		&& array_values($firstMtimes) === array_fill(0, count($firstMtimes), $fixedZipMtime),
+		'Release ZIP and checksum bytes must be reproducible with every entry fixed at the 1980-01-01 UTC ZIP-safe epoch.'
+		. " First hash: {$firstHash}; second hash: {$secondHash}; first mtimes: " . json_encode(array_values($firstMtimes))
+		. '; second mtimes: ' . json_encode(array_values($secondMtimes)),
+	);
 	cf7aiv_release_assert(
 		$result['version'] === '9.8.7'
 		&& $result['entries'] === 7

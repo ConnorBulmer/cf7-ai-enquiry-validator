@@ -1,43 +1,57 @@
-# Release verification — 0.2.16 final candidate
+# Release verification — 0.2.16 deterministic archive candidate
 
-The current 0.2.16 final-review candidate was verified locally, in the
-disposable WordPress matrix, and on the live Mosaic Media Training site on
-2026-08-03. The exact final archive is deployed and accepted at schema 10.
-Local automation used synthetic fixtures only; the final live redeploy used no
-new provider, analytics, advertising, or form-submission request and retained
-no credentials, private enquiries, account identifiers, or raw provider
-responses.
+The 0.2.16 release packager was corrected and verified locally on 2026-08-04.
+Every ZIP entry now receives the fixed ZIP-safe UTC mtime
+`1980-01-01 00:00:00` (`315532800`) instead of inheriting checkout-specific
+source mtimes. No production system was accessed during this correction. The
+new deterministic archive is a pending release artifact; it has not been
+uploaded, installed, or accepted on the live Mosaic Media Training site.
 
-## Current final-candidate status
+## Pending deterministic-artifact status
 
-- Candidate archive: `cf7-ai-enquiry-validator-0.2.16.zip`, **232** entries
-  under one canonical `cf7-ai-enquiry-validator/` root, SHA-256
+- Pending archive: `cf7-ai-enquiry-validator-0.2.16.zip`, **232** entries under
+  one canonical `cf7-ai-enquiry-validator/` root, SHA-256
+  `c48c02222071bf6c3849e47edb3f8925cd396f1b2926d39d787758935e61e3f4`.
+- TDD RED on parent `fca8770`: the same seven-file temporary fixture was built
+  into two output directories after changing only selected source mtimes from
+  `946684800` to `1577836800`. The archives differed at SHA-256
+  (`1a2f2cc7ead945050d69ac2bf270f68a1191febe82fefd1b123fea25152d6d7f`
+  versus `29eea7528a19bde6bb59ccd0de8a6ea4cbd91d53cb69a39028345aba25424e61`),
+  and all seven entry timestamps differed.
+- TDD GREEN: after every successful `ZipArchive::addFile()`, the packager now
+  requires PHP 8.1-compatible `setMtimeName()` normalization to `315532800` and
+  fails closed if it cannot normalize an entry. The focused release-package
+  test passes and proves identical archive/checksum bytes plus the fixed entry
+  timestamp after source mtime changes.
+- The real 0.2.16 release was built twice in distinct worktree output
+  directories, with included `README.md` touched to
+  `2001-02-03T04:05:06Z` between builds and restored afterward. Both ZIPs are
+  **396359** bytes, both generated checksum files are byte-identical, and both
+  archive SHA-256 values equal the pending hash above.
+- Both reopened archives contain the same **232** selected relative paths with
+  **0** path differences, **0** source/archive content mismatches, **0**
+  archive-pair content mismatches, and **0** entries outside the fixed epoch.
+  `ReleasePackager::verifyArchive()` passes for both; credential-pattern and
+  site-identifier scans each report **0** matches.
+- The canonical content manifest remains
+  `33d76e0d322102b8237114a147b86c845ab12585f8075df9badca762207614ab`:
+  232 ordinal/Linux path-sorted lowercase per-file SHA-256 lines in exact
+  `hash  ./relative/path` form, UTF-8 without BOM, LF-terminated. It matches
+  the installed manifest recorded by the prior live acceptance because file
+  paths and uncompressed contents are unchanged; this does **not** make the new
+  deterministic ZIP live.
+- Fresh local gates pass: **26/26** standalone PHP tests, **154/154** tracked
+  non-vendor PHP lint checks, and both JavaScript checks. The pre-existing
+  fail-closed migration retry diagnostic is still emitted by
+  `DedupRegressionTest.php`, which exits successfully.
+
+## Historical live acceptance — current live source archive
+
+- The archive that remains the current live source at the time of this local
+  verification is `cf7-ai-enquiry-validator-0.2.16.zip`, SHA-256
   `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
-- The selected source list and reopened archive contain the same 232 relative
-  paths, and every archive entry is byte-for-byte equal to its selected source
-  file. The generated checksum matches independently.
-- The final-review changes add the shared header treatment to all six
-  administration pages, separate Microsoft UET and webhook configuration
-  panels, and shared 44px action treatment for Health calibration and per-item
-  Review Queue submits. They do not change form names, nonce or POST
-  boundaries, guarded actions, release identity, or schema.
-- Fresh gates passed: **26/26** standalone PHP tests, **154/154** non-vendor
-  PHP lint checks, both JavaScript checks, `ReleasePackageTest`, and all four
-  serial disposable WordPress matrix cells with pre-browser, **4/4** browser,
-  and post-browser assertions in every cell.
-- Archive inspection found **0** top-level `.superpowers` entries, **0**
-  Windows-unsafe/reserved paths, **0** credential matches, **0**
-  private/production-PII matches, and **0** site-identifier matches. A broader
-  email-pattern review classified only expected public third-party vendor
-  attribution metadata and reserved-domain synthetic self-test fixtures, not
-  private or site data.
-- This exact candidate is live and accepted. Its installed 232-file canonical
-  manifest matches the reopened archive with zero path/hash mismatches.
-
-## Final live acceptance — current 0.2.16 archive
-
-- Exact deployed archive: `cf7-ai-enquiry-validator-0.2.16.zip`, SHA-256
-  `ff5b5bb48ad0feaf1f6f229993d351b93c037a0fce9cf5e04ba226cf51e2d722`.
+  It is historical deployment evidence and is not the pending deterministic
+  archive described above.
   The remote upload matched this required hash before installation. After full
   acceptance, only that exact temporary ZIP was removed and its absence was
   proved.

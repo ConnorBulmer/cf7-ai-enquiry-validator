@@ -15,6 +15,7 @@ use ZipArchive;
 final class ReleasePackager {
 	public const SLUG = 'cf7-ai-enquiry-validator';
 	public const MAIN_FILE = 'cf7-ai-enquiry-validator.php';
+	private const ZIP_ENTRY_MTIME = 315532800; // 1980-01-01 00:00:00 UTC.
 
 	public static function versionFromTag(string $tag): string {
 		if (preg_match('/^v([0-9]+\.[0-9]+\.[0-9]+)$/D', trim($tag), $matches) !== 1) {
@@ -118,6 +119,9 @@ final class ReleasePackager {
 				$entry = self::SLUG . '/' . $relative;
 				if (! $archive->addFile($source, $entry)) {
 					throw new RuntimeException("Could not add {$relative} to the release ZIP.");
+				}
+				if (! $archive->setMtimeName($entry, self::ZIP_ENTRY_MTIME)) {
+					throw new RuntimeException("Could not normalize the release ZIP timestamp for {$relative}.");
 				}
 			}
 		} finally {
