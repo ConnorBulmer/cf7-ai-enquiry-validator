@@ -2,6 +2,15 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.11 — 2026-08-03
+
+- Kept a fresh, operational CF7-to-CFDB7 source-link token in page memory when
+  analytics and marketing consent are denied or unavailable.
+- Preserved strict consent behavior by storing no attribution in localStorage
+  or cookies and leaving every tracking field empty without consent.
+- Rotated the ephemeral source-link token after each completed submission so
+  repeated no-consent submissions remain distinct.
+
 ## 0.2.10 — 2026-08-03
 
 - Instructed DeepSeek to include every available grounded supporting assertion

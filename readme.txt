@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 0.2.10
+Stable tag: 0.2.11
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,11 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.11 =
+* Keeps a fresh source-link token in page memory when analytics and marketing consent are denied or unavailable.
+* Allows privacy-respecting CF7 enquiries to join their CFDB7 source row without storing attribution in localStorage or cookies.
+* Rotates the operational token after each completed submission while keeping every tracking field empty without consent.
 
 = 0.2.10 =
 * Tells DeepSeek to include available grounded supporting evidence until the chosen tier's minimum is satisfied.
