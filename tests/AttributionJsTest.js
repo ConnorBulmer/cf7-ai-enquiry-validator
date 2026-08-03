@@ -8,19 +8,33 @@ function check(condition, message) {
 	if (!condition) failures.push(message);
 }
 
-function makeHarness(options = {}) {
-	const listeners = {};
-	const stored = new Map(Object.entries(options.storage || {}));
-	const cookies = new Map(Object.entries(options.cookies || {}));
+function makeForm(fieldNames) {
 	const inputs = {};
-	Object.keys(options.fields || {}).forEach((field) => { inputs[field] = { value: '' }; });
+	Object.keys(fieldNames).forEach((field) => { inputs[field] = { value: '' }; });
 	const form = {
+		inputs,
+		matches: (selector) => selector === '.wpcf7 form',
+		closest: (selector) => selector === '.wpcf7 form' ? form : (selector === '.wpcf7' ? wrapper : null),
 		querySelector: (selector) => {
 			const match = selector.match(/^\[name="(.+)"\]$/);
 			return match ? inputs[match[1]] || null : null;
 		},
-		closest: (selector) => selector === '.wpcf7' ? {} : null,
 	};
+	const wrapper = {
+		querySelector: (selector) => selector === 'form' ? form : form.querySelector(selector),
+		closest: (selector) => selector === '.wpcf7' ? wrapper : null,
+	};
+	return { form, wrapper };
+}
+
+function makeHarness(options = {}) {
+	const listeners = {};
+	const stored = options.storageMap || new Map(Object.entries(options.storage || {}));
+	const cookies = options.cookieMap || new Map(Object.entries(options.cookies || {}));
+	const formFixtures = Array.from({ length: options.formCount || 1 }, () => makeForm(options.fields || {}));
+	const forms = formFixtures.map((fixture) => fixture.form);
+	const wrappers = formFixtures.map((fixture) => fixture.wrapper);
+	const inputs = forms[0].inputs;
 	const pluginName = 'cf7aiv_attribution';
 	let pluginWrites = 0;
 
@@ -44,7 +58,7 @@ function makeHarness(options = {}) {
 	global.document = {
 		referrer: Object.prototype.hasOwnProperty.call(options, 'referrer') ? options.referrer : 'https://search.example/results',
 		addEventListener: (name, callback) => { (listeners[name] ||= []).push(callback); },
-		querySelectorAll: (selector) => selector === '.wpcf7 form' ? [form] : [],
+		querySelectorAll: (selector) => selector === '.wpcf7 form' ? forms : [],
 	};
 	Object.defineProperty(global.document, 'cookie', {
 		get: () => [...cookies.entries()].map(([key, value]) => key + '=' + value).join('; '),
@@ -62,7 +76,11 @@ function makeHarness(options = {}) {
 	require(script);
 	return {
 		inputs,
+		forms,
+		wrappers,
+		fieldValue: (formIndex, fieldName) => forms[formIndex].inputs[fieldName].value,
 		payload: () => stored.has(pluginName) ? JSON.parse(stored.get(pluginName)) : null,
+		storedPayload: () => stored.has(pluginName) ? JSON.parse(stored.get(pluginName)) : null,
 		hasCookie: () => cookies.has(pluginName),
 		pluginWrites: () => pluginWrites,
 		emit: (name, event = {}) => (listeners[name] || []).forEach((listener) => listener(event)),
@@ -241,7 +259,8 @@ function foreachMalformedGaCookie(cases) {
 	page.emit('DOMContentLoaded');
 	const payload = page.payload() || {};
 	check(page.hasCookie() && payload.gclid === 'TESTCLICK123' && payload.gbraid === 'GBRAID123' && payload.utm_source === 'paid-search', 'marketing plus statistics consent must persist valid attribution');
-	check(page.inputs.cf7aiv_gclid.value === 'TESTCLICK123' && page.inputs.cf7aiv_utm_source.value === 'paid-search' && page.inputs.cf7aiv_submission_id.value === payload.submission_id, 'granted attribution must populate injected fields');
+	check(page.inputs.cf7aiv_gclid.value === 'TESTCLICK123' && page.inputs.cf7aiv_utm_source.value === 'paid-search' && page.inputs.cf7aiv_submission_id.value !== '', 'granted attribution must populate tracking fields and an operational submission token');
+	check(!Object.prototype.hasOwnProperty.call(payload, 'submission_id'), 'granted attribution must not persist the operational submission token');
 }
 
 // When the configured WordPress Consent API is authoritative, stale Google
@@ -294,7 +313,7 @@ function foreachMalformedGaCookie(cases) {
 	page.emit('submit', { target: formTarget(page) });
 	page.emit('wpcf7beforesubmit', { target: formTarget(page) });
 	check(page.inputs.cf7aiv_submission_id.value === first, 'repeated no-consent submit hooks must keep one operational source-link token for the submission');
-	page.emit('wpcf7mailsent');
+	page.emit('wpcf7mailsent', { target: page.wrappers[0] });
 	page.emit('wpcf7beforesubmit', { target: formTarget(page) });
 	check(page.inputs.cf7aiv_submission_id.value !== '' && page.inputs.cf7aiv_submission_id.value !== first, 'a completed no-consent submission must rotate its operational source-link token before the next submission');
 	check(page.payload() === null && !page.hasCookie() && trackingFieldsEmpty(page), 'no-consent token rotation must not create attribution storage or populate tracking fields');
@@ -303,20 +322,55 @@ function foreachMalformedGaCookie(cases) {
 {
 	const page = makeHarness({ dataLayer: consent(true, true), fields });
 	page.emit('DOMContentLoaded');
-	const first = page.payload().submission_id;
+	const first = page.inputs.cf7aiv_submission_id.value;
 	page.emit('wp_listen_for_consent_change', { detail: { statistics: 'allow', marketing: 'allow' } });
 	page.emit('submit', { target: formTarget(page) });
 	page.emit('wpcf7beforesubmit', { target: formTarget(page) });
-	check(page.payload().submission_id === first, 'repeated consent and CF7 submit hooks must not create a second submission ID before wpcf7mailsent');
-	page.emit('wpcf7mailsent');
-	check(!('submission_id' in page.payload()), 'wpcf7mailsent must clear the completed submission ID');
+	check(page.inputs.cf7aiv_submission_id.value === first, 'repeated consent and CF7 submit hooks must not create a second submission ID before wpcf7mailsent');
+	check(!('submission_id' in page.payload()), 'the active submission ID must remain outside persistent attribution');
+	page.emit('wpcf7mailsent', { target: page.wrappers[0] });
+	check(page.inputs.cf7aiv_submission_id.value !== first, 'wpcf7mailsent must rotate the completed form token');
+}
+
+{
+	const page = makeHarness({ dataLayer: consent(true, true), fields, formCount: 2 });
+	page.emit('DOMContentLoaded');
+	const first = page.fieldValue(0, 'cf7aiv_submission_id');
+	const second = page.fieldValue(1, 'cf7aiv_submission_id');
+	check(first !== '' && second !== '' && first !== second, 'two CF7 forms on one page must receive distinct operational tokens');
+	check(!Object.prototype.hasOwnProperty.call(page.storedPayload() || {}, 'submission_id'), 'operational tokens must never enter persistent attribution');
+	page.emit('submit', { target: page.forms[0] });
+	page.emit('wpcf7beforesubmit', { target: page.wrappers[0] });
+	page.emit('wpcf7invalid', { target: page.wrappers[0] });
+	page.emit('wpcf7spam', { target: page.wrappers[0] });
+	check(page.fieldValue(0, 'cf7aiv_submission_id') === first, 'submit, validation, and spam events must preserve one attempt token');
+	page.emit('wpcf7mailfailed', { target: page.wrappers[0] });
+	check(page.fieldValue(0, 'cf7aiv_submission_id') !== first, 'mail failure must rotate the failed form token');
+	check(page.fieldValue(1, 'cf7aiv_submission_id') === second, 'mail failure must not rotate another form token');
+}
+
+{
+	const storageMap = new Map();
+	const firstPage = makeHarness({ dataLayer: consent(true, true), fields, storageMap });
+	firstPage.emit('DOMContentLoaded');
+	const first = firstPage.fieldValue(0, 'cf7aiv_submission_id');
+	const secondPage = makeHarness({ dataLayer: consent(true, true), fields, storageMap });
+	secondPage.emit('DOMContentLoaded');
+	const second = secondPage.fieldValue(0, 'cf7aiv_submission_id');
+	check(first !== '' && second !== '' && first !== second, 'two tabs or page contexts sharing attribution storage must receive distinct operational tokens');
+	check(!Object.prototype.hasOwnProperty.call(secondPage.storedPayload() || {}, 'submission_id'), 'shared attribution storage must not contain either tab token');
+}
+
+{
+	const stale = JSON.stringify({ utm_source: 'legacy', submission_id: 'legacy-persisted-token' });
+	const page = makeHarness({ dataLayer: consent(true, true), fields, storage: { cf7aiv_attribution: stale } });
+	page.emit('DOMContentLoaded');
+	check(page.inputs.cf7aiv_submission_id.value !== 'legacy-persisted-token', 'a legacy persisted token must not be reused for a new form attempt');
+	check(!Object.prototype.hasOwnProperty.call(page.storedPayload() || {}, 'submission_id'), 'a legacy persisted token must be removed on the next attribution write');
 }
 
 function formTarget(page) {
-	return { closest: (selector) => selector === '.wpcf7' ? {} : null, querySelector: (selector) => {
-		const match = selector.match(/^\[name="(.+)"\]$/);
-		return match ? page.inputs[match[1]] || null : null;
-	} };
+	return page.forms[0];
 }
 
 function trackingFieldsEmpty(page) {

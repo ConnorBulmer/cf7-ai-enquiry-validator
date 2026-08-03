@@ -5,7 +5,7 @@
 	var clickKeys = ['gclid', 'gbraid', 'wbraid', 'msclkid'];
 	var utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id'];
 	var consentKeys = ['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization'];
-	var submissionId = createSubmissionId();
+	var submissionIds = new WeakMap();
 
 	function createSubmissionId() {
 		return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(36).slice(2);
@@ -26,16 +26,23 @@
 		var raw = '';
 		try { raw = localStorage.getItem(storageName) || ''; } catch (e) {}
 		if (!raw) raw = readCookie(storageName);
-		try { return JSON.parse(raw) || {}; } catch (e) { return {}; }
+		try {
+			var stored = JSON.parse(raw) || {};
+			delete stored.submission_id;
+			return stored;
+		} catch (e) { return {}; }
 	}
 	function writeStored(value) {
-		var raw = JSON.stringify(value);
+		var persisted = Object.assign({}, value);
+		delete persisted.submission_id;
+		var raw = JSON.stringify(persisted);
 		try { localStorage.setItem(storageName, raw); } catch (e) {}
 		var age = Math.max(1, Number(cfg.retentionDays || 90)) * 86400;
 		document.cookie = storageName + '=' + encodeURIComponent(raw) + ';path=/;max-age=' + age + ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
 	}
 	function clearFields(root) {
 		Object.keys(cfg.fields || {}).forEach(function (field) {
+			if (cfg.fields[field] === 'submission_id') return;
 			var input = root.querySelector('[name="' + field + '"]');
 			if (input) input.value = '';
 		});
@@ -187,7 +194,7 @@
 		var consent = consentState();
 		if (!consent.statistics && !consent.marketing) {
 			deleteStored();
-			return { submission_id: submissionId };
+			return {};
 		}
 		var stored = filterStored(readStored(), consent);
 		var params = new URLSearchParams(location.search);
@@ -216,10 +223,25 @@
 			Object.assign(stored, gaIdentity());
 		}
 		captureConsent(stored, consent);
-		if (stored.submission_id) submissionId = stored.submission_id;
-		stored.submission_id = submissionId;
 		writeStored(stored);
 		return stored;
+	}
+	function formElement(target) {
+		if (!target) return null;
+		if (target.matches && target.matches('.wpcf7 form')) return target;
+		if (target.closest) {
+			var closest = target.closest('.wpcf7 form');
+			if (closest) return closest;
+		}
+		return target.querySelector ? target.querySelector('form') : null;
+	}
+	function submissionIdFor(form) {
+		var value = submissionIds.get(form);
+		if (!value) {
+			value = createSubmissionId();
+			submissionIds.set(form, value);
+		}
+		return value;
 	}
 	function populate(root, values) {
 		if (!values) {
@@ -231,27 +253,28 @@
 			if (input) input.value = values[cfg.fields[field]] || '';
 		});
 	}
+	function populateForm(form, values) {
+		if (!form) return;
+		var formValues = Object.assign({}, values || collect());
+		formValues.submission_id = submissionIdFor(form);
+		populate(form, formValues);
+	}
 	function populateAll() {
 		var values = collect();
-		document.querySelectorAll('.wpcf7 form').forEach(function (form) { populate(form, values); });
+		document.querySelectorAll('.wpcf7 form').forEach(function (form) { populateForm(form, values); });
 	}
-	function completeSubmission() {
-		var consent = consentState();
-		if (!consent.statistics && !consent.marketing) {
-			deleteStored();
-			submissionId = createSubmissionId();
-			return;
-		}
-		var values = filterStored(readStored(), consent);
-		delete values.submission_id;
-		submissionId = createSubmissionId();
-		writeStored(values);
+	function rotateSubmission(event) {
+		var form = formElement(event && event.target);
+		if (!form) return;
+		submissionIds.set(form, createSubmissionId());
+		populateForm(form);
 	}
 	document.addEventListener('DOMContentLoaded', populateAll);
 	document.addEventListener('submit', function (event) {
-		if (event.target && event.target.closest('.wpcf7')) populate(event.target, collect());
+		if (event.target && event.target.closest('.wpcf7')) populateForm(formElement(event.target));
 	}, true);
-	document.addEventListener('wpcf7beforesubmit', function (event) { populate(event.target, collect()); });
-	document.addEventListener('wpcf7mailsent', completeSubmission);
+	document.addEventListener('wpcf7beforesubmit', function (event) { populateForm(formElement(event.target)); });
+	document.addEventListener('wpcf7mailsent', rotateSubmission);
+	document.addEventListener('wpcf7mailfailed', rotateSubmission);
 	document.addEventListener('wp_listen_for_consent_change', populateAll);
 }());
