@@ -7,10 +7,39 @@ namespace CF7AIV\Infrastructure;
 final class Queue {
 	public const GROUP = 'cf7aiv';
 
+	/**
+	 * Is this exact job - hook, arguments and group - already waiting to run?
+	 *
+	 * Action Scheduler's own $unique flag cannot answer this. Its uniqueness
+	 * predicate is:
+	 *
+	 *   WHERE status IN ('pending','in-progress') AND hook = %s AND group_id = %d
+	 *
+	 * which ignores arguments entirely, so passing $unique = true means only one
+	 * action per hook may be pending for the whole site. Every job enqueued while
+	 * another is waiting is dropped, silently, with a 0 return.
+	 *
+	 * Every hook here is per item - cf7aiv_classify_item, cf7aiv_evaluate_delivery,
+	 * cf7aiv_deliver_item, cf7aiv_backfill_batch - so that behaviour discarded
+	 * enquiries under any concurrency at all. Observed on a live staging site: four
+	 * enquiries submitted ten seconds apart, one classified, three left in
+	 * 'captured' for ever with classification_attempts = 0 and no error recorded.
+	 *
+	 * as_has_scheduled_action() does compare arguments, so it gives the
+	 * per-item deduplication that was intended.
+	 *
+	 * @param array<int|string, mixed> $arguments
+	 */
+	private static function alreadyQueued(string $hook, array $arguments, string $group): bool {
+		return function_exists('as_has_scheduled_action')
+			&& as_has_scheduled_action($hook, $arguments, $group) === true;
+	}
+
 	/** @param array<int|string, mixed> $arguments */
 	public static function enqueue(string $hook, array $arguments = [], string $group = self::GROUP): int|bool {
 		if (function_exists('as_enqueue_async_action')) {
-			return self::normalize(as_enqueue_async_action($hook, $arguments, $group, true));
+			if (self::alreadyQueued($hook, $arguments, $group)) { return true; }
+			return self::normalize(as_enqueue_async_action($hook, $arguments, $group, false));
 		}
 		if (function_exists('wp_schedule_single_event')) {
 			return self::normalize(wp_schedule_single_event(time() + 1, $hook, $arguments, true));
@@ -21,7 +50,8 @@ final class Queue {
 	/** @param array<int|string, mixed> $arguments */
 	public static function schedule(string $hook, int $timestamp, array $arguments = [], string $group = self::GROUP): int|bool {
 		if (function_exists('as_schedule_single_action')) {
-			return self::normalize(as_schedule_single_action($timestamp, $hook, $arguments, $group, true));
+			if (self::alreadyQueued($hook, $arguments, $group)) { return true; }
+			return self::normalize(as_schedule_single_action($timestamp, $hook, $arguments, $group, false));
 		}
 		if (function_exists('wp_schedule_single_event')) {
 			return self::normalize(wp_schedule_single_event($timestamp, $hook, $arguments, true));

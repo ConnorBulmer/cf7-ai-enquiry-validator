@@ -45,6 +45,15 @@
 		var persisted = Object.assign({}, value);
 		delete persisted.submission_id;
 		var raw = JSON.stringify(persisted);
+		/*
+		 * Skip a write that would change nothing. One consent decision can reach
+		 * us twice - a Consent Mode dataLayer push and a WordPress Consent API
+		 * event - and re-storing an identical payload is pure noise.
+		 */
+		var current = null;
+		try { current = localStorage.getItem(storageName); } catch (e) {}
+		if (current === null) { current = readCookie(storageName) || null; }
+		if (current === raw) { return; }
 		try { localStorage.setItem(storageName, raw); } catch (e) {}
 		var age = Math.max(1, Number(cfg.retentionDays || 90)) * 86400;
 		document.cookie = storageName + '=' + encodeURIComponent(raw) + ';path=/;max-age=' + age + ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
@@ -205,10 +214,35 @@
 			if (consent.mode[key] === 'granted' || consent.mode[key] === 'denied') target[key] = consent.mode[key];
 		});
 	}
+	/**
+	 * Has a consent decision actually been made, as opposed to not arriving yet?
+	 *
+	 * The WordPress Consent API is synchronous and authoritative, so if it
+	 * answered, the decision is real. Consent Mode is published asynchronously
+	 * through dataLayer: before the consent manager runs there are no consent
+	 * entries at all, which is not the same as a refusal.
+	 */
+	function consentDecided(consent) {
+		if (consent.source === 'wordpress') { return true; }
+		var mode = consent.mode || {};
+		for (var index = 0; index < consentKeys.length; index++) {
+			if (mode[consentKeys[index]] === 'granted' || mode[consentKeys[index]] === 'denied') { return true; }
+		}
+		return false;
+	}
 	function collect() {
 		var consent = consentState();
 		if (!consent.statistics && !consent.marketing) {
-			deleteStored();
+			/*
+			 * Only discard stored attribution when consent has genuinely been
+			 * refused. collect() runs on every page load, and with a Consent Mode
+			 * consent manager nothing has been published at that point - treating
+			 * "not yet known" as "denied" deleted the click id captured on the
+			 * landing page before the visitor ever reached the form. Measured on a
+			 * staging site: gclid stored correctly on the ad landing page, then
+			 * wiped on the next page view, leaving first_landing_page as /contact/.
+			 */
+			if (consentDecided(consent)) { deleteStored(); }
 			return {};
 		}
 		var stored = filterStored(readStored(), consent);
@@ -284,6 +318,46 @@
 		submissionIds.set(form, createSubmissionId());
 		populateForm(form);
 	}
+	/*
+	 * Consent Mode consent managers publish through dataLayer, not through the
+	 * WordPress Consent API, and they publish asynchronously - after
+	 * DOMContentLoaded.
+	 *
+	 * Without this, collect() runs once at DOMContentLoaded, sees no consent
+	 * signal yet, and stores nothing. The consent update lands a moment later,
+	 * but nothing re-collects, so a click id present on the landing URL is lost
+	 * for good: attribution_ready never becomes 1 and no conversion is ever
+	 * dispatched. Measured on a staging site using a Consent Mode banner - at DOMContentLoaded
+	 * the dataLayer held zero consent entries; the granted update arrived after.
+	 *
+	 * Wrapping push is the usual way to observe Consent Mode. It runs the
+	 * original push first so GTM behaviour is unchanged, and it is installed at
+	 * script execution rather than on DOMContentLoaded so it is in place before a
+	 * consent manager loaded later can publish. Anything pushed before this
+	 * script runs is still picked up, because googleConsentMode() scans the whole
+	 * dataLayer array on every collect().
+	 */
+	function watchConsentMode() {
+		try {
+			window.dataLayer = window.dataLayer || [];
+			if (window.dataLayer.__cf7aivWatched) return;
+			var originalPush = window.dataLayer.push;
+			if (typeof originalPush !== 'function') return;
+			window.dataLayer.push = function () {
+				var result = originalPush.apply(this, arguments);
+				try {
+					var row = Array.prototype.slice.call(arguments[0] || []);
+					if (row[0] === 'consent' && (row[1] === 'default' || row[1] === 'update')) {
+						populateAll();
+					}
+				} catch (e) {}
+				return result;
+			};
+			window.dataLayer.__cf7aivWatched = true;
+		} catch (e) {}
+	}
+	watchConsentMode();
+
 	document.addEventListener('DOMContentLoaded', populateAll);
 	document.addEventListener('submit', function (event) {
 		if (event.target && event.target.closest('.wpcf7')) populateForm(formElement(event.target));
