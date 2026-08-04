@@ -2,6 +2,32 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.17 — 2026-08-04
+
+- Fixed queued work being discarded. `Queue::enqueue()` and `Queue::schedule()`
+  passed Action Scheduler's `$unique` flag, whose predicate matches only hook and
+  group and ignores arguments, so a single pending action per hook was permitted
+  for an entire site. Every per-item job enqueued while another was waiting was
+  dropped silently, with no error recorded. Observed on a live site as four
+  enquiries submitted seconds apart producing one classification and three items
+  left in `captured` with `classification_attempts` at zero. Deduplication now
+  uses `as_has_scheduled_action()`, which compares arguments.
+- Fixed attribution never being captured on sites that publish consent through
+  Google Consent Mode. The script re-collected only on the WordPress Consent API
+  event, which such sites never emit, so a click identifier present on the
+  landing URL was never stored, `attribution_ready` never became true, and no
+  conversion could be dispatched. Consent defaults and updates pushed to
+  `dataLayer` are now observed.
+- Fixed stored attribution being deleted before consent was known. `collect()`
+  runs on every page load and discarded storage whenever consent was not granted,
+  but Consent Mode publishes asynchronously, so an undecided state was treated as
+  a refusal and destroyed the click identifier captured on the landing page.
+  Attribution is now discarded only once a decision has actually been made.
+- Skipped storage writes when the attribution payload is unchanged, so a Consent
+  Mode push and a WordPress Consent API event describing the same decision still
+  result in exactly one write.
+- Schema version 10 is unchanged; no migration is required.
+
 ## 0.2.16 — 2026-08-03
 
 - Replaced raw Overview and Tracking Health output with semantic summaries,

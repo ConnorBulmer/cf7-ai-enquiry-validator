@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.16
+Stable tag: 0.2.17
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,13 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.17 =
+* Fixes queued work being discarded: Action Scheduler's `$unique` flag ignores arguments, so only one action per hook could be pending site-wide and every per-item job enqueued behind another was dropped silently.
+* Fixes attribution never being captured on sites publishing consent through Google Consent Mode, which never emit the WordPress Consent API event the script listened for.
+* Fixes stored attribution being deleted before consent was known, which destroyed the click identifier captured on the landing page.
+* Skips storage writes when the attribution payload is unchanged, so one consent decision arriving by two routes still stores exactly once.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.16 =
 * Replaces raw Overview and Tracking Health output with semantic summaries, status badges, descriptions, and accessible local table regions.
