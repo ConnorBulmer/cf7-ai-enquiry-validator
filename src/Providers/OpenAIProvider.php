@@ -31,9 +31,11 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		'gpt-5.2' => true,
 		'gpt-5.2-mini' => true,
 		'gpt-5.4' => true,
+		'gpt-5.4-2026-03-05' => true,
 		'gpt-5.4-mini' => true,
 		'gpt-5.4-nano' => true,
 		'gpt-5.4-mini-2026-03-17' => true,
+		'gpt-5.4-nano-2026-03-17' => true,
 	];
 
 	public function __construct(

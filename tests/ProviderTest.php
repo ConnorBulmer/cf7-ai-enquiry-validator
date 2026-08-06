@@ -96,6 +96,10 @@ provider_assert(is_string($dsDescDeep) && $dsDescDeep !== '', 'DeepSeek deep rea
 $oaiOptionsSupported = CF7AIV\Providers\OpenAIProvider::reasoningOptions('o4-mini');
 provider_assert(is_array($oaiOptionsSupported), 'OpenAIProvider::reasoningOptions() must return an array for o4-mini.');
 provider_assert(in_array('standard', $oaiOptionsSupported, true), 'OpenAI reasoning options must include standard for o4-mini.');
+foreach (['o4-mini-2025-04-16', 'gpt-5.4-2026-03-05', 'gpt-5.4-mini-2026-03-17', 'gpt-5.4-nano-2026-03-17'] as $snapshotModel) {
+	$snapshotOptions = CF7AIV\Providers\OpenAIProvider::reasoningOptions($snapshotModel);
+	provider_assert(in_array('standard', $snapshotOptions, true), "OpenAI reasoning options must support documented snapshot {$snapshotModel}.");
+}
 
 $oaiOptionsUnsupported = CF7AIV\Providers\OpenAIProvider::reasoningOptions('gpt-4o');
 provider_assert(is_array($oaiOptionsUnsupported), 'OpenAIProvider::reasoningOptions() must return an array for gpt-4o.');
