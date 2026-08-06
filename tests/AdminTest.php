@@ -300,6 +300,21 @@ admin_assert(str_contains($setup, 'cf7aiv-setup-page'), 'Setup needs a dedicated
 admin_assert(str_contains($setup, 'cf7aiv-setup-progress'), 'Setup needs progress navigation.');
 admin_assert(substr_count($setup, 'cf7aiv-setup-step') >= 5, 'Setup needs five guided steps.');
 admin_assert(str_contains($setup, 'Save guided draft'), 'Setup needs a clear draft-save action.');
+$scanForm = [];
+preg_match('/(<form[^>]*id="cf7aiv-setup-scan-form"[^>]*>.*?<\/form>)/s', $setup, $scanForm);
+admin_assert(
+	preg_match('/<select[^>]*name="pack_key"[^>]*form="cf7aiv-setup-scan-form"/', $setup) === 1
+	&& isset($scanForm[1])
+	&& str_contains($scanForm[1], 'value="cf7aiv_setup_scan"')
+	&& ! str_contains($scanForm[1], 'data-setup-scan-pack'),
+	'No-JavaScript scan submission must use the selected pack control owned by the scan form.'
+);
+foreach (['pack', 'business_description', 'services', 'audiences', 'primary_definition', 'exclusion_codes', 'ai_whitelist'] as $summaryBinding) {
+	admin_assert(str_contains($setup, 'data-setup-summary="' . $summaryBinding . '"'), "Setup review must bind the {$summaryBinding} summary.");
+}
+foreach (['exclusion_codes', 'ai_whitelist'] as $optionGroup) {
+	admin_assert(str_contains($setup, 'data-setup-option-group="' . $optionGroup . '"'), "Setup must expose the {$optionGroup} option group for review binding.");
+}
 admin_assert(str_contains($policy, 'cf7aiv-page-header') && str_contains($policy, 'cf7aiv-actions'), 'Policy Lab must use shared native structure.');
 admin_assert(str_contains($setup, 'cf7aiv-page-header') && str_contains($setup, 'cf7aiv-actions'), 'Setup must use shared native structure.');
 admin_assert(str_contains($policy, 'class="card'), 'Policy Lab must retain native card panels.');
@@ -409,6 +424,10 @@ admin_assert(str_contains($testingSetup,'value="live"')&&str_contains($testingSe
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['setup']['stage']='live';
 ob_start();CF7AIV\Admin\AdminPages::setup();$liveSetup=ob_get_clean();
 admin_assert(str_contains($liveSetup,'value="testing"')&&str_contains($liveSetup,'Return to Testing'),'Live must expose a return-to-Testing lifecycle control.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['automation']['mode']='live';
+ob_start();CF7AIV\Admin\AdminPages::setup();$liveAutomationSetup=ob_get_clean();
+admin_assert(str_contains($liveAutomationSetup,'Automation is currently live mode')&&!str_contains($liveAutomationSetup,'Automation is currently shadow mode'),'Setup must render the current automation mode rather than always claiming shadow mode.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['automation']['mode']='shadow';
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['setup']['stage']='setup';
 
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['ui']['advanced_mode']=true;

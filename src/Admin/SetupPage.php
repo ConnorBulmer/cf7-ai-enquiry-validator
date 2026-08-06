@@ -12,6 +12,10 @@ final class SetupPage {
 		self::capability();
 		$settings = (array) get_option(Settings::OPTION, Settings::defaults());
 		$stage = (string) ($settings['setup']['stage'] ?? 'setup');
+		$automationMode = (string) ($settings['automation']['mode'] ?? 'shadow');
+		if (! in_array($automationMode, ['shadow', 'live'], true)) {
+			$automationMode = 'shadow';
+		}
 		$packs = (new PolicyPackRegistry())->all();
 		$selectedPack = (string) ($settings['setup']['selected_pack'] ?? array_key_first($packs));
 		if (! isset($packs[$selectedPack])) {
@@ -47,13 +51,13 @@ final class SetupPage {
 		foreach (['setup' => 'Setup', 'testing' => 'Testing', 'live' => 'Live'] as $key => $label) {
 			echo '<li class="cf7aiv-status-badge' . ($stage === $key ? ' is-current' : '') . '"' . ($stage === $key ? ' aria-current="step"' : '') . '>' . self::e($label) . '</li>';
 		}
-		echo '</ol><p>Automation is currently kept in shadow mode. Lifecycle changes do not enable delivery.</p></div>';
-		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-guided-pack">Starter pack</label><select id="cf7aiv-guided-pack" name="guided[pack_key]" form="cf7aiv-guided-policy-form" data-setup-pack required>';
+		echo '</ol><p>Automation is currently ' . self::e($automationMode) . ' mode. Lifecycle changes do not enable delivery.</p></div>';
+		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-guided-pack">Starter pack</label><select id="cf7aiv-guided-pack" name="pack_key" form="cf7aiv-setup-scan-form" data-setup-pack required>';
 		foreach ($packs as $key => $pack) {
 			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e((string) ($pack['pack']['label'] ?? $key)) . '</option>';
 		}
 		echo '</select><p class="description">The pack supplies a validated starting policy. You can change the draft rules before publishing.</p></div>';
-		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" class="cf7aiv-setup-scan-form"><input type="hidden" name="action" value="cf7aiv_setup_scan"><input type="hidden" name="pack_key" value="' . self::e($selectedPack) . '" data-setup-scan-pack>';
+		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-setup-scan-form" class="cf7aiv-setup-scan-form"><input type="hidden" name="action" value="cf7aiv_setup_scan">';
 		wp_nonce_field('cf7aiv_setup_scan');
 		echo '<p class="cf7aiv-setup-supporting-action">Need help shaping the draft? <button type="submit" class="button button-secondary">Analyse public site and forms</button></p><p class="description">Only public page copy and safe form structure are sent. Submission values are never scanned.</p></form>';
 
@@ -74,32 +78,28 @@ final class SetupPage {
 		echo '</div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="button" class="button button-primary" data-setup-next="qualification">Continue to qualification</button> <button type="button" class="button button-secondary" data-setup-back="context" disabled>Back</button></p></section>';
 
-		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-guided-policy-form" class="cf7aiv-setup-guided-form"><input type="hidden" name="action" value="cf7aiv_save_guided_policy"><input type="hidden" name="return_page" value="setup"><input type="hidden" name="guided[policy_key]" value="global">';
+		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-guided-policy-form" class="cf7aiv-setup-guided-form"><input type="hidden" name="action" value="cf7aiv_save_guided_policy"><input type="hidden" name="return_page" value="setup"><input type="hidden" name="guided[policy_key]" value="global"><input type="hidden" name="guided[pack_key]" value="' . self::e($selectedPack) . '" data-setup-guided-pack>';
 		wp_nonce_field('cf7aiv_guided_policy');
 		echo '<section id="cf7aiv-setup-step-qualification" class="card cf7aiv-setup-step" data-step="qualification"><h2 tabindex="-1">2. Define qualification</h2><p>Describe the legitimate business context and the signals that distinguish a primary opportunity.</p><div class="cf7aiv-setup-prose-fields">';
 		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-business-description">Describe the business</label><textarea id="cf7aiv-business-description" name="guided[business_description]" rows="4" required></textarea></div>';
 		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-services">Which services or products should count? One per line.</label><textarea id="cf7aiv-services" name="guided[services]" rows="4"></textarea></div>';
 		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-audiences">Who are the intended audiences? One per line.</label><textarea id="cf7aiv-audiences" name="guided[audiences]" rows="4"></textarea></div>';
 		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-primary">What makes an enquiry a primary opportunity?</label><textarea id="cf7aiv-primary" name="guided[primary_definition]" rows="4"></textarea></div>';
-		echo '<fieldset class="cf7aiv-setup-choice-group"><legend>Exclusions</legend><p class="description">Keep supplier, recruitment, existing-customer, spam, and other out-of-scope enquiries from becoming opportunities.</p>' . self::guidedCheckboxes($packs, 'exclusion_catalog', 'guided[exclusion_codes][]') . '</fieldset></div>';
+		echo '<fieldset class="cf7aiv-setup-choice-group" data-setup-option-group="exclusion_codes"><legend>Exclusions</legend><p class="description">Keep supplier, recruitment, existing-customer, spam, and other out-of-scope enquiries from becoming opportunities.</p>' . self::guidedCheckboxes($packs, 'exclusion_catalog', 'guided[exclusion_codes][]') . '</fieldset></div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="button" class="button button-primary" data-setup-next="fields">Continue to AI fields</button> <button type="button" class="button button-secondary" data-setup-back="context">Back to context</button></p></section>';
 
-		echo '<section id="cf7aiv-setup-step-fields" class="card cf7aiv-setup-step" data-step="fields"><h2 tabindex="-1">3. Choose AI fields</h2><p>Select only the non-identifying fields needed to apply the draft policy. The whitelist is the boundary for provider input.</p><fieldset class="cf7aiv-setup-choice-group"><legend>Field whitelist</legend><p class="description">These fields may be sent to the configured AI provider for classification.</p>' . self::guidedCheckboxes($packs, 'ai_whitelist', 'guided[ai_whitelist][]') . '</fieldset>';
+		echo '<section id="cf7aiv-setup-step-fields" class="card cf7aiv-setup-step" data-step="fields"><h2 tabindex="-1">3. Choose AI fields</h2><p>Select only the non-identifying fields needed to apply the draft policy. The whitelist is the boundary for provider input.</p><fieldset class="cf7aiv-setup-choice-group" data-setup-option-group="ai_whitelist"><legend>Field whitelist</legend><p class="description">These fields may be sent to the configured AI provider for classification.</p>' . self::guidedCheckboxes($packs, 'ai_whitelist', 'guided[ai_whitelist][]') . '</fieldset>';
 		echo '<div class="cf7aiv-setup-callout" role="note"><h3>Privacy boundary</h3><p>Identity, attribution, consent, secrets, files, and fields beginning with <code>cf7aiv_</code> stay excluded. Free text may still contain personal or sensitive information, so review provider suitability before saving.</p></div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="button" class="button button-primary" data-setup-next="review">Review draft</button> <button type="button" class="button button-secondary" data-setup-back="qualification">Back to qualification</button></p></section>';
 
-		$packBusiness = (array) ($selectedPackDefinition['business'] ?? []);
-		$primaryDefinition = self::primaryDefinition($selectedPackDefinition);
-		$packExclusions = self::stringList($selectedPackDefinition['exclusion_catalog'] ?? []);
-		$packFields = self::stringList($selectedPackDefinition['ai_whitelist'] ?? []);
 		echo '<section id="cf7aiv-setup-step-review" class="card cf7aiv-setup-step" data-step="review"><h2 tabindex="-1">4. Review draft</h2><p>Check the read-only policy summary before saving. The save creates a draft only; publishing remains an explicit Policy Lab action.</p><dl class="cf7aiv-setup-summary-panel cf7aiv-setup-summary-list">';
-		echo '<div><dt>Starter pack</dt><dd>' . self::e($selectedPackLabel) . '</dd></div>';
-		echo '<div><dt>Business context</dt><dd>' . self::e((string) ($packBusiness['description'] ?? 'Your business description will be validated from the answer above.')) . '</dd></div>';
-		echo '<div><dt>Starter services</dt><dd>' . self::e(self::displayList($packBusiness['services'] ?? [], 'Defined from your answers.')) . '</dd></div>';
-		echo '<div><dt>Intended audiences</dt><dd>' . self::e(self::displayList($packBusiness['audiences'] ?? [], 'Defined from your answers.')) . '</dd></div>';
-		echo '<div><dt>Primary opportunity</dt><dd>' . self::e($primaryDefinition !== '' ? $primaryDefinition : 'Defined from your answer above.') . '</dd></div>';
-		echo '<div><dt>Exclusions</dt><dd>' . self::e(self::displayList($packExclusions, 'No catalog exclusions selected.')) . '</dd></div>';
-		echo '<div><dt>AI whitelist</dt><dd>' . self::e(self::displayList($packFields, 'No fields selected.')) . '</dd></div>';
+		echo '<div><dt>Starter pack</dt><dd data-setup-summary="pack">' . self::e($selectedPackLabel) . '</dd></div>';
+		echo '<div><dt>Business context</dt><dd data-setup-summary="business_description">No unsaved business description is available in the server-rendered summary.</dd></div>';
+		echo '<div><dt>Services or products</dt><dd data-setup-summary="services">No unsaved services or products are available in the server-rendered summary.</dd></div>';
+		echo '<div><dt>Intended audiences</dt><dd data-setup-summary="audiences">No unsaved audiences are available in the server-rendered summary.</dd></div>';
+		echo '<div><dt>Primary opportunity</dt><dd data-setup-summary="primary_definition">No unsaved primary-opportunity definition is available in the server-rendered summary.</dd></div>';
+		echo '<div><dt>Exclusions</dt><dd data-setup-summary="exclusion_codes">Selections are shown above and will be included when the draft is saved.</dd></div>';
+		echo '<div><dt>AI whitelist</dt><dd data-setup-summary="ai_whitelist">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>Draft status</dt><dd>' . self::e((string) ($draftSummary['status'] ?? 'Not saved')) . '</dd></div></dl>';
 		echo '<div class="cf7aiv-setup-field-group cf7aiv-setup-review-version"><label for="cf7aiv-guided-version">Draft version</label><input id="cf7aiv-guided-version" name="guided[version]" value="' . self::e(gmdate('Ymd-His')) . '" required><p class="description">Use the generated version unless you need a recognizable internal draft label.</p></div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="submit" class="button button-primary">Save guided draft</button> <button type="button" class="button button-secondary" data-setup-back="fields">Back to AI fields</button></p></section></form>';
@@ -149,32 +149,6 @@ final class SetupPage {
 		global $wpdb;
 		return isset($wpdb->prefix) && method_exists($wpdb, 'get_var')
 			&& (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cf7aiv_policies WHERE status='draft'") > 0;
-	}
-
-	/** @param array<string,mixed> $pack */
-	private static function primaryDefinition(array $pack): string {
-		foreach ((array) ($pack['tier_definitions'] ?? []) as $tier) {
-			if (is_array($tier) && ($tier['outcome_id'] ?? '') === 'primary_opportunity') {
-				return (string) ($tier['description'] ?? '');
-			}
-		}
-		return '';
-	}
-
-	/** @return list<string> */
-	private static function stringList(mixed $values): array {
-		$out = [];
-		foreach ((array) $values as $value) {
-			if (is_scalar($value) && trim((string) $value) !== '') {
-				$out[] = trim((string) $value);
-			}
-		}
-		return array_values(array_unique($out));
-	}
-
-	private static function displayList(mixed $values, string $empty): string {
-		$list = self::stringList($values);
-		return $list === [] ? $empty : implode(', ', $list);
 	}
 
 	/** @param array<string,array<string,mixed>> $packs */

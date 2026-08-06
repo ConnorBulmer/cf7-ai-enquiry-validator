@@ -125,13 +125,99 @@
 		}, true);
 
 		var packSelect = root.querySelector('[data-setup-pack]');
-		var scanPackInputs = Array.prototype.slice.call(root.querySelectorAll('[data-setup-scan-pack]'));
+		var guidedPackInput = root.querySelector('[data-setup-guided-pack]');
+
+		var setSummary = function (key, value) {
+			var target = root.querySelector('[data-setup-summary="' + key + '"]');
+			if (target) {
+				target.textContent = value;
+			}
+		};
+
+		var compactText = function (value, fallback) {
+			var text = String(value || '').replace(/\s+/g, ' ').trim();
+			if (text === '') {
+				return fallback;
+			}
+			return text.length > 240 ? text.slice(0, 237) + '...' : text;
+		};
+
+		var listText = function (values, fallback) {
+			var unique = [];
+			values.forEach(function (value) {
+				var text = String(value || '').replace(/\s+/g, ' ').trim();
+				if (text !== '' && unique.indexOf(text) === -1) {
+					unique.push(text);
+				}
+			});
+			if (!unique.length) {
+				return fallback;
+			}
+			var visible = unique.slice(0, 5).join(', ');
+			return unique.length > 5 ? visible + ' (+' + (unique.length - 5) + ' more)' : visible;
+		};
+
+		var lineText = function (value, fallback) {
+			return listText(String(value || '').split(/\r?\n/), fallback);
+		};
+
+		var optionText = function (groupName, fallback) {
+			var group = root.querySelector('[data-setup-option-group="' + groupName + '"]');
+			if (!group) {
+				return fallback;
+			}
+			var labels = [];
+			Array.prototype.forEach.call(group.querySelectorAll('input[type="checkbox"]:checked'), function (input) {
+				var label = input.closest ? input.closest('label') : null;
+				labels.push(label ? label.textContent : input.value);
+			});
+			return listText(labels, fallback);
+		};
+
+		var updateSummary = function () {
+			if (packSelect) {
+				var selectedOption = packSelect.options[packSelect.selectedIndex];
+				setSummary('pack', selectedOption ? selectedOption.textContent.trim() : 'No starter pack selected.');
+			}
+			var business = root.querySelector('#cf7aiv-business-description');
+			var services = root.querySelector('#cf7aiv-services');
+			var audiences = root.querySelector('#cf7aiv-audiences');
+			var primary = root.querySelector('#cf7aiv-primary');
+			setSummary('business_description', compactText(business ? business.value : '', 'No business description entered.'));
+			setSummary('services', lineText(services ? services.value : '', 'No services or products entered.'));
+			setSummary('audiences', lineText(audiences ? audiences.value : '', 'No audiences entered.'));
+			setSummary('primary_definition', compactText(primary ? primary.value : '', 'No primary-opportunity definition entered.'));
+			setSummary('exclusion_codes', optionText('exclusion_codes', 'No exclusions selected.'));
+			setSummary('ai_whitelist', optionText('ai_whitelist', 'No AI fields selected.'));
+		};
+
 		if (packSelect) {
+			if (guidedPackInput) {
+				guidedPackInput.value = packSelect.value;
+			}
 			packSelect.addEventListener('change', function () {
-				scanPackInputs.forEach(function (input) {
-					input.value = packSelect.value;
-				});
+				if (guidedPackInput) {
+					guidedPackInput.value = packSelect.value;
+				}
+				updateSummary();
 			});
 		}
+
+		['#cf7aiv-business-description', '#cf7aiv-services', '#cf7aiv-audiences', '#cf7aiv-primary'].forEach(function (selector) {
+			var control = root.querySelector(selector);
+			if (control) {
+				control.addEventListener('input', updateSummary);
+				control.addEventListener('change', updateSummary);
+			}
+		});
+		['exclusion_codes', 'ai_whitelist'].forEach(function (groupName) {
+			var group = root.querySelector('[data-setup-option-group="' + groupName + '"]');
+			if (group) {
+				Array.prototype.forEach.call(group.querySelectorAll('input[type="checkbox"]'), function (input) {
+					input.addEventListener('change', updateSummary);
+				});
+			}
+		});
+		updateSummary();
 	});
 }());

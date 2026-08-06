@@ -78,9 +78,10 @@ ui_assert(
 
 $js = file_get_contents(__DIR__ . '/../assets/js/admin.js');
 ui_assert(is_string($js), 'Admin JavaScript must be readable.');
-foreach (['.cf7aiv-setup-page', 'aria-current', 'checkValidity', 'reportValidity', 'aria-hidden', 'data-setup-scan-pack'] as $fragment) {
+foreach (['.cf7aiv-setup-page', 'aria-current', 'checkValidity', 'reportValidity', 'aria-hidden', 'data-setup-summary', 'data-setup-option-group', 'textContent'] as $fragment) {
 	ui_assert(str_contains($js, $fragment), "Setup navigation JavaScript must contain {$fragment}.");
 }
+ui_assert(! str_contains($js, 'innerHTML'), 'Setup summary enhancement must not inject raw values as HTML.');
 ui_assert(
 	(bool) preg_match('/\.cf7aiv-admin \.card,\s*\.cf7aiv-admin \.cf7aiv-panel\s*\{[^}]*min-width:\s*0;/s', $css),
 	'Plugin admin cards must override WordPress minimum widths so responsive grid items can shrink.'
