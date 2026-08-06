@@ -71,6 +71,9 @@ ui_assert(is_string($css), 'Admin stylesheet must be readable.');
 foreach (['.cf7aiv-admin {', '.cf7aiv-admin .cf7aiv-metric-grid', '.cf7aiv-admin .cf7aiv-table-region', '.cf7aiv-admin :focus-visible', '@media (max-width: 782px)', '@media (forced-colors: active)'] as $fragment) {
 	ui_assert(str_contains($css, $fragment), "Admin stylesheet must contain {$fragment}.");
 }
+foreach (['.cf7aiv-integrations-page .cf7aiv-integration-tabs', '.cf7aiv-integrations-page .cf7aiv-save-bar', '.cf7aiv-integrations-page .cf7aiv-integration-tab-panel', '.cf7aiv-integrations-page .cf7aiv-high-risk'] as $fragment) {
+	ui_assert(str_contains($css, $fragment), "Integrations stylesheet must contain {$fragment}.");
+}
 ui_assert(
 	(bool) preg_match('/\.cf7aiv-admin \.cf7aiv-form-grid\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(auto-fit, minmax\(190px, 1fr\)\);[^}]*gap:\s*var\(--cf7aiv-space-4\);[^}]*\}/s', $css),
 	'Form grids must define scoped desktop grid display, columns, and spacing.'
@@ -80,6 +83,9 @@ $js = file_get_contents(__DIR__ . '/../assets/js/admin.js');
 ui_assert(is_string($js), 'Admin JavaScript must be readable.');
 foreach (['.cf7aiv-setup-page', 'aria-current', 'checkValidity', 'reportValidity', 'aria-hidden', 'data-setup-summary', 'data-setup-option-group', 'textContent'] as $fragment) {
 	ui_assert(str_contains($js, $fragment), "Setup navigation JavaScript must contain {$fragment}.");
+}
+foreach (['.cf7aiv-integrations-page', 'cf7aiv-integration-tabs', 'data-tab', 'cf7aiv-save', 'cf7aiv-discard', 'data-dirty', 'data-save-state'] as $fragment) {
+	ui_assert(str_contains($js, $fragment), "Integrations JavaScript must contain {$fragment}.");
 }
 ui_assert(! str_contains($js, 'innerHTML'), 'Setup summary enhancement must not inject raw values as HTML.');
 ui_assert(

@@ -229,3 +229,190 @@
 		updateSummary();
 	});
 }());
+
+(function () {
+	'use strict';
+
+	var roots = document.querySelectorAll('.cf7aiv-integrations-page');
+
+	Array.prototype.forEach.call(roots, function (root) {
+		var tabLinks = Array.prototype.slice.call(root.querySelectorAll('.cf7aiv-integration-tabs [data-tab]'));
+		var panels = Array.prototype.slice.call(root.querySelectorAll('.cf7aiv-integration-tab-panel[data-tab]'));
+		var form = root.querySelector('[data-settings-form]');
+		var saveBars = Array.prototype.slice.call(root.querySelectorAll('.cf7aiv-save-bar'));
+		var returnTab = root.querySelector('[data-integration-return-tab]');
+		var activeTab = root.getAttribute('data-active-tab') || 'provider';
+		var tabNames = tabLinks.map(function (link) {
+			return link.getAttribute('data-tab');
+		});
+
+		if (!tabLinks.length) {
+			return;
+		}
+
+		var validTab = function (tab) {
+			return tabNames.indexOf(tab) !== -1 ? tab : tabNames[0];
+		};
+
+		var queryTab = function () {
+			var match = window.location.search.match(/[?&]tab=([^&]+)/);
+			if (!match) {
+				return null;
+			}
+			try {
+				return decodeURIComponent(match[1]);
+			} catch (error) {
+				return null;
+			}
+		};
+
+		var setActiveTab = function (tab, shouldFocus) {
+			activeTab = validTab(tab);
+			tabLinks.forEach(function (link) {
+				var isActive = link.getAttribute('data-tab') === activeTab;
+				link.classList.toggle('is-active', isActive);
+				link.setAttribute('aria-selected', isActive ? 'true' : 'false');
+			});
+			panels.forEach(function (panel) {
+				var isActive = panel.getAttribute('data-tab') === activeTab;
+				panel.classList.toggle('is-active', isActive);
+				panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+				panel.hidden = !isActive;
+			});
+			if (returnTab) {
+				returnTab.value = activeTab;
+			}
+			if (shouldFocus) {
+				var activeLink = tabLinks.find(function (link) {
+					return link.getAttribute('data-tab') === activeTab;
+				});
+				if (activeLink) {
+					try {
+						activeLink.focus({ preventScroll: true });
+					} catch (error) {
+						activeLink.focus();
+					}
+				}
+			}
+		};
+
+		var setProvider = function (provider) {
+			var selected = provider === 'openai' ? 'openai' : 'deepseek';
+			Array.prototype.forEach.call(root.querySelectorAll('[data-provider-panel="true"]'), function (panel) {
+				var isActive = panel.getAttribute('data-provider') === selected;
+				panel.classList.toggle('is-active', isActive);
+				panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+				panel.hidden = !isActive;
+			});
+		};
+
+		var setSaveState = function (state) {
+			var dirty = state !== 'saved';
+			var statusText = {
+				saved: 'Saved',
+				unsaved: 'Unsaved changes',
+				saving: 'Saving',
+				failed: 'Save failed'
+			}[state] || 'Saved';
+			saveBars.forEach(function (bar) {
+				bar.setAttribute('data-dirty', dirty ? 'true' : 'false');
+				bar.setAttribute('data-save-state', state);
+				var status = bar.querySelector('[data-save-status]');
+				if (status) {
+					status.textContent = statusText;
+				}
+				Array.prototype.forEach.call(bar.querySelectorAll('[name="cf7aiv-save"]'), function (button) {
+					button.disabled = !dirty;
+				});
+				Array.prototype.forEach.call(bar.querySelectorAll('[name="cf7aiv-discard"]'), function (button) {
+					button.disabled = !dirty;
+				});
+			});
+		};
+
+		var controls = function () {
+			if (!form) {
+				return [];
+			}
+			return Array.prototype.filter.call(form.querySelectorAll('input, select, textarea'), function (control) {
+				return control.getAttribute('data-integration-return-tab') === null;
+			});
+		};
+
+		var snapshot = [];
+		var takeSnapshot = function () {
+			snapshot = controls().map(function (control) {
+				return {
+					control: control,
+					value: control.value,
+					checked: control.checked
+				};
+			});
+		};
+
+		var hasChanges = function () {
+			return snapshot.some(function (item) {
+				return item.control.value !== item.value || item.control.checked !== item.checked;
+			});
+		};
+
+		setActiveTab(validTab(queryTab() || activeTab), false);
+		var providerSelector = root.querySelector('[data-provider-selector]');
+		if (providerSelector) {
+			setProvider(providerSelector.value);
+			providerSelector.addEventListener('change', function () {
+				setProvider(providerSelector.value);
+			});
+		}
+
+		tabLinks.forEach(function (link) {
+			link.addEventListener('click', function (event) {
+				var tab = validTab(link.getAttribute('data-tab'));
+				event.preventDefault();
+				setActiveTab(tab, true);
+				if (window.history && window.history.replaceState) {
+					window.history.replaceState({}, '', link.href);
+				}
+			});
+		});
+
+		if (!form) {
+			return;
+		}
+
+		takeSnapshot();
+		setSaveState(root.querySelector('.cf7aiv-save-bar[data-save-state="failed"]') ? 'failed' : 'saved');
+		form.addEventListener('input', function () {
+			setSaveState(hasChanges() ? 'unsaved' : 'saved');
+		});
+		form.addEventListener('change', function () {
+			setSaveState(hasChanges() ? 'unsaved' : 'saved');
+		});
+		form.addEventListener('submit', function () {
+			setSaveState('saving');
+		});
+
+		root.addEventListener('click', function (event) {
+			var discard = event.target.closest ? event.target.closest('[name="cf7aiv-discard"]') : null;
+			if (!discard || !root.contains(discard) || !hasChanges()) {
+				return;
+			}
+			if (!window.confirm('Discard unsaved integration changes?')) {
+				event.preventDefault();
+				return;
+			}
+			snapshot.forEach(function (item) {
+				item.control.value = item.value;
+				item.control.checked = item.checked;
+			});
+			if (providerSelector) {
+				setProvider(providerSelector.value);
+			}
+			setSaveState('saved');
+		});
+
+		window.addEventListener('popstate', function () {
+			setActiveTab(validTab(queryTab() || activeTab), false);
+		});
+	});
+}());

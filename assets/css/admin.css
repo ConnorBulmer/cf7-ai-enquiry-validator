@@ -393,6 +393,131 @@
 	outline-offset: 2px;
 }
 
+.cf7aiv-integrations-page .cf7aiv-integration-context {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--cf7aiv-space-2);
+	max-width: 1100px;
+	margin: var(--cf7aiv-space-4) 0;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tabs {
+	max-width: 1100px;
+	margin: var(--cf7aiv-space-5) 0 0;
+	border-bottom: 1px solid var(--cf7aiv-border);
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tabs ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--cf7aiv-space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tabs li {
+	margin: 0;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tabs a {
+	min-height: 44px;
+	border-bottom: 3px solid transparent;
+	border-radius: 0;
+	text-decoration: none;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tabs a.is-active {
+	border-bottom-color: #2271b1;
+	background: #f0f6fc;
+	color: #135e96;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tab-panel {
+	max-width: 1100px;
+	margin-top: var(--cf7aiv-space-4);
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tab-panel[aria-hidden="true"] {
+	display: none;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-tab-panel > .card {
+	max-width: none;
+	margin-top: 0;
+}
+
+.cf7aiv-integrations-page .cf7aiv-provider-fields,
+.cf7aiv-integrations-page .cf7aiv-reasoning-control {
+	margin: var(--cf7aiv-space-4) 0;
+	padding: var(--cf7aiv-space-4);
+	border: 1px solid var(--cf7aiv-border);
+	background: var(--cf7aiv-surface-subtle);
+}
+
+.cf7aiv-integrations-page .cf7aiv-provider-fields[aria-hidden="true"] {
+	display: none;
+}
+
+.cf7aiv-integrations-page .cf7aiv-form-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cf7aiv-integrations-page .cf7aiv-high-risk {
+	border-left: 4px solid #996800;
+	background: #fffdf5;
+}
+
+.cf7aiv-integrations-page .cf7aiv-high-risk .cf7aiv-safety-action {
+	border-color: #996800;
+	color: #6e4b00;
+}
+
+.cf7aiv-integrations-page .cf7aiv-save-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--cf7aiv-space-3);
+	max-width: 1100px;
+	margin: var(--cf7aiv-space-4) 0;
+	padding: var(--cf7aiv-space-3) var(--cf7aiv-space-4);
+	border: 1px solid var(--cf7aiv-border);
+	background: var(--cf7aiv-surface-subtle);
+	box-shadow: 0 -2px 8px rgba(29, 35, 39, 0.08);
+}
+
+.cf7aiv-integrations-page .cf7aiv-save-bar-top {
+	box-shadow: none;
+}
+
+.cf7aiv-integrations-page .cf7aiv-save-bar p {
+	margin: 0;
+	font-weight: 600;
+}
+
+.cf7aiv-integrations-page .cf7aiv-save-bar[data-save-state="unsaved"] p,
+.cf7aiv-integrations-page .cf7aiv-save-bar[data-save-state="saving"] p,
+.cf7aiv-integrations-page .cf7aiv-save-bar[data-save-state="failed"] p {
+	color: #6e4b00;
+}
+
+.cf7aiv-integrations-page .cf7aiv-save-bar .cf7aiv-actions {
+	margin: 0;
+}
+
+.cf7aiv-integrations-page .cf7aiv-integration-settings-form {
+	max-width: 1100px;
+}
+
+@media (min-width: 783px) {
+	.cf7aiv-integrations-page .cf7aiv-save-bar:not(.cf7aiv-save-bar-top) {
+		position: sticky;
+		bottom: 16px;
+		z-index: 2;
+	}
+}
+
 @media (max-width: 782px) {
 	.cf7aiv-setup-page .cf7aiv-setup-progress {
 		grid-template-columns: 1fr;
@@ -420,6 +545,35 @@
 	.cf7aiv-admin .cf7aiv-metric-grid,
 	.cf7aiv-admin .cf7aiv-panel-grid {
 		grid-template-columns: 1fr;
+	}
+
+	.cf7aiv-integrations-page .cf7aiv-form-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.cf7aiv-integrations-page .cf7aiv-integration-tabs ul {
+		flex-direction: column;
+	}
+
+	.cf7aiv-integrations-page .cf7aiv-integration-tabs a {
+		display: flex;
+		justify-content: center;
+		width: 100%;
+	}
+
+	.cf7aiv-integrations-page .cf7aiv-save-bar {
+		position: static;
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.cf7aiv-integrations-page .cf7aiv-save-bar .cf7aiv-actions {
+		width: 100%;
+	}
+
+	.cf7aiv-integrations-page .cf7aiv-save-bar .button {
+		flex: 1 1 auto;
+		justify-content: center;
 	}
 
 	.cf7aiv-admin .card,
@@ -456,7 +610,9 @@
 
 	.cf7aiv-admin .cf7aiv-status-badge,
 	.cf7aiv-admin .card,
-	.cf7aiv-admin .cf7aiv-table-region {
+	.cf7aiv-admin .cf7aiv-table-region,
+	.cf7aiv-integrations-page .cf7aiv-save-bar,
+	.cf7aiv-integrations-page .cf7aiv-high-risk {
 		border: 1px solid ButtonText;
 	}
 }
