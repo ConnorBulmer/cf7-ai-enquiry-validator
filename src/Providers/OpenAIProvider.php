@@ -19,7 +19,23 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		private readonly string $baseUrl = 'https://api.openai.com/v1/responses',
 		private readonly string $model = 'gpt-5.4-mini',
 		private readonly int $timeout = 30,
+		private readonly string $reasoningEffort = 'unsupported',
 	) {}
+
+	public static function reasoningOptions(string $model): array {
+		return self::supportsReasoning($model) ? ['off', 'standard', 'deep'] : ['unsupported'];
+	}
+
+	public static function reasoningDescription(string $model, string $effort): string {
+		if (! self::supportsReasoning($model) || $effort === 'unsupported') {
+			return 'Reasoning is unavailable for this OpenAI model or selected configuration.';
+		}
+		return match ($effort) {
+			'standard' => 'Standard OpenAI reasoning uses a bounded medium reasoning effort and may use more tokens.',
+			'deep' => 'Deep OpenAI reasoning uses a bounded high reasoning effort and may use more tokens.',
+			default => 'Reasoning is off for this OpenAI model.'
+		};
+	}
 
 	public function key(): string { return 'openai'; }
 
@@ -57,6 +73,9 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 			]],
 			'max_output_tokens' => $request->policySchema === \CF7AIV\Classification\PolicyValidator::SCHEMA_V2 ? 900 : 500,
 		];
+		if (self::supportsReasoning($this->model) && in_array($this->reasoningEffort, ['standard', 'deep'], true)) {
+			$payload['reasoning'] = ['effort' => $this->reasoningEffort === 'deep' ? 'high' : 'medium'];
+		}
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
 			'timeout' => max(5, min(120, $this->timeout)),
@@ -98,5 +117,9 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		if ($response->status >= 200 && $response->status < 300) { return; }
 		if ($response->status === 0 || $response->status === 408 || $response->status === 429 || $response->status >= 500) { throw new TransientProviderException('OpenAI suggestion request failed temporarily.'); }
 		throw new PermanentProviderException('OpenAI suggestion request failed.');
+	}
+
+	private static function supportsReasoning(string $model): bool {
+		return preg_match('/^(?:o[1-4](?:$|[-.])|gpt-5(?:$|[-.]))/i', trim($model)) === 1;
 	}
 }

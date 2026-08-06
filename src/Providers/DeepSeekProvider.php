@@ -22,7 +22,20 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		private readonly string $baseUrl = 'https://api.deepseek.com/chat/completions',
 		private readonly string $model = 'deepseek-v4-flash',
 		private readonly int $timeout = 30,
+		private readonly string $reasoningEffort = 'off',
 	) {}
+
+	public static function reasoningOptions(string $model): array {
+		return ['off', 'standard', 'deep'];
+	}
+
+	public static function reasoningDescription(string $model, string $effort): string {
+		return match ($effort) {
+			'standard' => 'Standard reasoning enables DeepSeek thinking with a bounded JSON output budget.',
+			'deep' => 'Deep reasoning enables a larger bounded DeepSeek thinking budget and may use more tokens.',
+			default => 'Reasoning is off; DeepSeek is limited to the bounded structured JSON output budget.',
+		};
+	}
 
 	public function key(): string { return 'deepseek'; }
 
@@ -57,6 +70,11 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	protected function send(ClassificationRequest $request, bool $reasoning): HttpResponse {
 		$schema = json_encode(ResultValidator::jsonSchema($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		$guidance = $this->v2JsonGuidance($request);
+		$reasoningEffort = $reasoning ? 'deep' : $this->reasoningEffort;
+		$thinking = match ($reasoningEffort) {
+			'standard', 'deep' => ['type' => 'enabled'],
+			default => ['type' => 'disabled'],
+		};
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
@@ -64,10 +82,10 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 				['role' => 'user', 'content' => json_encode($this->userInput($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)],
 			],
 			'response_format' => ['type' => 'json_object'],
-			'thinking' => ['type' => $reasoning ? 'enabled' : 'disabled'],
-			'max_tokens' => $reasoning ? 1600 : 900,
+			'thinking' => $thinking,
+			'max_tokens' => $reasoningEffort === 'deep' ? 1600 : 900,
 		];
-		if (! $reasoning) { $payload['temperature'] = 0; }
+		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
 			'timeout' => max(5, min(120, $this->timeout)),

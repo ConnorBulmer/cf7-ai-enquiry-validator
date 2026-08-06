@@ -7,16 +7,20 @@ namespace CF7AIV\Admin;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Infrastructure\Settings;
 use CF7AIV\Providers\DeepSeekProvider;
+use CF7AIV\Providers\OpenAIProvider;
 
 final class IntegrationsPage {
 	public static function render(): void {
 		if (! function_exists('current_user_can') || ! current_user_can('manage_options')) { throw new \RuntimeException('Administrator capability is required.'); }
-		$settings = function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : Settings::defaults();
+		$settings = Settings::withDefaults(function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : []);
 		$providers = (array) ($settings['providers'] ?? []);
 		$destinations = (array) ($settings['destinations'] ?? []);
 		$privacy = (array) ($settings['privacy'] ?? []);
 		$advanced = ! empty($settings['ui']['advanced_mode']);
-		$selectedProvider = (string) ($providers['selected'] ?? 'deepseek');
+		$selectedProvider = in_array((string) ($providers['selected'] ?? 'deepseek'), ['deepseek', 'openai'], true) ? (string) $providers['selected'] : 'deepseek';
+		$deepSeekModel = (string) ($providers['deepseek_model'] ?? 'deepseek-v4-flash');
+		$openAiModel = (string) ($providers['openai_model'] ?? 'gpt-5.4-mini');
+		$selectedModel = $selectedProvider === 'openai' ? $openAiModel : $deepSeekModel;
 		$verificationSupported = self::verificationSupported($selectedProvider);
 		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>Integrations</h1><p>All credentials are write-only. Blank secret fields retain the currently stored encrypted value.</p></div>';
 		$testStatus = is_scalar($_GET['microsoft_test'] ?? null) ? (string) $_GET['microsoft_test'] : '';
@@ -31,14 +35,17 @@ final class IntegrationsPage {
 		wp_nonce_field('cf7aiv_settings');
 		echo '<section class="card cf7aiv-integration-panel"><h2>Interface mode</h2><div class="cf7aiv-form-grid"><input type="hidden" name="cf7aiv[ui][advanced_mode]" value="0">';
 		echo self::checkbox('Advanced mode', 'cf7aiv[ui][advanced_mode]', $advanced) . '</div><p>Advanced mode reveals additional technical policy and provider diagnostics. Hiding it does not discard saved settings.</p></section>';
-		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]">' . self::option('deepseek', (string) ($providers['selected'] ?? 'deepseek')) . self::option('openai', (string) ($providers['selected'] ?? 'deepseek')) . '</select></label>';
-		echo self::text('DeepSeek model', 'cf7aiv[providers][deepseek_model]', (string) ($providers['deepseek_model'] ?? ''));
+		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2><p class="description">Selected provider: ' . self::e($selectedProvider) . '; model: ' . self::e($selectedModel) . '.</p><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]">' . self::option('deepseek', $selectedProvider) . self::option('openai', $selectedProvider) . '</select></label>';
+		echo self::text('DeepSeek model', 'cf7aiv[providers][deepseek_model]', $deepSeekModel);
 		echo self::text('DeepSeek base URL', 'cf7aiv[providers][deepseek_base_url]', (string) ($providers['deepseek_base_url'] ?? ''));
 		echo self::secret('DeepSeek API key', 'cf7aiv[providers][deepseek_api_key]');
-		echo self::text('OpenAI model', 'cf7aiv[providers][openai_model]', (string) ($providers['openai_model'] ?? ''));
+		echo self::reasoningControl('deepseek', $deepSeekModel, (string) ($providers['deepseek_reasoning_effort'] ?? 'off'));
+		echo self::text('OpenAI model', 'cf7aiv[providers][openai_model]', $openAiModel);
 		echo self::text('OpenAI base URL', 'cf7aiv[providers][openai_base_url]', (string) ($providers['openai_base_url'] ?? ''));
 		echo self::secret('OpenAI API key', 'cf7aiv[providers][openai_api_key]');
+		echo self::reasoningControl('openai', $openAiModel, (string) ($providers['openai_reasoning_effort'] ?? 'unsupported'));
 		echo '<label>Timeout <input type="number" min="3" max="60" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? 15) . '"></label></div>';
+		echo '<p class="description">Higher reasoning effort can increase token use and cost. Optional automatic-candidate verification is a separate second provider call and does not override policy, consent, attribution, mapping, lifecycle, or delivery gates.</p>';
 		echo '<fieldset><legend>Optional verification</legend><div class="cf7aiv-form-grid">';
 		if ($verificationSupported) {
 			echo '<input type="hidden" name="cf7aiv[automation][verification_mode]" value="' . self::e(Settings::VERIFICATION_OFF) . '">';
@@ -137,6 +144,25 @@ final class IntegrationsPage {
 	private static function secret(string $label, string $name): string { return '<label>' . self::e($label) . ' <input type="password" autocomplete="new-password" name="' . self::e($name) . '" value=""></label>'; }
 	private static function checkbox(string $label, string $name, bool $checked, string $value = '1'): string { return '<label><input type="checkbox" name="' . self::e($name) . '" value="' . self::e($value) . '" ' . ($checked ? 'checked' : '') . '> ' . self::e($label) . '</label>'; }
 	private static function option(string $value, string $selected): string { return '<option value="' . self::e($value) . '" ' . ($value === $selected ? 'selected' : '') . '>' . self::e($value) . '</option>'; }
+	private static function reasoningControl(string $provider, string $model, string $effort): string {
+		$isOpenAi = $provider === 'openai';
+		$options = $isOpenAi ? OpenAIProvider::reasoningOptions($model) : DeepSeekProvider::reasoningOptions($model);
+		$selected = in_array($effort, $options, true) ? $effort : (in_array('unsupported', $options, true) ? 'unsupported' : 'off');
+		if ($effort === 'unsupported' && ! in_array('unsupported', $options, true)) { array_unshift($options, 'unsupported'); }
+		$description = $isOpenAi
+			? OpenAIProvider::reasoningDescription($model, $selected)
+			: DeepSeekProvider::reasoningDescription($model, $selected);
+		$disabled = $options === ['unsupported'];
+		$name = "cf7aiv[providers][{$provider}_reasoning_effort]";
+		$html = '<fieldset data-provider="' . self::e($provider) . '"><legend>Reasoning effort</legend><label>' . self::e(ucfirst($provider)) . ' reasoning <select' . ($disabled ? '' : ' name="' . self::e($name) . '"') . ($disabled ? ' disabled' : '') . '>';
+		foreach ($options as $option) {
+			$label = $option === 'unsupported' ? 'Unavailable' : ucfirst($option);
+			$html .= '<option value="' . self::e($option) . '" ' . ($option === $selected ? 'selected' : '') . '>' . self::e($label) . '</option>';
+		}
+		$html .= '</select></label><p class="description">' . self::e($description) . '</p></fieldset>';
+		if ($disabled) { $html .= '<input type="hidden" name="' . self::e($name) . '" value="unsupported">'; }
+		return $html;
+	}
 	private static function verificationSupported(string $selected): bool {
 		$providers = function_exists('apply_filters') ? (array) apply_filters('cf7aiv_ai_providers', []) : [];
 		if (isset($providers[$selected])) {

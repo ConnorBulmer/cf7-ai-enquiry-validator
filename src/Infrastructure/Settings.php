@@ -44,6 +44,8 @@ final class Settings {
 			],
 			'providers' => [
 				'selected' => 'deepseek',
+				'deepseek_reasoning_effort' => 'off',
+				'openai_reasoning_effort' => 'unsupported',
 				'deepseek_model' => 'deepseek-v4-flash',
 				'deepseek_base_url' => 'https://api.deepseek.com/chat/completions',
 				'openai_model' => 'gpt-5.4-mini',

@@ -30,17 +30,21 @@ final class ClassificationHooks {
 
 	/** @param array<string, mixed> $providers @return array<string, mixed> */
 	public static function registerProviders(array $providers): array {
-		$settings = function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : Settings::defaults();
+		$settings = Settings::withDefaults(function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : []);
 		$transport = new WordPressHttpTransport();
 		$providers['deepseek'] = new DeepSeekProvider(
 			$transport, Crypto::secret('deepseek_api_key'),
 			(string) ($settings['providers']['deepseek_base_url'] ?? 'https://api.deepseek.com/chat/completions'),
 			(string) ($settings['providers']['deepseek_model'] ?? 'deepseek-v4-flash'),
+			30,
+			(string) ($settings['providers']['deepseek_reasoning_effort'] ?? 'off'),
 		);
 		$providers['openai'] = new OpenAIProvider(
 			$transport, Crypto::secret('openai_api_key'),
 			(string) ($settings['providers']['openai_base_url'] ?? 'https://api.openai.com/v1/responses'),
 			(string) ($settings['providers']['openai_model'] ?? 'gpt-5.4-mini'),
+			30,
+			(string) ($settings['providers']['openai_reasoning_effort'] ?? 'unsupported'),
 		);
 		return $providers;
 	}

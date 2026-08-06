@@ -108,6 +108,19 @@ cf7aiv_integration_assert(! CF7AIV\Integration\OperationalSafety::isSafe($unsafe
 $unsafeServerGtmSettings = $pilotSettings; $unsafeServerGtmSettings['destinations']['server_gtm']['dry_run'] = false;
 cf7aiv_integration_assert(! CF7AIV\Integration\OperationalSafety::isSafe($unsafeServerGtmSettings), 'A non-dry-run server-side GTM destination must fail the operational safety guard.');
 
+$GLOBALS['cf7aiv_integration_options'][CF7AIV\Infrastructure\Settings::OPTION] = CF7AIV\Infrastructure\Settings::withDefaults([
+	'providers' => [
+		'deepseek_reasoning_effort' => 'deep',
+		'openai_reasoning_effort' => 'standard',
+	],
+]);
+$registeredProviders = CF7AIV\Classification\ClassificationHooks::registerProviders([]);
+$deepReasoningProperty = new ReflectionProperty($registeredProviders['deepseek'], 'reasoningEffort');
+$openAiReasoningProperty = new ReflectionProperty($registeredProviders['openai'], 'reasoningEffort');
+$deepReasoningProperty->setAccessible(true);
+$openAiReasoningProperty->setAccessible(true);
+cf7aiv_integration_assert($deepReasoningProperty->getValue($registeredProviders['deepseek']) === 'deep' && $openAiReasoningProperty->getValue($registeredProviders['openai']) === 'standard', 'Provider registration must pass hydrated reasoning settings to both provider adapters.');
+
 $GLOBALS['wpdb'] = new class {
 	public string $prefix = 'wp_';
 	public function prepare(string $sql, mixed ...$arguments): string { return str_replace('%s', "'wp_db7_forms'", $sql); }
