@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace CF7AIV\Delivery;
 
+use CF7AIV\Admin\DiagnosticsService;
 use CF7AIV\Contracts\DestinationInterface;
 use CF7AIV\Domain\DeliveryResult;
 use CF7AIV\Hooks;
@@ -24,7 +25,11 @@ final class DeliveryWorker {
 	}
 	public static function standard(): self { return new self(new WpDeliveryStore()); }
 	public function process(int $itemId): void {
-		$item = ($this->itemResolver)($itemId); if (! is_array($item) || ($item['tier_id'] ?? '') === '' || ! array_key_exists('is_shadow',$item) || (int)$item['is_shadow'] !== 0 || ! empty($item['is_calibration']) || ! empty($item['is_historical'])) { return; }
+		$item = ($this->itemResolver)($itemId);
+		if (! is_array($item)) { $this->gate($itemId, '', 'item_not_found'); return; }
+		if (($item['tier_id'] ?? '') === '') { $this->gate($itemId, '', 'tier_not_classified'); return; }
+		if (! array_key_exists('is_shadow', $item) || (int) $item['is_shadow'] !== 0) { $this->gate($itemId, '', 'shadow_item'); return; }
+		if (! empty($item['is_calibration']) || ! empty($item['is_historical'])) { $this->gate($itemId, '', 'calibration_or_historical_item'); return; }
 		$settings = ($this->settingsResolver)();
 		$automatic = ($item['decision_state'] ?? '') === 'strong_match';
 		if ($automatic && ($settings['automation']['verification_mode'] ?? 'off') === 'automatic_candidates') {
@@ -45,20 +50,24 @@ final class DeliveryWorker {
 			try { $manual = (bool) ($this->manualApprovalResolver)($item); }
 			catch (Throwable) { $manual = false; }
 		}
-		if (! $automatic && ! $manual) { return; }
+		if (! $automatic && ! $manual) { $this->gate($itemId, '', 'not_approved'); return; }
 		[$attribution, $consent] = ($this->signalsResolver)($item); $destinations = ($this->destinationResolver)();
-		foreach (($this->mappingResolver)((string) $item['tier_id']) as $mapping) {
-			if (! $mapping instanceof DeliveryMapping || ! $mapping->isPublished() || $this->store->isPaused($mapping->destinationKey)) { continue; }
-			$destination = $destinations[$mapping->destinationKey] ?? null;
-			if (! $destination instanceof DestinationInterface || ! $this->configurationReady($mapping->destinationKey, $settings)) { continue; }
-			$required = match ($mapping->destinationKey) { 'ga4' => ['analytics_storage'], 'microsoft_uet' => ['ad_storage'], default => ['analytics_storage', 'ad_storage'] };
-			try { $decision = ConsentPolicy::evaluate((string) ($settings['consent']['mode'] ?? 'respect'), is_array($consent) ? $consent : [], (array) ($settings['consent']['override'] ?? []), $required); } catch (Throwable) { continue; }
-			if (! $decision->permitted) { continue; }
-			if (! self::signalsReady($mapping->destinationKey, is_array($attribution) ? $attribution : [], $item, $settings, $decision->actual)) { continue; }
+		$mappings = ($this->mappingResolver)((string) $item['tier_id']);
+		if ($mappings === []) { $this->gate($itemId, '', 'no_published_mapping'); return; }
+		foreach ($mappings as $mapping) {
+			$destinationKey = $mapping instanceof DeliveryMapping ? $mapping->destinationKey : '';
+			if (! $mapping instanceof DeliveryMapping || ! $mapping->isPublished()) { $this->gate($itemId, $destinationKey, 'mapping_not_published'); continue; }
+			if ($this->store->isPaused($destinationKey)) { $this->gate($itemId, $destinationKey, 'destination_paused'); continue; }
+			$destination = $destinations[$destinationKey] ?? null;
+			if (! $destination instanceof DestinationInterface || ! $this->configurationReady($destinationKey, $settings)) { $this->gate($itemId, $destinationKey, 'destination_not_configured'); continue; }
+			$required = match ($destinationKey) { 'ga4' => ['analytics_storage'], 'microsoft_uet' => ['ad_storage'], default => ['analytics_storage', 'ad_storage'] };
+			try { $decision = ConsentPolicy::evaluate((string) ($settings['consent']['mode'] ?? 'respect'), is_array($consent) ? $consent : [], (array) ($settings['consent']['override'] ?? []), $required); } catch (Throwable) { $this->gate($itemId, $destinationKey, 'consent_evaluation_failed'); continue; }
+			if (! $decision->permitted) { $this->gate($itemId, $destinationKey, 'consent_not_permitted'); continue; }
+			if (! self::signalsReady($destinationKey, is_array($attribution) ? $attribution : [], $item, $settings, $decision->actual)) { $this->gate($itemId, $destinationKey, 'signals_not_ready'); continue; }
 			$enhanced = ! empty($settings['privacy']['enhanced_matching']) && ($decision->actual['ad_user_data'] ?? 'unknown') === 'granted';
 			$event = EnvelopeBuilder::build($item, $mapping, is_array($attribution) ? $attribution : [], $decision->actual, $enhanced, $decision->audit);
 			$delivery = $this->store->claim($itemId, $mapping, $event);
-			if (empty($delivery['acquired'])) { continue; }
+			if (empty($delivery['acquired'])) { $this->gate($itemId, $destinationKey, 'claim_not_acquired'); continue; }
 			try { $result = $destination->send($event); } catch (Throwable) { $result = new DeliveryResult(false, false, null, 'Destination configuration is invalid.'); }
 			$attempt = $this->store->record((int) ($delivery['id'] ?? 0), $result, (string) ($delivery['lease_token'] ?? ''));
 			if (function_exists('do_action')) { do_action(Hooks::AFTER_DELIVERY, (int) ($delivery['id'] ?? 0), $itemId, $mapping->destinationKey, $result); }
@@ -66,6 +75,7 @@ final class DeliveryWorker {
 			if (! $result->successful && ! $result->retryable && ! $result->dryRun && $this->store->permanentFailures($mapping->destinationKey) >= max(1, (int) ($settings['delivery']['pause_threshold'] ?? 3))) { $this->store->pause($mapping->destinationKey, $result->error ?? 'Repeated permanent delivery failure.'); }
 		}
 	}
+	private function gate(int $itemId, string $destination, string $reason): void { DiagnosticsService::recordGate($itemId, $destination, $reason); }
 	/** @param array<string,mixed> $settings */
 	private function configurationReady(string $destinationKey, array $settings): bool {
 		$config = (array) ($settings['destinations'][$destinationKey] ?? []);
