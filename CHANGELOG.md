@@ -2,6 +2,14 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.18 — 2026-08-06
+
+- Added a read-only operational doctor and per-item diagnosis command that expose queue, attribution issue-code, consent, destination, mapping, and delivery-gate state without exposing enquiry content or secrets.
+- Added delivery gate lifecycle observability and optional `CF7AIV_DEBUG` logging for skipped delivery decisions.
+- Changed rejected administrator requests from uncaught critical errors to controlled HTTP 403 responses.
+- Added focused diagnostics regression coverage and corrected tablet Overview distribution-table overflow.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.17 — 2026-08-04
 
 - Fixed queued work being discarded. `Queue::enqueue()` and `Queue::schedule()`

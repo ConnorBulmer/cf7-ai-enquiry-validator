@@ -22,5 +22,5 @@ diagnostics_assert(str_contains($worker, 'DiagnosticsService::recordGate'), 'Del
 diagnostics_assert(str_contains($diagnostics, "cf7aiv_delivery_gate"), 'Delivery gate lifecycle event must be exposed.');
 diagnostics_assert(str_contains($guard, 'wp_die') && str_contains($guard, "'response' => 403"), 'Invalid admin requests must use a controlled HTTP 403 response.');
 diagnostics_assert(str_contains($css, '@media (min-width: 783px) and (max-width: 1100px)'), 'Overview tablet layout regression rule must exist.');
-diagnostics_assert(str_contains($css, '.cf7aiv-admin .cf7aiv-distribution-panel .cf7aiv-count-grid'), 'Tablet rule must constrain Overview distribution tables.');
+diagnostics_assert(str_contains($css, '.cf7aiv-admin .cf7aiv-panel .cf7aiv-compact-table'), 'Tablet rule must constrain Overview compact tables.');
 echo "PASS DiagnosticsTest\n";

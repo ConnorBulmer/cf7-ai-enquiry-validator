@@ -243,7 +243,12 @@
 }
 
 @media (min-width: 783px) and (max-width: 1100px) {
-	.cf7aiv-admin .cf7aiv-distribution-panel .cf7aiv-count-grid {
+	.cf7aiv-admin .cf7aiv-panel {
+		overflow: hidden;
+	}
+
+	.cf7aiv-admin .cf7aiv-panel .cf7aiv-compact-table {
+		display: block;
 		min-width: 0;
 		max-width: 100%;
 		width: 100%;
