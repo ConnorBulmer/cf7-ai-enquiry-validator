@@ -73,6 +73,21 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.18 diagnostics and delivery observability
+
+Version 0.2.18 adds a read-only operational doctor and per-item diagnosis path
+for live troubleshooting. `wp cf7aiv doctor` reports queue state, captured but
+unclassified items, attribution readiness and safe issue-code counts, consent
+integration detection, destination readiness, and published mapping readiness.
+`wp cf7aiv diagnose --item=ID` walks one stored item through classification,
+lifecycle, attribution, consent, and mapping/destination gates without sending
+or claiming a delivery.
+
+Delivery gate decisions also emit the `cf7aiv_delivery_gate` lifecycle action and
+optional `CF7AIV_DEBUG` error-log records. Invalid administrator nonces now
+return a controlled HTTP 403 instead of an uncaught critical error. Schema
+remains version 10, so no migration is required.
+
 ### Version 0.2.17 queue and Consent Mode attribution fixes
 
 Version 0.2.17 corrects three defects that each stopped qualified conversions

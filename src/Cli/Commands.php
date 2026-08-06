@@ -6,6 +6,7 @@ namespace CF7AIV\Cli;
 
 use CF7AIV\Admin\CalibrationService;
 use CF7AIV\Admin\CalibrationPolicySnapshot;
+use CF7AIV\Admin\DiagnosticsService;
 use CF7AIV\Admin\HealthService;
 use CF7AIV\Classification\PolicyRepository;
 use CF7AIV\Contracts\AIProviderInterface;
@@ -48,6 +49,17 @@ final class Commands {
 	/** @param list<string> $args @param array<string, mixed> $assocArgs */
 	public function health(array $args, array $assocArgs): void {
 		$this->json((new HealthService())->inspect());
+	}
+
+	/** @param list<string> $args @param array<string, mixed> $assocArgs */
+	public function doctor(array $args, array $assocArgs): void {
+		$this->json((new DiagnosticsService())->inspect());
+	}
+
+	/** @param list<string> $args @param array<string, mixed> $assocArgs */
+	public function diagnose(array $args, array $assocArgs): void {
+		$itemId = (int) ($assocArgs['item'] ?? ($args[0] ?? 0));
+		$this->json((new DiagnosticsService())->diagnose($itemId));
 	}
 
 	/** @param list<string> $args @param array<string, mixed> $assocArgs */

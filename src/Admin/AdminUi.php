@@ -30,7 +30,7 @@ final class AdminUi {
 
 	/** @param array<int,array{label:mixed,total:mixed}> $rows */
 	public static function labelCountTable(string $caption, array $rows): string {
-		$html = '<table class="widefat striped cf7aiv-compact-table"><caption>' . self::e($caption) . '</caption><thead><tr><th scope="col">Label</th><th scope="col">Count</th></tr></thead><tbody>';
+		$html = '<table class="widefat striped cf7aiv-compact-table cf7aiv-count-grid"><caption>' . self::e($caption) . '</caption><thead><tr><th scope="col">Label</th><th scope="col">Count</th></tr></thead><tbody>';
 		foreach ($rows as $row) {
 			$html .= '<tr><th scope="row">' . self::e((string) ($row['label'] ?? '')) . '</th><td>' . self::e((string) ($row['total'] ?? '0')) . '</td></tr>';
 		}

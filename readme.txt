@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.17
+Stable tag: 0.2.18
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.18 =
+* Adds a read-only operational doctor and per-item diagnosis command.
+* Exposes safe attribution issue-code counts, queue backlog state, destination/mapping readiness, and delivery gate reasons.
+* Returns controlled HTTP 403 responses for rejected administrator requests and adds tablet Overview overflow coverage.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.17 =
 * Fixes queued work being discarded: Action Scheduler's `$unique` flag ignores arguments, so only one action per hook could be pending site-wide and every per-item job enqueued behind another was dropped silently.
