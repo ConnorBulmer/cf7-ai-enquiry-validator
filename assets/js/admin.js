@@ -125,7 +125,7 @@
 		}, true);
 
 		var packSelect = root.querySelector('[data-setup-pack]');
-		var guidedPackInput = root.querySelector('[data-setup-guided-pack]');
+		var guidedPackSelect = root.querySelector('[data-setup-guided-pack]');
 
 		var setSummary = function (key, value) {
 			var target = root.querySelector('[data-setup-summary="' + key + '"]');
@@ -192,12 +192,20 @@
 		};
 
 		if (packSelect) {
-			if (guidedPackInput) {
-				guidedPackInput.value = packSelect.value;
+			if (guidedPackSelect) {
+				guidedPackSelect.value = packSelect.value;
 			}
 			packSelect.addEventListener('change', function () {
-				if (guidedPackInput) {
-					guidedPackInput.value = packSelect.value;
+				if (guidedPackSelect) {
+					guidedPackSelect.value = packSelect.value;
+				}
+				updateSummary();
+			});
+		}
+		if (guidedPackSelect) {
+			guidedPackSelect.addEventListener('change', function () {
+				if (packSelect) {
+					packSelect.value = guidedPackSelect.value;
 				}
 				updateSummary();
 			});

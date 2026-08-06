@@ -309,6 +309,14 @@ admin_assert(
 	&& ! str_contains($scanForm[1], 'data-setup-scan-pack'),
 	'No-JavaScript scan submission must use the selected pack control owned by the scan form.'
 );
+$guidedForm = [];
+preg_match('/(<form[^>]*id="cf7aiv-guided-policy-form"[^>]*>.*?<\/form>)/s', $setup, $guidedForm);
+admin_assert(
+	isset($guidedForm[1])
+	&& preg_match('/<select[^>]*name="guided\[pack_key\]"[^>]*data-setup-guided-pack/', $guidedForm[1]) === 1
+	&& ! preg_match('/<input[^>]*type="hidden"[^>]*name="guided\[pack_key\]"/', $guidedForm[1]),
+	'No-JavaScript guided saving must use a current pack select owned by the guided form.'
+);
 foreach (['pack', 'business_description', 'services', 'audiences', 'primary_definition', 'exclusion_codes', 'ai_whitelist'] as $summaryBinding) {
 	admin_assert(str_contains($setup, 'data-setup-summary="' . $summaryBinding . '"'), "Setup review must bind the {$summaryBinding} summary.");
 }

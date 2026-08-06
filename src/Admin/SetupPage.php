@@ -78,7 +78,7 @@ final class SetupPage {
 		echo '</div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="button" class="button button-primary" data-setup-next="qualification">Continue to qualification</button> <button type="button" class="button button-secondary" data-setup-back="context" disabled>Back</button></p></section>';
 
-		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-guided-policy-form" class="cf7aiv-setup-guided-form"><input type="hidden" name="action" value="cf7aiv_save_guided_policy"><input type="hidden" name="return_page" value="setup"><input type="hidden" name="guided[policy_key]" value="global"><input type="hidden" name="guided[pack_key]" value="' . self::e($selectedPack) . '" data-setup-guided-pack>';
+		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-guided-policy-form" class="cf7aiv-setup-guided-form"><input type="hidden" name="action" value="cf7aiv_save_guided_policy"><input type="hidden" name="return_page" value="setup"><input type="hidden" name="guided[policy_key]" value="global">';
 		wp_nonce_field('cf7aiv_guided_policy');
 		echo '<section id="cf7aiv-setup-step-qualification" class="card cf7aiv-setup-step" data-step="qualification"><h2 tabindex="-1">2. Define qualification</h2><p>Describe the legitimate business context and the signals that distinguish a primary opportunity.</p><div class="cf7aiv-setup-prose-fields">';
 		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-business-description">Describe the business</label><textarea id="cf7aiv-business-description" name="guided[business_description]" rows="4" required></textarea></div>';
@@ -101,6 +101,11 @@ final class SetupPage {
 		echo '<div><dt>Exclusions</dt><dd data-setup-summary="exclusion_codes">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>AI whitelist</dt><dd data-setup-summary="ai_whitelist">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>Draft status</dt><dd>' . self::e((string) ($draftSummary['status'] ?? 'Not saved')) . '</dd></div></dl>';
+		echo '<div class="cf7aiv-setup-field-group cf7aiv-setup-guided-pack-confirmation"><label for="cf7aiv-guided-draft-pack">Starter pack for this draft</label><select id="cf7aiv-guided-draft-pack" name="guided[pack_key]" data-setup-guided-pack required>';
+		foreach ($packs as $key => $pack) {
+			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e((string) ($pack['pack']['label'] ?? $key)) . '</option>';
+		}
+		echo '</select><p class="description">Confirm the same pack selected in Context before saving this draft. This control remains available without JavaScript.</p></div>';
 		echo '<div class="cf7aiv-setup-field-group cf7aiv-setup-review-version"><label for="cf7aiv-guided-version">Draft version</label><input id="cf7aiv-guided-version" name="guided[version]" value="' . self::e(gmdate('Ymd-His')) . '" required><p class="description">Use the generated version unless you need a recognizable internal draft label.</p></div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="submit" class="button button-primary">Save guided draft</button> <button type="button" class="button button-secondary" data-setup-back="fields">Back to AI fields</button></p></section></form>';
 
