@@ -101,6 +101,9 @@ $oaiOptionsUnsupported = CF7AIV\Providers\OpenAIProvider::reasoningOptions('gpt-
 provider_assert(is_array($oaiOptionsUnsupported), 'OpenAIProvider::reasoningOptions() must return an array for gpt-4o.');
 provider_assert(in_array('unsupported', $oaiOptionsUnsupported, true), 'OpenAI reasoning options must include unsupported for gpt-4o.');
 provider_assert(! in_array('standard', $oaiOptionsUnsupported, true), 'OpenAI gpt-4o must not include standard in reasoning options.');
+$oaiAliasOptions = CF7AIV\Providers\OpenAIProvider::reasoningOptions('gpt-5-chat-latest');
+provider_assert(in_array('unsupported', $oaiAliasOptions, true), 'OpenAI gpt-5-chat-latest must render reasoning as unsupported.');
+provider_assert(! in_array('standard', $oaiAliasOptions, true), 'OpenAI gpt-5-chat-latest must not expose standard reasoning options.');
 
 $oaiDesc = CF7AIV\Providers\OpenAIProvider::reasoningDescription('gpt-5.4-mini', 'unsupported');
 provider_assert(is_string($oaiDesc) && $oaiDesc !== '', 'OpenAI unsupported reasoning description must be a non-empty string.');
@@ -225,7 +228,7 @@ provider_assert(($v1TransportDeep->lastPayload['max_tokens'] ?? 0) === 1600, 'De
 
 // ─── OpenAI send() payload assertions ────────────────────────────────────────
 
-// OpenAI unsupported → no reasoning parameter added
+// OpenAI unsupported model alias → no reasoning parameter added
 $oaiTransport = new class implements CF7AIV\Infrastructure\HttpTransportInterface {
 	public ?array $lastPayload = null;
 	public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse {
@@ -235,9 +238,9 @@ $oaiTransport = new class implements CF7AIV\Infrastructure\HttpTransportInterfac
 		return new CF7AIV\Infrastructure\HttpResponse(200, $body);
 	}
 };
-$oaiUnsupportedInstance = new CF7AIV\Providers\OpenAIProvider($oaiTransport, 'key', 'https://api.openai.com/v1/responses', 'gpt-5.4-mini', 30, 'unsupported');
+$oaiUnsupportedInstance = new CF7AIV\Providers\OpenAIProvider($oaiTransport, 'key', 'https://api.openai.com/v1/responses', 'gpt-5-chat-latest', 30, 'standard');
 try { $oaiUnsupportedInstance->classify($mockRequest); } catch (Throwable) {}
-provider_assert(! isset($oaiTransport->lastPayload['reasoning']), 'OpenAI unsupported model must not send reasoning parameter.');
+provider_assert(! isset($oaiTransport->lastPayload['reasoning']), 'OpenAI unsupported model alias must not send reasoning parameter.');
 provider_assert(($oaiTransport->lastPayload['store'] ?? true) === false, 'OpenAI must retain store=false regardless of reasoning.');
 
 $oaiSupportedTransport = new class implements CF7AIV\Infrastructure\HttpTransportInterface {

@@ -13,6 +13,29 @@ use CF7AIV\Infrastructure\HttpResponse;
 use CF7AIV\Infrastructure\HttpTransportInterface;
 
 final class OpenAIProvider extends JsonProvider implements PolicySuggestionProviderInterface {
+	private const REASONING_MODELS = [
+		'o1' => true,
+		'o1-mini' => true,
+		'o1-preview' => true,
+		'o1-pro' => true,
+		'o3' => true,
+		'o3-mini' => true,
+		'o3-pro' => true,
+		'o4-mini' => true,
+		'o4-mini-2025-04-16' => true,
+		'gpt-5' => true,
+		'gpt-5-mini' => true,
+		'gpt-5-nano' => true,
+		'gpt-5.1' => true,
+		'gpt-5.1-mini' => true,
+		'gpt-5.2' => true,
+		'gpt-5.2-mini' => true,
+		'gpt-5.4' => true,
+		'gpt-5.4-mini' => true,
+		'gpt-5.4-nano' => true,
+		'gpt-5.4-mini-2026-03-17' => true,
+	];
+
 	public function __construct(
 		private readonly HttpTransportInterface $transport,
 		private readonly string $apiKey,
@@ -120,6 +143,6 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 	}
 
 	private static function supportsReasoning(string $model): bool {
-		return preg_match('/^(?:o[1-4](?:$|[-.])|gpt-5(?:$|[-.]))/i', trim($model)) === 1;
+		return isset(self::REASONING_MODELS[strtolower(trim($model))]);
 	}
 }
