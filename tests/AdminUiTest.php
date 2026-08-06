@@ -1,9 +1,29 @@
 <?php
 declare(strict_types=1);
 
+define('CF7AIV\\DIR', dirname(__DIR__) . '/');
+
 function esc_html(string $value): string {
 	return htmlspecialchars($value, ENT_QUOTES);
 }
+
+function current_user_can(string $capability): bool {
+	return true;
+}
+
+function get_option(string $key, mixed $default = false): mixed {
+	return $default;
+}
+
+function admin_url(string $path = ''): string {
+	return 'https://example.test/wp-admin/' . $path;
+}
+
+function wp_nonce_field(string $action, string $name = '_wpnonce'): void {
+	echo '<input type="hidden" name="' . $name . '" value="nonce">';
+}
+
+$GLOBALS['wpdb'] = (object) ['prefix' => ''];
 
 spl_autoload_register(static function (string $class): void {
 	$prefix = 'CF7AIV\\';
@@ -17,6 +37,7 @@ function ui_assert(bool $condition, string $message): void {
 }
 
 use CF7AIV\Admin\AdminUi;
+use CF7AIV\Admin\SetupPage;
 
 $badge = AdminUi::badge('<Live>', 'positive');
 ui_assert(str_contains($badge, 'cf7aiv-status-badge is-positive'), 'Badge tone must be prefixed.');
@@ -27,6 +48,14 @@ ui_assert(str_contains($metric, 'cf7aiv-metric') && str_contains($metric, '<dt>Q
 
 $empty = AdminUi::emptyState('No reviewed enquiries yet.');
 ui_assert(str_contains($empty, 'role="status"') && str_contains($empty, 'No reviewed enquiries yet.'), 'Empty states must be explicit status text.');
+
+ob_start();
+SetupPage::render();
+$setup = ob_get_clean();
+ui_assert(str_contains($setup, 'cf7aiv-setup-page'), 'Setup needs a dedicated root.');
+ui_assert(str_contains($setup, 'cf7aiv-setup-progress'), 'Setup needs progress navigation.');
+ui_assert(substr_count($setup, 'cf7aiv-setup-step') >= 5, 'Setup needs five guided steps.');
+ui_assert(str_contains($setup, 'Save guided draft'), 'Setup needs a clear draft-save action.');
 
 $table = AdminUi::labelCountTable('Counts by state', [['label' => '<classified>', 'total' => '2']]);
 ui_assert(str_contains($table, '<caption>Counts by state</caption>') && str_contains($table, '&lt;classified&gt;') && str_contains($table, '<td>2</td>'), 'Count tables must be semantic and escaped.');
@@ -46,6 +75,12 @@ ui_assert(
 	(bool) preg_match('/\.cf7aiv-admin \.cf7aiv-form-grid\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(auto-fit, minmax\(190px, 1fr\)\);[^}]*gap:\s*var\(--cf7aiv-space-4\);[^}]*\}/s', $css),
 	'Form grids must define scoped desktop grid display, columns, and spacing.'
 );
+
+$js = file_get_contents(__DIR__ . '/../assets/js/admin.js');
+ui_assert(is_string($js), 'Admin JavaScript must be readable.');
+foreach (['.cf7aiv-setup-page', 'aria-current', 'checkValidity', 'reportValidity', 'aria-hidden', 'data-setup-scan-pack'] as $fragment) {
+	ui_assert(str_contains($js, $fragment), "Setup navigation JavaScript must contain {$fragment}.");
+}
 ui_assert(
 	(bool) preg_match('/\.cf7aiv-admin \.card,\s*\.cf7aiv-admin \.cf7aiv-panel\s*\{[^}]*min-width:\s*0;/s', $css),
 	'Plugin admin cards must override WordPress minimum widths so responsive grid items can shrink.'

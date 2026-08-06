@@ -2,7 +2,7 @@
 /** Standalone administration, review, privacy, and operations tests. */
 declare(strict_types=1);
 function admin_assert(bool $condition, string $message): void { if (! $condition) { throw new RuntimeException($message); } }
-$GLOBALS['admin_actions'] = []; $GLOBALS['admin_filters'] = []; $GLOBALS['admin_menus'] = []; $GLOBALS['admin_submenus'] = []; $GLOBALS['admin_fired'] = []; $GLOBALS['admin_options'] = []; $GLOBALS['admin_enqueued_styles'] = []; $GLOBALS['admin_allowed'] = true; $GLOBALS['admin_nonce_valid'] = true; $GLOBALS['admin_throw_action'] = null;
+$GLOBALS['admin_actions'] = []; $GLOBALS['admin_filters'] = []; $GLOBALS['admin_menus'] = []; $GLOBALS['admin_submenus'] = []; $GLOBALS['admin_fired'] = []; $GLOBALS['admin_options'] = []; $GLOBALS['admin_enqueued_styles'] = []; $GLOBALS['admin_enqueued_scripts'] = []; $GLOBALS['admin_allowed'] = true; $GLOBALS['admin_nonce_valid'] = true; $GLOBALS['admin_throw_action'] = null;
 function add_action(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['admin_actions'][$hook][] = [$callback,$priority,$acceptedArgs]; }
 function add_filter(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['admin_filters'][$hook][] = [$callback,$priority,$acceptedArgs]; }
 function do_action(string $hook, mixed ...$args): void { $GLOBALS['admin_fired'][] = [$hook,$args]; if ($GLOBALS['admin_throw_action'] === $hook) { throw new RuntimeException('Observer failure.'); } }
@@ -30,6 +30,7 @@ function add_menu_page(mixed ...$args): string { $GLOBALS['admin_menus'][] = $ar
 function add_submenu_page(mixed ...$args): string { $GLOBALS['admin_submenus'][] = $args; return 'submenu'; }
 function register_setting(mixed ...$args): bool { return true; }
 function wp_enqueue_style(string $handle, string $src, array $dependencies = [], string|bool|null $version = false): void { $GLOBALS['admin_enqueued_styles'][] = compact('handle', 'src', 'dependencies', 'version'); }
+function wp_enqueue_script(string $handle, string $src, array $dependencies = [], string|bool|null $version = false, array|bool $args = []): void { $GLOBALS['admin_enqueued_scripts'][] = compact('handle', 'src', 'dependencies', 'version', 'args'); }
 function sanitize_text_field(string $value): string { return trim(strip_tags($value)); }
 function sanitize_email(string $value): string { return filter_var($value, FILTER_VALIDATE_EMAIL) ? strtolower($value) : ''; }
 define('ABSPATH', __DIR__ . '/'); define('ARRAY_A', 'ARRAY_A'); define('AUTH_KEY', 'admin-auth'); define('SECURE_AUTH_KEY', 'admin-secure');
@@ -295,6 +296,10 @@ $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['setup']['draf
 $GLOBALS['wpdb']->pendingSuggestions=[['id'=>1,'suggestion_type'=>'service','value_json'=>'"Presentation test"','provenance_json'=>'["starter-pack"]']];
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$policy=ob_get_clean();
 ob_start();CF7AIV\Admin\AdminPages::setup();$setup=ob_get_clean();
+admin_assert(str_contains($setup, 'cf7aiv-setup-page'), 'Setup needs a dedicated root.');
+admin_assert(str_contains($setup, 'cf7aiv-setup-progress'), 'Setup needs progress navigation.');
+admin_assert(substr_count($setup, 'cf7aiv-setup-step') >= 5, 'Setup needs five guided steps.');
+admin_assert(str_contains($setup, 'Save guided draft'), 'Setup needs a clear draft-save action.');
 admin_assert(str_contains($policy, 'cf7aiv-page-header') && str_contains($policy, 'cf7aiv-actions'), 'Policy Lab must use shared native structure.');
 admin_assert(str_contains($setup, 'cf7aiv-page-header') && str_contains($setup, 'cf7aiv-actions'), 'Setup must use shared native structure.');
 admin_assert(str_contains($policy, 'class="card'), 'Policy Lab must retain native card panels.');
@@ -421,6 +426,8 @@ CF7AIV\Admin\AdminHooks::enqueueAssets('post.php');
 admin_assert($GLOBALS['admin_enqueued_styles']===[],'Admin CSS must not load on unrelated WordPress screens.');
 $_GET=['page'=>'cf7aiv-review'];CF7AIV\Admin\AdminHooks::enqueueAssets('ai-enquiry-validator_page_cf7aiv-review');unset($_GET);
 admin_assert(count($GLOBALS['admin_enqueued_styles'])===1&&str_ends_with($GLOBALS['admin_enqueued_styles'][0]['src'],'assets/css/admin.css')&&$GLOBALS['admin_enqueued_styles'][0]['version']===CF7AIV\VERSION,'Admin CSS must load only on plugin screens using the plugin version.');
+$_GET=['page'=>'cf7aiv-setup'];CF7AIV\Admin\AdminHooks::enqueueAssets('ai-enquiry-validator_page_cf7aiv-setup');unset($_GET);
+admin_assert(count($GLOBALS['admin_enqueued_scripts'])===1&&str_ends_with($GLOBALS['admin_enqueued_scripts'][0]['src'],'assets/js/admin.js')&&$GLOBALS['admin_enqueued_scripts'][0]['version']===CF7AIV\VERSION,'Setup navigation JavaScript must load only on the Setup screen using the plugin version.');
 foreach(['admin_post_cf7aiv_review','admin_post_cf7aiv_bulk_review','admin_post_cf7aiv_save_settings','admin_post_cf7aiv_save_guided_policy','admin_post_cf7aiv_lifecycle_transition','admin_post_cf7aiv_automation_transition','admin_post_cf7aiv_ga_transition','admin_post_cf7aiv_save_consent','admin_post_cf7aiv_policy_import','admin_post_cf7aiv_policy_publish','admin_post_cf7aiv_save_mapping','admin_post_cf7aiv_mapping_publish','admin_post_cf7aiv_mapping_enable','admin_post_cf7aiv_mapping_disable','admin_post_cf7aiv_validate_ga4','admin_post_cf7aiv_test_microsoft','admin_post_cf7aiv_setup','admin_post_cf7aiv_backfill','admin_enqueue_scripts','cf7aiv_backfill_batch','cf7aiv_daily_maintenance'] as $hook){admin_assert(isset($GLOBALS['admin_actions'][$hook]),"Required secured/operational hook {$hook} must be registered.");}
 
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]=CF7AIV\Infrastructure\Settings::defaults();
