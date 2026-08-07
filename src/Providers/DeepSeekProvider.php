@@ -127,9 +127,19 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		];
 	}
 
+	/**
+	 * The status code is the whole diagnosis here, so it belongs in the message.
+	 *
+	 * Without it every rejection reads the same, and an administrator cannot tell
+	 * a credential that was never stored (401) from one the account cannot use
+	 * (403) from a wrong base URL (404). The status is not sensitive: it carries
+	 * no key material and no enquiry content.
+	 */
 	private function assertSuggestionStatus(HttpResponse $response): void {
 		if ($response->status >= 200 && $response->status < 300) { return; }
-		if ($response->status === 0 || $response->status === 408 || $response->status === 429 || $response->status >= 500) { throw new TransientProviderException('DeepSeek suggestion request failed temporarily.'); }
-		throw new PermanentProviderException('DeepSeek suggestion request failed.');
+		if ($response->status === 0 || $response->status === 408 || $response->status === 429 || $response->status >= 500) {
+			throw new TransientProviderException('DeepSeek suggestion request failed temporarily (HTTP ' . $response->status . ').');
+		}
+		throw new PermanentProviderException('DeepSeek suggestion request failed (HTTP ' . $response->status . ').');
 	}
 }

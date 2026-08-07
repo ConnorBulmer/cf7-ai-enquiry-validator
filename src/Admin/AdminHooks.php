@@ -18,6 +18,7 @@ use CF7AIV\Providers\OpenAIProvider;
 use InvalidArgumentException;
 
 final class AdminHooks {
+	private const SCAN_DIAGNOSTIC_PREFIX = 'cf7aiv_scan_diagnostic_';
 	/**
 	 * Every admin_post action this plugin answers, and the method that answers it.
 	 *
@@ -110,7 +111,27 @@ final class AdminHooks {
 	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);$event=new ConversionEvent('cf7aiv-validation','validation','cf7aiv_configuration_check',0.0,'GBP',gmdate(DATE_ATOM),[],['client_id'=>'0.0'],['analytics_storage'=>'denied','ad_storage'=>'denied','ad_user_data'=>'denied','ad_personalization'=>'denied']);$result=(new GA4Destination(new \CF7AIV\Infrastructure\WordPressHttpTransport(),(string)($ga['measurement_id']??''),Crypto::secret('ga4_api_secret'),true,false,false))->send($event);if($result->successful){$settings['destinations']['ga4']['debug_validated']=true;update_option(Settings::OPTION,$settings,false);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function testMicrosoft():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_microsoft');$status='failed';try{$receipt=(new MicrosoftUetTestService())->transport((string)($post['confirmation']??''));$status=!empty($receipt['successful'])?'success':(!empty($receipt['retryable'])?'retryable':'failed');}catch(InvalidArgumentException){$status='refused';}self::redirect('admin.php?page=cf7aiv-integrations&microsoft_test='.$status);}
 	public static function completeSetup():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$settings['setup_complete']=true;$settings['setup']['stage']='testing';$settings['automation']['mode']='shadow';update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-setup');}
-	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');$service=self::setupService();$count=$service->generate($pack,get_current_user_id());$path='admin.php?page=cf7aiv-setup&suggestions='.$count;if($service->lastError()!==null){$path.='&suggestion_error=1';}self::redirect($path);}
+	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');$service=self::setupService();$count=$service->generate($pack,get_current_user_id());$path='admin.php?page=cf7aiv-setup&suggestions='.$count;if($service->lastError()!==null){$path.='&suggestion_error=1';self::rememberScanDiagnostic($service->lastDiagnostic());}self::redirect($path);}
+	/**
+	 * Hand the redacted scan failure to the next page load.
+	 *
+	 * It travels in a short-lived per-administrator transient rather than the
+	 * query string: a URL is shoulder-surfed, logged by the server, and kept in
+	 * history, and this text names the provider and the status it returned. It is
+	 * read once and deleted, so a stale reason cannot be mistaken for a fresh one.
+	 */
+	private static function rememberScanDiagnostic(?string $diagnostic):void{
+		if($diagnostic===null||$diagnostic===''||!function_exists('set_transient')||!function_exists('get_current_user_id')){return;}
+		set_transient(self::SCAN_DIAGNOSTIC_PREFIX.get_current_user_id(),$diagnostic,300);
+	}
+	/** Read and clear the stored scan failure reason. */
+	public static function takeScanDiagnostic():string{
+		if(!function_exists('get_transient')||!function_exists('get_current_user_id')){return '';}
+		$key=self::SCAN_DIAGNOSTIC_PREFIX.get_current_user_id();
+		$value=get_transient($key);
+		if(function_exists('delete_transient')){delete_transient($key);}
+		return is_string($value)?$value:'';
+	}
 	public static function setupSuggestion():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_suggestion');$action=(string)($post['suggestion_action']??'');$edited=$post['edited_value']??null;if(is_string($edited)&&str_starts_with(trim($edited),'{')){$decoded=json_decode($edited,true);if(is_array($decoded)){$edited=$decoded;}}self::setupService()->review((int)($post['suggestion_id']??0),$action,$edited);self::redirect('admin.php?page=cf7aiv-setup');}
 	public static function backfill():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_backfill');$source=substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($post['source']??''))??'',0,32);$rawForms=$post['form_ids']??[];if(!is_array($rawForms)){$rawForms=preg_split('/\s*,\s*/',(string)$rawForms,-1,PREG_SPLIT_NO_EMPTY)?:[];}$explicit=in_array($post['explicit_opt_in']??null,[true,1,'1','true','on','yes'],true);$snapshot=CalibrationPolicySnapshot::active();$submitted=(string)($post['whitelist_fingerprint']??'');if($submitted===''||!hash_equals($snapshot['fingerprint'],$submitted)){self::refuse('Published policy fields changed after preview. Review the current whitelist and opt in again.');}try{(new CalibrationService())->schedule($source,['explicit_opt_in'=>$explicit,'form_ids'=>$rawForms,'date_from'=>(string)($post['date_from']??gmdate('Y-m-d',strtotime('-1 year'))),'date_to'=>(string)($post['date_to']??gmdate('Y-m-d')),'maximum'=>(int)($post['maximum']??25),'ai_whitelist_snapshot'=>$snapshot['fields'],'whitelist_fingerprint'=>$snapshot['fingerprint']],function_exists('get_current_user_id')?get_current_user_id():0);}catch(\InvalidArgumentException $error){self::refuse($error->getMessage());}self::redirect('admin.php?page=cf7aiv-health');}
 	/** @param array<string,mixed> $arguments */ public static function backfillBatch(string $sourceKey,array $arguments=[],int $batchSize=25):void{(new CalibrationBatchWorker(new WpCalibrationRunStore()))->process($sourceKey,$arguments,$batchSize);}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CF7AIV\Admin;
 
+use CF7AIV\Classification\Redactor;
 use CF7AIV\Delivery\ConsentPolicy;
 use CF7AIV\Delivery\WpMappingRepository;
 use CF7AIV\Infrastructure\Crypto;
@@ -141,6 +142,51 @@ final class DiagnosticsService {
 			'consent_states' => $this->safeStates($consent), 'attribution_issue_codes' => $issues,
 			'gates' => $gates, 'mappings' => $mappings, 'read_only' => true,
 		];
+	}
+
+	/**
+	 * Describe a caught failure in terms an administrator can act on.
+	 *
+	 * Setup previously reduced every provider failure to one sentence, so a
+	 * credential that was never stored, a credential the provider rejected, and a
+	 * host that blocks outbound HTTP all presented identically. That is not a
+	 * usable signal: the only remaining move is to guess.
+	 *
+	 * The exception class and its message already separate those cases, so both
+	 * are kept. Everything that could carry a secret or an enquiry is stripped
+	 * first - Redactor does not know about API keys, so credentials are scrubbed
+	 * here before it runs - and the result is length-capped.
+	 */
+	public static function describeFailure(Throwable $error): string {
+		$class = $error::class;
+		$position = strrpos($class, '\\');
+		$short = $position === false ? $class : substr($class, $position + 1);
+
+		$message = Redactor::redact(self::scrubCredentials($error->getMessage()));
+		$message = trim((string) preg_replace('/\s+/', ' ', $message));
+
+		return substr($short . ($message === '' ? '' : ': ' . $message), 0, 300);
+	}
+
+	/**
+	 * Remove credential-shaped runs before anything is shown or logged.
+	 *
+	 * Redactor covers enquiry content - addresses, numbers, click identifiers -
+	 * but a provider error is a different hazard: it can quote the key it was
+	 * given. Widening Redactor would change the classification path too, so the
+	 * credential patterns live here instead.
+	 */
+	private static function scrubCredentials(string $text): string {
+		$patterns = [
+			'/\b(?:sk|pk|rk)[-_][A-Za-z0-9_\-]{6,}/' => '[REDACTED_KEY]',
+			'/\bBearer\s+\S+/i' => 'Bearer [REDACTED_KEY]',
+			'/((?:api[_\-]?key|access[_\-]?token|token|secret|password)\s*[:=]\s*)\S+/i' => '$1[REDACTED_KEY]',
+			'/\b[A-Za-z0-9_\-]{32,}\b/' => '[REDACTED_KEY]',
+		];
+		foreach ($patterns as $pattern => $replacement) {
+			$text = preg_replace($pattern, $replacement, $text) ?? $text;
+		}
+		return $text;
 	}
 
 	public static function recordGate(int $itemId, string $destination, string $reason): void {

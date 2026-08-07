@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.20
+Stable tag: 0.2.21
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.21 =
+* Setup scan failures now state the reason instead of one generic sentence, so a rejected credential, a credential that was never stored, and a host that blocks outbound HTTP are no longer indistinguishable.
+* DeepSeek suggestion failures now include the HTTP status.
+* The reason is redacted for credentials and personal data, length-capped, carried in a short-lived per-administrator transient rather than the URL, and cleared after one read.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.20 =
 * Rejected administration input now returns a controlled HTTP 400 carrying the reason, instead of rendering WordPress's critical-error page and mailing the site administrator.

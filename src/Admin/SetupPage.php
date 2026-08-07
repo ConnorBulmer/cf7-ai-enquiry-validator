@@ -48,7 +48,16 @@ final class SetupPage {
 
 		$suggestionError = ! empty($_GET['suggestion_error']);
 		if ($suggestionError) {
-			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert" aria-live="assertive"><p>The site scan could not complete. Review the selected context and try again.</p></div>';
+			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert" aria-live="assertive"><p>The site scan could not complete. Review the selected context and try again.</p>';
+			// The reason is what makes this actionable. HTTP 401 means the provider
+			// rejected the credential, so the key is wrong or was never stored; a
+			// transport failure means the host would not let the request out at all.
+			// Those need opposite fixes, and without this line they looked identical.
+			$diagnostic = AdminHooks::takeScanDiagnostic();
+			if ($diagnostic !== '') {
+				echo '<p class="cf7aiv-setup-diagnostic"><strong>Reason:</strong> <code>' . self::e($diagnostic) . '</code></p>';
+			}
+			echo '</div>';
 		}
 		if (! $suggestionError && is_scalar($_GET['suggestions'] ?? null)) {
 			$suggestionCount = max(0, (int) $_GET['suggestions']);

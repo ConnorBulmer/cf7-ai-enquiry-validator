@@ -2,6 +2,23 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.21 — 2026-08-07
+
+- Fixed a setup scan failure being undiagnosable. `SetupSuggestionService` caught
+  every failure with an unbound `catch (Throwable)` and replaced it with one
+  generic sentence, so a credential that was never stored, a credential the
+  provider rejected, and a host that blocks outbound HTTP all looked identical.
+- Added the HTTP status to DeepSeek suggestion failures, which is what separates
+  a rejected credential (401) from an unusable account (403), a wrong base URL
+  (404) and a provider outage (5xx).
+- Added `DiagnosticsService::describeFailure()`, which reports the exception
+  class and reason after scrubbing credential-shaped runs — `Redactor` covers
+  enquiry content but not API keys or bearer tokens — and length-caps the result.
+- Added the redacted reason to the Setup failure notice, carried in a
+  short-lived per-administrator transient rather than the query string, and
+  cleared after one read so a stale reason cannot be mistaken for a fresh one.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.20 — 2026-08-07
 
 - Fixed administration actions presenting rejected input as a site failure. All

@@ -73,6 +73,26 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.21 diagnosable setup failures
+
+Version 0.2.21 makes a failed site scan say why it failed. The service caught
+every failure with an unbound `catch (Throwable)` and replaced it with a single
+reassuring sentence, so an API key that was never stored, an API key the
+provider rejected, and a host that refuses outbound HTTP all produced the same
+notice. Those need opposite fixes, and the screen gave no way to tell them
+apart.
+
+DeepSeek suggestion failures now carry the HTTP status, which is the whole
+diagnosis: 401 means the credential was rejected, 403 that the account cannot
+use it, 404 a wrong base URL, 5xx a provider outage. The reason is scrubbed
+before display — `Redactor` handles enquiry content but not API keys or bearer
+tokens, so credential-shaped runs are removed first — then length-capped.
+
+The reason reaches the notice through a short-lived per-administrator transient
+rather than the query string, because a URL is logged by the server, kept in
+history and read over a shoulder. It is cleared after one read. Schema remains
+version 10, so no migration is required.
+
 ### Version 0.2.20 administration failure handling
 
 Version 0.2.20 changes what an administrator sees when an action cannot be
@@ -487,7 +507,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.20 --output-dir=dist
+php tools/build-release.php --tag=v0.2.21 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -505,16 +525,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.20`:
+For version `0.2.21`:
 
 ```bash
-git tag v0.2.20
-git push origin v0.2.20
+git tag v0.2.21
+git push origin v0.2.21
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.20.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.21.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.

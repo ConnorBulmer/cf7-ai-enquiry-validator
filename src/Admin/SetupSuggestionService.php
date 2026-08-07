@@ -17,6 +17,7 @@ final class SetupSuggestionService {
 	private const SUGGESTION_LIMIT = PolicySuggestionResult::MAX_SUGGESTIONS;
 	private const BATCH_CHARACTER_LIMIT = 40000;
 	private ?string $error = null;
+	private ?string $diagnostic = null;
 
 	public function __construct(
 		private readonly SiteProfileScanner $scanner,
@@ -26,6 +27,7 @@ final class SetupSuggestionService {
 
 	public function generate(string $packKey, int $administratorId): int {
 		$this->error = null;
+		$this->diagnostic = null;
 		$packKey = substr(preg_replace('/[^a-zA-Z0-9_\-]/', '', trim($packKey)) ?? '', 0, 100);
 		if ($packKey === '') { $packKey = 'general'; }
 		try {
@@ -44,8 +46,9 @@ final class SetupSuggestionService {
 			if ($valid === []) { return 0; }
 			$count = $this->repository->storeBatch($valid, $administratorId);
 			if ($count !== count($valid)) { throw new \RuntimeException('Suggestion batch could not be stored atomically.'); }
-		} catch (Throwable) {
+		} catch (Throwable $failure) {
 			$this->error = 'Suggestions could not be generated. Manual setup remains available.';
+			$this->diagnostic = DiagnosticsService::describeFailure($failure);
 			return 0;
 		}
 		if (function_exists('do_action')) { try { do_action(Hooks::AFTER_SETUP_SUGGESTIONS, $count, $packKey, $administratorId); } catch (Throwable) {} }
@@ -66,8 +69,9 @@ final class SetupSuggestionService {
 			$request = new PolicySuggestionRequest($packKey, $this->scanner->scan());
 			$validated = $this->validate(['type' => $original['type'], 'value' => $value, 'source_refs' => $original['source_refs']], $request);
 		} catch (InvalidArgumentException $error) { throw $error; }
-		catch (Throwable) {
+		catch (Throwable $failure) {
 			$this->error = 'Suggestions could not be generated. Manual setup remains available.';
+			$this->diagnostic = DiagnosticsService::describeFailure($failure);
 			return false;
 		}
 		if ($validated === null) { throw new InvalidArgumentException('Edited suggestion does not match its pending type, provenance, or safe field schema.'); }
@@ -75,6 +79,14 @@ final class SetupSuggestionService {
 	}
 
 	public function lastError(): ?string { return $this->error; }
+
+	/**
+	 * The redacted reason behind lastError(), for an administrator to act on.
+	 *
+	 * Kept separate from lastError() so the reassuring sentence and the technical
+	 * cause stay distinguishable at the call site.
+	 */
+	public function lastDiagnostic(): ?string { return $this->diagnostic; }
 
 	/** @param array<string,mixed> $suggestion @return array{type:string,value:mixed,source_refs:list<string>}|null */
 	private function validate(array $suggestion, PolicySuggestionRequest $request): ?array {
