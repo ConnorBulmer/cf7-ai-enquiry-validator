@@ -291,6 +291,14 @@ admin_assert(str_contains($healthPage, '<caption class="screen-reader-text">Subm
 // chose the first one even when the panel beside it reported it unavailable.
 admin_assert(str_contains($healthPage, 'disabled') && str_contains($healthPage, '(unavailable)'), 'Unavailable calibration sources must be disabled and labelled.');
 admin_assert((bool) preg_match('/<option value="[^"]*"[^>]* selected>/', $healthPage), 'An available calibration source must be preselected.');
+// A refusal an administrator is entitled to trigger must not present as a
+// WordPress critical error. backfill() used to throw out of the admin_post
+// handler uncaught, which rendered the fatal page and mailed the site admin.
+$refusedCleanly = false;
+try { $_POST = ['_wpnonce'=>'nonce','source'=>'no-such-source','explicit_opt_in'=>'1','date_from'=>'2026-07-01','date_to'=>'2026-07-22','whitelist_fingerprint'=>CF7AIV\Admin\CalibrationPolicySnapshot::active()['fingerprint']]; CF7AIV\Admin\AdminHooks::backfill(); }
+catch (InvalidArgumentException) { $refusedCleanly = true; }
+unset($_POST);
+admin_assert($refusedCleanly, 'An unknown calibration source must be refused through the shared refusal path, not raised as an unhandled error.');
 admin_assert(str_contains($healthPage, 'Available') && str_contains($healthPage, 'Unavailable'), 'Availability must be stated in text.');
 admin_assert(str_contains($healthPage, '<caption class="screen-reader-text">Read-only checks</caption>'), 'Read-only checks must be structured.');
 admin_assert(str_contains($healthPage, 'cf7aiv-table-region') && str_contains($healthPage, 'aria-label="Sanitized delivery errors"'), 'Delivery logs must scroll locally in a labelled region.');

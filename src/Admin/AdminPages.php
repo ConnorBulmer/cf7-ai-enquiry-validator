@@ -177,7 +177,12 @@ final class AdminPages {
 		$calibrationForm .= '</select><label for="cf7aiv-health-from">From</label><input id="cf7aiv-health-from" type="date" name="date_from" value="' . self::e($dateFrom) . '" required>';
 		$calibrationForm .= '<label for="cf7aiv-health-to">To</label><input id="cf7aiv-health-to" type="date" name="date_to" value="' . self::e($dateTo) . '" required>';
 		$calibrationForm .= '<label for="cf7aiv-health-maximum">Maximum</label><input id="cf7aiv-health-maximum" type="number" name="maximum" value="25" min="1" max="500" required>';
-		$calibrationForm .= '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><p class="cf7aiv-actions"><button type="submit" class="button">Schedule calibration</button></p></form>';
+		// With nothing to sample, the action cannot succeed, so it is not offered.
+		$scheduleButton = $firstAvailable === ''
+			? '<button type="submit" class="button" disabled>Schedule calibration</button>'
+				. '<span class="description"> No submission source has records to sample yet.</span>'
+			: '<button type="submit" class="button">Schedule calibration</button>';
+		$calibrationForm .= '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><p class="cf7aiv-actions">' . $scheduleButton . '</p></form>';
 		$sourceBody = $sourceRows === [] ? AdminUi::emptyState('No submission sources were detected.') : AdminUi::keyValueTable('Submission source health', $sourceRows);
 		$pausedBody = $pausedRows === [] ? AdminUi::emptyState('No destinations are paused.') : AdminUi::keyValueTable('Paused destinations', $pausedRows);
 		$deliveryBody = $deliveryTable === '' ? AdminUi::emptyState('No delivery errors were recorded.') : AdminUi::tableRegion('Sanitized delivery errors', $deliveryTable);
