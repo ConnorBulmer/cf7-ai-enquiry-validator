@@ -22,6 +22,14 @@ const viewports = [
 	{ width: 390, height: 844 },
 ] as const;
 
+type PublicConsentFixture = {
+	google: Record<string, string>;
+	wordpress: {
+		statistics: boolean;
+		marketing: boolean;
+	};
+};
+
 type DiagnosticLog = {
 	console: string[];
 	pageErrors: string[];
@@ -195,10 +203,34 @@ async function openAdminPage(browser: Browser, trackedPages: TrackedPage[], page
 	return { context, page };
 }
 
-async function openPublicPage(browser: Browser, trackedPages: TrackedPage[], consent: Record<string, string>): Promise<{ context: Awaited<ReturnType<Browser['newContext']>>; page: Page }> {
+async function openPublicPage(browser: Browser, trackedPages: TrackedPage[], consent: PublicConsentFixture): Promise<{ context: Awaited<ReturnType<Browser['newContext']>>; page: Page }> {
 	const context = await browser.newContext({ baseURL: requireBaseURL() });
-	await context.addInitScript((initialConsent) => {
-		(window as Window & { dataLayer?: unknown[] }).dataLayer = [['consent', 'update', initialConsent]];
+	await context.addInitScript(({ google, wordpress }) => {
+		const windowWithConsent = window as Window & {
+			dataLayer?: unknown[];
+			wp_get_consent_type?: () => string;
+			wp_has_consent?: (category: string) => boolean;
+		};
+		windowWithConsent.dataLayer = [['consent', 'update', google]];
+		const getConsentType = () => 'optin';
+		const hasConsent = (category: string) => {
+			if (category === 'statistics') return wordpress.statistics;
+			if (category === 'marketing') return wordpress.marketing;
+			return false;
+		};
+		// Keep the authoritative fixture stable if a consent manager loads later.
+		Object.defineProperty(windowWithConsent, 'wp_get_consent_type', {
+			configurable: false,
+			enumerable: true,
+			get: () => getConsentType,
+			set: () => {},
+		});
+		Object.defineProperty(windowWithConsent, 'wp_has_consent', {
+			configurable: false,
+			enumerable: true,
+			get: () => hasConsent,
+			set: () => {},
+		});
 	}, consent);
 	const page = await context.newPage();
 	trackPage(page, trackedPages);
@@ -217,6 +249,12 @@ async function gotoContact(page: Page): Promise<void> {
 for (const viewport of viewports) {
 	test(`Setup has grouped steps at ${viewport.width}px`, async ({ browser, trackedPages }, testInfo) => {
 		const { context, page } = await openAdminPage(browser, trackedPages, 'cf7aiv-setup');
+		const nonGetRequests: string[] = [];
+		page.on('request', (request) => {
+			if (request.method() !== 'GET') {
+				nonGetRequests.push(`${request.method()} ${safeRequestURL(request.url())}`);
+			}
+		});
 		try {
 			await page.setViewportSize(viewport);
 			await expect(page.locator('.cf7aiv-setup-page')).toBeVisible();
@@ -224,7 +262,15 @@ for (const viewport of viewports) {
 			await expect(page.locator('.cf7aiv-setup-step')).toHaveCount(5);
 			await expect(page.getByLabel('Starter pack')).toBeVisible();
 			await expectLabeledControlsAndNonces(page);
-			await expectNoOverflow(page, `Setup ${viewport.width}x${viewport.height}`);
+			const setupSteps = page.locator('.cf7aiv-setup-progress [data-setup-step]');
+			const setupStepNames = await setupSteps.evaluateAll((items) => items.map((item) => item.getAttribute('data-setup-step') || ''));
+			for (const [index, stepName] of setupStepNames.entries()) {
+				await setupSteps.nth(index).click();
+				await expect(page.locator(`.cf7aiv-setup-step[data-step="${stepName}"]`)).toBeVisible();
+				await expect(page.locator('.cf7aiv-setup-progress [aria-current="step"]')).toHaveAttribute('data-setup-step', stepName);
+				await expectNoOverflow(page, `Setup ${viewport.width}x${viewport.height} ${stepName}`);
+			}
+			expect(nonGetRequests).toEqual([]);
 			await page.screenshot({ path: testInfo.outputPath(`setup-${viewport.width}.png`), fullPage: true });
 		} finally {
 			await context.close();
@@ -233,6 +279,12 @@ for (const viewport of viewports) {
 
 	test(`Integrations remains grouped at ${viewport.width}px`, async ({ browser, trackedPages }, testInfo) => {
 		const { context, page } = await openAdminPage(browser, trackedPages, 'cf7aiv-integrations');
+		const nonGetRequests: string[] = [];
+		page.on('request', (request) => {
+			if (request.method() !== 'GET') {
+				nonGetRequests.push(`${request.method()} ${safeRequestURL(request.url())}`);
+			}
+		});
 		try {
 			await page.setViewportSize(viewport);
 			await expect(page.locator('.cf7aiv-integrations-page')).toBeVisible();
@@ -242,7 +294,15 @@ for (const viewport of viewports) {
 			await expect(page.locator('.cf7aiv-save-bar')).toHaveCount(2);
 			await expect(page.locator('[data-provider-panel="true"]')).toHaveCount(2);
 			await expectLabeledControlsAndNonces(page);
-			await expectNoOverflow(page, `Integrations ${viewport.width}x${viewport.height}`);
+			const tabs = page.getByRole('tab');
+			const tabNames = await tabs.evaluateAll((items) => items.map((item) => item.getAttribute('data-tab') || ''));
+			for (const [index, tabName] of tabNames.entries()) {
+				await tabs.nth(index).click();
+				await expect(tabs.nth(index)).toHaveAttribute('aria-selected', 'true');
+				await expect(page.locator(`.cf7aiv-integration-tab-panel[data-tab="${tabName}"]`)).toBeVisible();
+				await expectNoOverflow(page, `Integrations ${viewport.width}x${viewport.height} ${tabName}`);
+			}
+			expect(nonGetRequests).toEqual([]);
 			await page.screenshot({ path: testInfo.outputPath(`integrations-${viewport.width}.png`), fullPage: true });
 		} finally {
 			await context.close();
@@ -352,18 +412,21 @@ test('public contact form renders attribution fields without submission', async 
 	await protectTransport(page);
 	await gotoContact(page);
 	const form = page.locator('.wpcf7 form').first();
-	await expect(form.getByRole('button', { name: /send|submit/i }).first()).toBeVisible();
+	await expect(form.locator('input[type="submit"], button[type="submit"]').first()).toBeVisible();
 	await expect(form.locator('[name="cf7aiv_submission_id"]')).toHaveCount(1);
 	await expect(form.locator('[name="cf7aiv_submission_id"]')).toHaveValue(/\S+/);
 	await page.screenshot({ path: testInfo.outputPath('public-contact.png'), fullPage: true });
 });
 
-test('consent denied keeps public attribution read-only and empty', async ({ browser, trackedPages }) => {
+test('authoritative consent denied keeps public attribution read-only and empty', async ({ browser, trackedPages }) => {
 	const { context, page } = await openPublicPage(browser, trackedPages, {
-		analytics_storage: 'denied',
-		ad_storage: 'denied',
-		ad_user_data: 'denied',
-		ad_personalization: 'denied',
+		google: {
+			analytics_storage: 'granted',
+			ad_storage: 'granted',
+			ad_user_data: 'granted',
+			ad_personalization: 'granted',
+		},
+		wordpress: { statistics: false, marketing: false },
 	});
 	try {
 		const target = new URL(contactURL());
@@ -377,8 +440,14 @@ test('consent denied keeps public attribution read-only and empty', async ({ bro
 		await expect(form).toBeVisible();
 		await expect.poll(() => form.locator('[name="cf7aiv_gclid"]').inputValue()).toBe('');
 		await expect.poll(() => form.locator('[name="cf7aiv_utm_source"]').inputValue()).toBe('');
-		await expect(form.locator('[name="cf7aiv_analytics_storage"]')).toHaveValue('denied');
-		await expect(form.locator('[name="cf7aiv_ad_storage"]')).toHaveValue('denied');
+		await expect(form.locator('[name="cf7aiv_analytics_storage"]')).toHaveValue('');
+		await expect(form.locator('[name="cf7aiv_ad_storage"]')).toHaveValue('');
+		await expect(form.locator('[name="cf7aiv_ad_user_data"]')).toHaveValue('');
+		await expect(form.locator('[name="cf7aiv_ad_personalization"]')).toHaveValue('');
+		const mosaicConsent = form.locator('[name="mosaic_consent"]');
+		if (await mosaicConsent.count()) {
+			await expect(mosaicConsent).toHaveValue('not_granted');
+		}
 		const storedAttribution = await page.evaluate(() => ({
 			localStorage: window.localStorage.getItem('cf7aiv_attribution'),
 			cookie: document.cookie,
@@ -390,12 +459,15 @@ test('consent denied keeps public attribution read-only and empty', async ({ bro
 	}
 });
 
-test('consent granted exposes public attribution without submission', async ({ browser, trackedPages }) => {
+test('authoritative consent granted exposes public attribution without submission', async ({ browser, trackedPages }) => {
 	const { context, page } = await openPublicPage(browser, trackedPages, {
-		analytics_storage: 'granted',
-		ad_storage: 'granted',
-		ad_user_data: 'granted',
-		ad_personalization: 'granted',
+		google: {
+			analytics_storage: 'denied',
+			ad_storage: 'denied',
+			ad_user_data: 'denied',
+			ad_personalization: 'denied',
+		},
+		wordpress: { statistics: true, marketing: true },
 	});
 	try {
 		const target = new URL(contactURL());
@@ -411,6 +483,8 @@ test('consent granted exposes public attribution without submission', async ({ b
 		await expect.poll(() => form.locator('[name="cf7aiv_utm_source"]').inputValue()).toBe('ux-granted');
 		await expect(form.locator('[name="cf7aiv_analytics_storage"]')).toHaveValue('granted');
 		await expect(form.locator('[name="cf7aiv_ad_storage"]')).toHaveValue('granted');
+		await expect(form.locator('[name="cf7aiv_ad_user_data"]')).toHaveValue('granted');
+		await expect(form.locator('[name="cf7aiv_ad_personalization"]')).toHaveValue('granted');
 		const storedAttribution = await page.evaluate(() => {
 			const raw = window.localStorage.getItem('cf7aiv_attribution');
 			return raw ? JSON.parse(raw) : null;
