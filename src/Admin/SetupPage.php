@@ -67,8 +67,15 @@ final class SetupPage {
 			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e(self::bounded((string) ($pack['pack']['label'] ?? $key), 120)) . '</option>';
 		}
 		echo '</select><p class="description">The pack supplies a validated starting policy. You can change the draft rules before publishing.</p></div>';
-		$policyPreview = self::policyPreview($selectedPackDefinition);
-		echo '<details class="cf7aiv-setup-advanced"><summary>Advanced: Read-only starter policy JSON</summary><p>Read-only starter policy JSON preview. Use Policy Lab for editing and publishing.</p><pre aria-label="Read-only starter policy JSON preview" class="cf7aiv-setup-policy-preview">' . self::e($policyPreview) . '</pre><p><a href="' . self::e(admin_url('admin.php?page=cf7aiv-policy')) . '">Edit this policy in Policy Lab</a></p></details>';
+		echo '<p class="description">JavaScript updates these disclosures for an unsaved pack selection. Without JavaScript, these disclosures reflect the saved starter pack until this page reloads.</p>';
+		echo '<details class="cf7aiv-setup-advanced"><summary>Advanced: Read-only starter policy JSON</summary><p>Read-only starter policy JSON preview. Use Policy Lab for editing and publishing.</p>';
+		foreach ($packs as $key => $pack) {
+			$packKey = self::bounded((string) $key, 64);
+			$definition = is_array($pack) ? $pack : [];
+			$visibility = $selectedPack === $packKey ? ' aria-hidden="false"' : ' hidden aria-hidden="true"';
+			echo '<pre aria-label="Read-only starter policy JSON preview" class="cf7aiv-setup-policy-preview" data-setup-pack-preview="' . self::e($packKey) . '"' . $visibility . '>' . self::e(self::policyPreview($definition)) . '</pre>';
+		}
+		echo '<p><a href="' . self::e(admin_url('admin.php?page=cf7aiv-policy')) . '">Edit this policy in Policy Lab</a></p></details>';
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-setup-scan-form" class="cf7aiv-setup-scan-form"><input type="hidden" name="action" value="cf7aiv_setup_scan">';
 		wp_nonce_field('cf7aiv_setup_scan');
 		echo '<p class="cf7aiv-setup-supporting-action">Need help shaping the draft? <button type="submit" class="button button-secondary">Analyse public site and forms</button></p><p class="description">Only public page copy and safe form structure are sent. Submission values are never scanned.</p></form>';
@@ -113,7 +120,11 @@ final class SetupPage {
 		echo '<div><dt>Exclusions</dt><dd data-setup-summary="exclusion_codes">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>AI whitelist</dt><dd data-setup-summary="ai_whitelist">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>Draft status</dt><dd>' . self::e((string) ($draftSummary['status'] ?? 'Not saved')) . '</dd></div></dl>';
-		echo self::evidenceSummary($selectedPackDefinition);
+		foreach ($packs as $key => $pack) {
+			$packKey = self::bounded((string) $key, 64);
+			$definition = is_array($pack) ? $pack : [];
+			echo self::evidenceSummary($definition, $packKey, $selectedPack === $packKey);
+		}
 		echo '<div class="cf7aiv-setup-field-group cf7aiv-setup-guided-pack-confirmation"><label for="cf7aiv-guided-draft-pack">Starter pack for this draft</label><select id="cf7aiv-guided-draft-pack" name="guided[pack_key]" data-setup-guided-pack required>';
 		foreach ($packs as $key => $pack) {
 			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e(self::bounded((string) ($pack['pack']['label'] ?? $key), 120)) . '</option>';
@@ -216,7 +227,7 @@ final class SetupPage {
 	}
 
 	/** @param array<string,mixed> $definition */
-	private static function evidenceSummary(array $definition): string {
+	private static function evidenceSummary(array $definition, string $packKey, bool $visible): string {
 		$catalog = [];
 		foreach (array_slice((array) ($definition['evidence_catalog'] ?? []), 0, 32) as $entry) {
 			if (! is_array($entry)) {
@@ -228,7 +239,9 @@ final class SetupPage {
 			}
 		}
 		$catalogText = $catalog === [] ? 'none listed' : implode(', ', array_map(static fn (string $value): string => $value, array_values($catalog)));
-		$html = '<section class="cf7aiv-setup-evidence-summary" aria-labelledby="cf7aiv-setup-evidence-heading"><h3 id="cf7aiv-setup-evidence-heading">Evidence requirements</h3><p class="description">Available evidence catalog: ' . self::e(self::bounded($catalogText, 1200)) . '.</p><ul>';
+		$headingId = 'cf7aiv-setup-evidence-heading-' . self::bounded($packKey, 64);
+		$visibility = $visible ? ' aria-hidden="false"' : ' hidden aria-hidden="true"';
+		$html = '<section class="cf7aiv-setup-evidence-summary" data-setup-pack-evidence="' . self::e(self::bounded($packKey, 64)) . '"' . $visibility . ' aria-labelledby="' . self::e($headingId) . '"><h3 id="' . self::e($headingId) . '">Evidence requirements</h3><p class="description">Available evidence catalog: ' . self::e(self::bounded($catalogText, 1200)) . '.</p><ul>';
 		foreach (array_slice((array) ($definition['tier_definitions'] ?? []), 0, 8) as $tier) {
 			if (! is_array($tier)) {
 				continue;

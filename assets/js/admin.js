@@ -127,6 +127,14 @@
 		var packSelect = root.querySelector('[data-setup-pack]');
 		var guidedPackSelect = root.querySelector('[data-setup-guided-pack]');
 
+		var setPackDisclosures = function (packKey) {
+			Array.prototype.forEach.call(root.querySelectorAll('[data-setup-pack-preview], [data-setup-pack-evidence]'), function (panel) {
+				var isActive = panel.getAttribute('data-setup-pack-preview') === packKey || panel.getAttribute('data-setup-pack-evidence') === packKey;
+				panel.hidden = !isActive;
+				panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+			});
+		};
+
 		var setSummary = function (key, value) {
 			var target = root.querySelector('[data-setup-summary="' + key + '"]');
 			if (target) {
@@ -175,6 +183,8 @@
 		};
 
 		var updateSummary = function () {
+			var selectedPack = packSelect ? packSelect.value : (guidedPackSelect ? guidedPackSelect.value : '');
+			setPackDisclosures(selectedPack);
 			if (packSelect) {
 				var selectedOption = packSelect.options[packSelect.selectedIndex];
 				setSummary('pack', selectedOption ? selectedOption.textContent.trim() : 'No starter pack selected.');

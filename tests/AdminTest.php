@@ -303,6 +303,20 @@ admin_assert(str_contains($setup, 'Save guided draft'), 'Setup needs a clear dra
 admin_assert(str_contains($setup, '<details class="cf7aiv-setup-advanced">') && str_contains($setup, 'Read-only starter policy JSON') && str_contains($setup, 'Edit this policy in Policy Lab'), 'Setup must disclose a bounded read-only starter policy JSON preview with a Policy Lab editing link.');
 admin_assert(str_contains($setup, 'Evidence requirements') && str_contains($setup, 'Required evidence') && str_contains($setup, 'Supporting evidence') && str_contains($setup, 'Minimum supporting evidence'), 'Setup Review must summarize selected-pack evidence requirements.');
 admin_assert(str_contains($setup, '&quot;evidence_catalog&quot;') && str_contains($setup, 'service_fit') && str_contains($setup, 'Residential care enquiry') && str_contains($setup, 'Required evidence: service fit'), 'Setup disclosures must use the selected pack evidence catalog codes and tier definitions.');
+$previewPacks = [];
+preg_match_all('/<pre[^>]*data-setup-pack-preview="([^"]+)"[^>]*>(.*?)<\/pre>/s', $setup, $previewPacks, PREG_SET_ORDER);
+$evidencePacks = [];
+preg_match_all('/<section[^>]*data-setup-pack-evidence="([^"]+)"[^>]*>(.*?)<\/section>/s', $setup, $evidencePacks, PREG_SET_ORDER);
+$agencyPreview = array_values(array_filter($previewPacks, static fn (array $match): bool => ($match[1] ?? '') === 'agency'))[0] ?? [];
+$agencyEvidence = array_values(array_filter($evidencePacks, static fn (array $match): bool => ($match[1] ?? '') === 'agency'))[0] ?? [];
+$visiblePreviews = array_values(array_filter($previewPacks, static fn (array $match): bool => ! str_contains($match[0] ?? '', ' hidden')));
+$visibleEvidence = array_values(array_filter($evidencePacks, static fn (array $match): bool => ! str_contains($match[0] ?? '', ' hidden')));
+admin_assert(count($previewPacks) >= 2 && count($evidencePacks) >= 2 && $agencyPreview !== [] && $agencyEvidence !== [], 'Setup must server-render bounded preview and evidence sections for each selectable pack.');
+admin_assert(str_contains((string) ($agencyPreview[2] ?? ''), 'retained_marketing') && str_contains((string) ($agencyEvidence[2] ?? ''), 'Retained marketing enquiry'), 'Each pack preview and evidence section must contain that pack\'s own policy data so an unsaved selection cannot silently retain the saved pack disclosure.');
+admin_assert(count($visiblePreviews) === 1 && ($visiblePreviews[0][1] ?? '') === 'care_supported_living' && count($visibleEvidence) === 1 && ($visibleEvidence[0][1] ?? '') === 'care_supported_living', 'No-JavaScript output must show exactly the saved pack in both disclosures while other pack state remains hidden.');
+admin_assert(str_contains($setup, 'Without JavaScript, these disclosures reflect the saved starter pack until this page reloads.'), 'Setup must state the truthful no-JavaScript preview boundary.');
+$setupJs = file_get_contents(__DIR__ . '/../assets/js/admin.js');
+admin_assert(is_string($setupJs) && str_contains($setupJs, 'data-setup-pack-preview') && str_contains($setupJs, 'data-setup-pack-evidence') && str_contains($setupJs, 'hidden = !isActive'), 'Setup JavaScript must switch both per-pack disclosures through the rendered markup contract.');
 $scanForm = [];
 preg_match('/(<form[^>]*id="cf7aiv-setup-scan-form"[^>]*>.*?<\/form>)/s', $setup, $scanForm);
 admin_assert(
