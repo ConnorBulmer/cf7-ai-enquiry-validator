@@ -73,6 +73,28 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.24 Complianz consent capture
+
+Version 0.2.24 fixes attribution never being captured on sites using Complianz,
+which silently prevented any conversion from ever being delivered.
+
+The script read consent from two places: the WordPress Consent API, and Consent
+Mode entries in `dataLayer`. Complianz publishes through its own
+`cmplz_has_consent()` function and its own `cmplz_event_*` events, and its
+Consent API bridge is optional. On a site configured that way both known routes
+stayed silent while consent was in fact fully granted, so consent read as never
+decided, the click identifier on the landing URL was never stored, and
+`attribution_ready` never became true. Nothing was logged, because as far as the
+script could tell the visitor had simply not chosen yet.
+
+Complianz is now a recognised consent source. Its statistics and marketing
+categories map exactly as the WordPress Consent API categories do, its
+synchronous answer counts as a real decision, and its post-load consent events
+are observed so a decision made after page load still captures the landing click
+identifier. The WordPress Consent API remains authoritative wherever it is
+present, so existing sites are unaffected. Schema remains version 10, so no
+migration is required.
+
 ### Version 0.2.23 credential field state
 
 Version 0.2.23 makes a stored credential visible as stored. Secret inputs are
@@ -548,7 +570,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.23 --output-dir=dist
+php tools/build-release.php --tag=v0.2.24 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like

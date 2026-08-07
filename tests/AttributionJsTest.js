@@ -44,6 +44,7 @@ function makeHarness(options = {}) {
 		crypto: global.crypto,
 	};
 	if (typeof options.wpHasConsent === 'function') window.wp_has_consent = options.wpHasConsent;
+	if (typeof options.cmplzHasConsent === 'function') window.cmplz_has_consent = options.cmplzHasConsent;
 	if (Object.prototype.hasOwnProperty.call(options, 'wpConsentType')) window.wp_get_consent_type = () => options.wpConsentType;
 	global.location = {
 		search: options.search || '?gclid=TESTCLICK123&gbraid=GBRAID123&wbraid=WBRAID123&msclkid=0123456789abcdef0123456789abcdef&utm_source=paid-search&utm_campaign=care',
@@ -451,6 +452,67 @@ function formTarget(page) {
 
 function trackingFieldsEmpty(page) {
 	return Object.entries(page.inputs).every(([name, input]) => name === 'cf7aiv_submission_id' || input.value === '');
+}
+
+
+// ─── Complianz-only consent ──────────────────────────────────────────────────
+//
+// Observed on a live Complianz site: consent fully granted, a click identifier
+// on the landing URL, the script loaded - and nothing stored. Complianz does not
+// necessarily emit Consent Mode entries into dataLayer, and its WordPress
+// Consent API bridge is optional, so both routes the script knew about stayed
+// silent and consent read as never decided. No conversion could ever be
+// delivered, and nothing was logged to say why.
+
+{
+	const page = makeHarness({
+		dataLayer: [],
+		cmplzHasConsent: (category) => category === 'statistics' || category === 'marketing',
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.storedPayload();
+	check(payload !== null, 'Complianz-granted consent must store attribution when dataLayer carries no consent entries.');
+	check(payload && payload.gclid === 'TESTCLICK123', 'The landing click identifier must survive on a Complianz-only site.');
+	check(page.fieldValue(0, 'cf7aiv_gclid') === 'TESTCLICK123', 'The click identifier must reach the form on a Complianz-only site.');
+}
+
+{
+	// A refusal must still be honoured through the same route.
+	const page = makeHarness({
+		dataLayer: [],
+		cmplzHasConsent: () => false,
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(page.storedPayload() === null, 'Complianz-refused consent must not store attribution.');
+}
+
+{
+	// The decision usually arrives after load. Complianz announces it as its own
+	// event, and the landing click identifier is lost unless that is observed.
+	const page = makeHarness({ dataLayer: [], fields });
+	page.emit('DOMContentLoaded');
+	check(page.storedPayload() === null, 'Nothing may be stored before Complianz has decided.');
+	global.window.cmplz_has_consent = (category) => category === 'statistics' || category === 'marketing';
+	page.emit('cmplz_event_marketing', {});
+	const payload = page.storedPayload();
+	check(payload !== null, 'A Complianz decision arriving after load must trigger collection.');
+	check(payload && payload.gclid === 'TESTCLICK123', 'A late Complianz decision must still capture the landing click identifier.');
+}
+
+{
+	// The WordPress Consent API stays authoritative where it is actually present,
+	// so adding Complianz must not change existing sites.
+	const page = makeHarness({
+		dataLayer: [],
+		wpHasConsent: (category) => category === 'statistics' || category === 'marketing',
+		wpConsentType: 'optin',
+		cmplzHasConsent: () => false,
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(page.storedPayload() !== null, 'The WordPress Consent API must still win where it is present and granted.');
 }
 
 if (failures.length) {

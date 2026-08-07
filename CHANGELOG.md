@@ -2,6 +2,27 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.24 — 2026-08-08
+
+- Fixed attribution never being captured on sites using Complianz. The script
+  read consent from the WordPress Consent API and from Consent Mode entries in
+  `dataLayer`. Complianz publishes through its own `cmplz_has_consent()`
+  function and its own `cmplz_event_*` events, and its Consent API bridge is
+  optional, so on such a site both known routes stayed silent while consent was
+  fully granted. Consent read as never decided, no click identifier was ever
+  stored, `attribution_ready` never became true, and no conversion could be
+  delivered - with nothing logged, because as far as the script could tell the
+  visitor had simply not chosen yet.
+- Added Complianz as a recognised consent source, mapping its statistics and
+  marketing categories exactly as the WordPress Consent API categories are
+  mapped, and treating its synchronous answer as a real decision.
+- Added listeners for `cmplz_event_marketing`, `cmplz_event_statistics`,
+  `cmplz_status_change` and `cmplz_fire_categories`, so a decision made after
+  page load still captures the click identifier from the landing URL.
+- The WordPress Consent API remains authoritative wherever it is present, so
+  existing sites are unaffected.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.23 — 2026-08-07
 
 - Fixed credential fields giving no sign that a credential is stored. Every

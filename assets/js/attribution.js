@@ -89,6 +89,28 @@
 		});
 		return mode;
 	}
+	/**
+	 * Complianz publishes consent through its own function and its own events.
+	 *
+	 * It does not necessarily emit Consent Mode entries into dataLayer, and its
+	 * WordPress Consent API bridge is optional, so a site can have consent fully
+	 * granted while both routes this script already knew about stay silent. On
+	 * such a site no attribution was ever stored and no conversion could ever be
+	 * delivered - with nothing logged, because as far as the script could tell
+	 * consent had simply never been decided.
+	 *
+	 * Its categories map the same way the WordPress Consent API branch maps them.
+	 */
+	function complianzConsent() {
+		if (typeof window.cmplz_has_consent !== 'function') return null;
+		try {
+			return {
+				statistics: window.cmplz_has_consent('statistics') === true,
+				marketing: window.cmplz_has_consent('marketing') === true,
+				source: 'complianz',
+			};
+		} catch (e) { return null; }
+	}
 	function consentState() {
 		if (typeof window.wp_has_consent === 'function') {
 			try {
@@ -101,6 +123,8 @@
 				}
 			} catch (e) {}
 		}
+		var complianz = complianzConsent();
+		if (complianz) return complianz;
 		var mode = googleConsentMode();
 		return {
 			statistics: mode.analytics_storage === 'granted',
@@ -203,7 +227,9 @@
 		return pairs.length === 1 ? pairs[0] : {};
 	}
 	function captureConsent(target, consent) {
-		if (consent.source === 'wordpress') {
+		// Both of these answer by category rather than by Consent Mode key, and
+		// both answer synchronously, so their reply maps straight across.
+		if (consent.source === 'wordpress' || consent.source === 'complianz') {
 			target.analytics_storage = consent.statistics ? 'granted' : 'denied';
 			target.ad_storage = consent.marketing ? 'granted' : 'denied';
 			target.ad_user_data = consent.marketing ? 'granted' : 'denied';
@@ -223,7 +249,9 @@
 	 * entries at all, which is not the same as a refusal.
 	 */
 	function consentDecided(consent) {
-		if (consent.source === 'wordpress') { return true; }
+		// Complianz answers synchronously from a stored decision, exactly like the
+		// WordPress Consent API: if cmplz_has_consent replied, a choice was made.
+		if (consent.source === 'wordpress' || consent.source === 'complianz') { return true; }
 		var mode = consent.mode || {};
 		for (var index = 0; index < consentKeys.length; index++) {
 			if (mode[consentKeys[index]] === 'granted' || mode[consentKeys[index]] === 'denied') { return true; }
@@ -366,4 +394,13 @@
 	document.addEventListener('wpcf7mailsent', rotateSubmission);
 	document.addEventListener('wpcf7mailfailed', rotateSubmission);
 	document.addEventListener('wp_listen_for_consent_change', populateAll);
+	/*
+	 * Complianz announces each category as its own event once the visitor
+	 * decides, and fires them on the document. Without these the first decision
+	 * on a page is only noticed on the next navigation, which is exactly when the
+	 * click identifier from the landing URL has already been lost.
+	 */
+	['cmplz_event_marketing', 'cmplz_event_statistics', 'cmplz_status_change', 'cmplz_fire_categories'].forEach(function (eventName) {
+		document.addEventListener(eventName, populateAll);
+	});
 }());
