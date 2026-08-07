@@ -1,3 +1,114 @@
+# Final staging verification - HEAD 44be503 / v0.2.18 candidate
+
+Status: **DONE_WITH_CONCERNS**. This verification applies only to
+`https://staging.mosaicpublicity.co.uk`. No live transition, GitHub tag or
+release, public form submission, mapping publish, high-risk action, or
+destination transport was performed.
+
+## Candidate And Local Gates
+
+- Source HEAD: `44be5035b9f5ce3ea536b100c7fad260760f3bb9`.
+- Exact build command: `php tools/build-release.php --tag=v0.2.18 --output-dir=dist`.
+- Candidate: `dist/cf7-ai-enquiry-validator-0.2.18.zip`, 234 entries, 417200 bytes.
+- Reproducible SHA-256: `a699b799b1cd0e4622e5af3cd08ed43eddb919a5c0360c602da949a6ed98a9c6`.
+- A second build in an independent temporary output directory produced the same
+  417200-byte archive and hash. The checksum file matched. The archive has one
+  `cf7-ai-enquiry-validator/` root, the main plugin file, normalized
+  `1980-01-01 00:00:00 UTC` entry mtimes, and zero credential-pattern matches.
+- Local gates: 28/28 standalone PHP tests passed; 157/157 non-vendor PHP files
+  passed lint; `AttributionJsTest.js`, `assets/js/attribution.js` syntax,
+  `assets/js/admin.js` syntax, and the pre-documentation diff check passed.
+- The expected non-fatal `DedupRegressionTest.php` migration retry diagnostic
+  was emitted and that test exited successfully.
+
+## Staging Deployment
+
+- Fresh rollback backup: mode `0700`, outside the public root at
+  `/home/sites/24a/9/9af8850299/backups/20260807-115757Z-cf7aiv-0.2.18-final-verification-predeploy`.
+- The `rollback-plugin` and `pre-replace-plugin` copies each contain 234 files
+  and zero symlinks. The uploaded candidate is mode `0600`, 417200 bytes, and
+  its remote SHA-256 equals the candidate hash above. The extraction workspace
+  and all diagnostic temporary files were removed.
+- The active staging plugin tree contains 234 files and reads back as version
+  `0.2.18`. No FTP, live root, untracked source directory, GitHub asset, tag,
+  or release was used.
+
+## Runtime Safety
+
+The standard staging wrapper reports remote PHP `8.0.30`, below the plugin
+minimum. All provider and runtime checks used the explicit PHP 8.3.33 command:
+
+```text
+/usr/bin/php83 /usr/local/bin/wp --path=/home/sites/24a/9/9af8850299/staging_html --url=https://staging.mosaicpublicity.co.uk
+```
+
+- Schema expected/installed: `10`/`10`.
+- Automation: `shadow`.
+- GA4, server GTM, Microsoft UET, and webhook: all `dry_run=true`.
+- Action Scheduler: available; `captured_unclassified=0`.
+- Health: Flamingo unavailable; CFDB7 available with 15 records.
+- Doctor, deterministic isolated pipeline, configured DeepSeek isolated
+  pipeline, GA4 validation, safe queue pass, and read-only item diagnosis
+  passed. Both pipelines reported `production_state_touched=false`; GA4
+  validation reported `live_request_sent=false`.
+- Read-only dry-run reported `safe=true` and no AI or destination request.
+- Existing staging mappings were not published, enabled, or changed by this
+  run. No high-risk or destination operation was attempted.
+
+## Browser Result
+
+The full command ran from `tests/wordpress` with these inputs:
+
+```text
+CF7AIV_BASE_URL=https://staging.mosaicpublicity.co.uk
+CF7AIV_CONTACT_URL=/contact/
+CF7AIV_ALLOW_REVERSIBLE_SAVES=1
+CF7AIV_AUTH_STATE=<temporary ignored storage state>
+```
+
+- The suite registered and executed all **17 tests** with zero skips.
+- Exact result: **16 passed, 1 failed, 0 skipped, 0 flaky**.
+- The failed test was `opt-in guided Setup draft save records an exact cleanup
+  manifest without publishing`. The exact `cf7aiv_save_guided_policy` POST
+  succeeded and created the draft row, but the redirected Setup page rendered
+  `Draft status: Not saved` instead of `draft` at `ux-admin.spec.ts:551`.
+- Setup and Integrations responsive coverage passed at `1440x1000`,
+  `1024x900`, and `390x844`; ordinary reversible timeout save/restore,
+  discard, provider switching, logged-out redirect, public `/contact/`, and
+  consent-denied/granted read-only attribution checks passed.
+- The captured attachment is retained at ignored
+  `tests/wordpress/test-results/task-6-v0218-json/guided-draft-cleanup-manifest.json`.
+  It records the exact cleanup predicate `policy_key=global`,
+  `version=pw-ux-f33c6061-8269-4a7b-9d6a-cf150ad57fe7`,
+  `status=draft`, and `policy_format=cf7aiv-policy/v2`.
+- Browser diagnostics contained 17 blocks, zero page errors, zero HTTP error
+  responses, zero plugin-specific markers, and two unrelated teardown
+  `net::ERR_ABORTED` requests for WordPress core JavaScript files.
+- No form was submitted, and no mapping publish, live transition, provider
+  destination transport, or other high-risk admin action was accepted.
+
+## Cleanup And Limitations
+
+- The manifest predicate matched exactly one row before deletion and zero rows
+  afterward. No prefix, date, pack, or broad policy deletion was used.
+- The complete server-side `cf7aiv_settings` snapshot was taken before the
+  browser run without printing its value. Pre-run and post-cleanup JSON files
+  are both mode `0600`, 1069 bytes, and have the same SHA-256:
+  `ae6b0e54d26878eda75544ff3c48fb85b1a870893e9d042e01f010c048483a45`.
+- Temporary administrator IDs 23 (failed setup attempt) and 24 (final run)
+  were deleted. The broader `cf7aiv-task6` user search returned zero users.
+  The ignored storage state is absent; no remote task endpoint or runner was
+  created; the extraction and diagnostic workspaces are absent.
+- The guided draft result remains an unresolved staging concern: the policy
+  row persisted, but the non-sensitive `draft_summary` option state did not
+  survive the guided save/readback, while the ordinary settings round-trip did
+  persist. This candidate is therefore not a clean green browser gate.
+- Flamingo remains unavailable while CFDB7 is available. The standard wrapper
+  PHP version remains below minimum, so future provider/runtime checks must
+  continue using explicit PHP 8.3.33 until staging operations are corrected.
+- This run does not claim live automation, destination collection, accepted
+  production mail flow, or real campaign attribution.
+
 # Release verification — 0.2.16 deterministic archive
 
 The 0.2.16 release packager was corrected and verified locally on 2026-08-04,
