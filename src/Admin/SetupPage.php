@@ -42,10 +42,11 @@ final class SetupPage {
 		}
 		echo '</ol>';
 
-		if (! empty($_GET['suggestion_error'])) {
+		$suggestionError = ! empty($_GET['suggestion_error']);
+		if ($suggestionError) {
 			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert" aria-live="assertive"><p>The site scan could not complete. Review the selected context and try again.</p></div>';
 		}
-		if (is_scalar($_GET['suggestions'] ?? null)) {
+		if (! $suggestionError && is_scalar($_GET['suggestions'] ?? null)) {
 			$suggestionCount = max(0, (int) $_GET['suggestions']);
 			$suggestionLabel = $suggestionCount === 1 ? 'suggestion' : 'suggestions';
 			echo '<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite"><p>Site scan complete. ' . $suggestionCount . ' pending ' . self::e($suggestionLabel) . ' are ready for review.</p></div>';

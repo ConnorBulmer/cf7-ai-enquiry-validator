@@ -325,6 +325,8 @@ foreach (['exclusion_codes', 'ai_whitelist'] as $optionGroup) {
 }
 $_GET=['suggestions'=>'2'];ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanStatus=ob_get_clean();unset($_GET);
 admin_assert(str_contains($setupScanStatus,'<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite">')&&str_contains($setupScanStatus,'Site scan complete.'),'Setup scan results must expose a bounded accessible status without adding a second save workflow.');
+$_GET=['suggestions'=>'2','suggestion_error'=>'1'];ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanFailure=ob_get_clean();unset($_GET);
+admin_assert(str_contains($setupScanFailure,'The site scan could not complete.')&&!str_contains($setupScanFailure,'cf7aiv-setup-status')&&!str_contains($setupScanFailure,'Site scan complete.'),'Setup scan failure must take precedence over a contradictory success status.');
 admin_assert(str_contains($policy, 'cf7aiv-page-header') && str_contains($policy, 'cf7aiv-actions'), 'Policy Lab must use shared native structure.');
 admin_assert(str_contains($setup, 'cf7aiv-page-header') && str_contains($setup, 'cf7aiv-actions'), 'Setup must use shared native structure.');
 admin_assert(str_contains($policy, 'class="card'), 'Policy Lab must retain native card panels.');

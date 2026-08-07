@@ -133,6 +133,30 @@ cf7aiv_integration_assert(
 	&& $capabilitySanitized['providers']['openai_reasoning_effort'] === 'unsupported',
 	'Reasoning sanitization must fail closed to each provider and model capability default.'
 );
+$capableUnsupported = CF7AIV\Admin\SettingsSanitizer::sanitize([
+	'providers' => [
+		'openai_model' => 'gpt-5.4-mini',
+		'openai_reasoning_effort' => 'unsupported',
+	],
+]);
+$unsupportedModelValues = CF7AIV\Admin\SettingsSanitizer::sanitize([
+	'providers' => [
+		'openai_model' => 'gpt-4o',
+		'openai_reasoning_effort' => 'off',
+	],
+]);
+$invalidCapableReasoning = CF7AIV\Admin\SettingsSanitizer::sanitize([
+	'providers' => [
+		'openai_model' => 'gpt-5.4-mini',
+		'openai_reasoning_effort' => 'invalid',
+	],
+]);
+cf7aiv_integration_assert(
+	$capableUnsupported['providers']['openai_reasoning_effort'] === 'off'
+	&& $unsupportedModelValues['providers']['openai_reasoning_effort'] === 'unsupported'
+	&& $invalidCapableReasoning['providers']['openai_reasoning_effort'] === 'unsupported',
+	'OpenAI reasoning sanitization must normalize capable unsupported input to off and retain fail-closed unsupported values only for unsupported or invalid input.'
+);
 
 $GLOBALS['wpdb'] = new class {
 	public string $prefix = 'wp_';
