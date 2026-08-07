@@ -693,3 +693,22 @@
 		color: #c3c4c7;
 	}
 }
+
+/* Progress for slow provider calls, and the states that were invisible. */
+.cf7aiv-admin .cf7aiv-busy-status {
+	margin: var(--cf7aiv-space-2) 0 0;
+	color: var(--cf7aiv-text-muted);
+	font-style: italic;
+}
+
+.cf7aiv-admin [aria-busy="true"] {
+	cursor: progress;
+}
+
+.cf7aiv-admin .cf7aiv-ga4-validation-state {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--cf7aiv-space-2);
+	margin: var(--cf7aiv-space-3) 0;
+}

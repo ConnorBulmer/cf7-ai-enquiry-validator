@@ -73,6 +73,29 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.25 visible operational state
+
+Version 0.2.25 shows three things the plugin already knew and never displayed.
+Each had the same shape: a state that decided what happened next was recorded
+internally and left off the screen, so the only remaining move was to guess or
+read the code.
+
+The reason a classification failed is written to `last_error` on every failure
+and was displayed nowhere. A queue of failed items showed only that they had
+failed, which leaves re-running them as the sole option - and something that
+fails deterministically fails again. It now appears in the Review Queue for
+failed and retrying items, sanitized through the same path as delivery errors.
+
+GA4 debug validation recorded its result silently. Live delivery refuses to
+leave dry-run until validation passes, so enabling it could do nothing with no
+explanation. Integrations now shows whether validation has passed and what
+follows from it.
+
+Administration actions that call an AI provider or Google synchronously can take
+tens of seconds behind an ordinary form submission, with no cursor change, no
+disabled button and no message. They now report progress while they run, without
+ever claiming success. Schema remains version 10, so no migration is required.
+
 ### Version 0.2.24 Complianz consent capture
 
 Version 0.2.24 fixes attribution never being captured on sites using Complianz,

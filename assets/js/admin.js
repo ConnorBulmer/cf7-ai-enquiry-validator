@@ -430,3 +430,66 @@
 		});
 	});
 }());
+
+/*
+ * Show that a slow administration action is running.
+ *
+ * Several actions call an AI provider or Google synchronously and can take tens
+ * of seconds. They submit an ordinary form, so the page simply sits there with
+ * no cursor change, no disabled button and no message. Reported as "clicking
+ * seems not to do anything" - the operator pressed the button repeatedly,
+ * queueing duplicate provider calls, and only learned it had been working when
+ * an error appeared much later.
+ *
+ * This only reflects work that is genuinely in progress; it never claims
+ * success. Kept separate from the tabbed Integrations enhancement above so it
+ * applies to every plugin screen, and written so a page without these forms is
+ * unaffected.
+ */
+(function () {
+	'use strict';
+
+	var SLOW_ACTIONS = [
+		'cf7aiv_setup_scan',
+		'cf7aiv_validate_ga4',
+		'cf7aiv_test_microsoft',
+		'cf7aiv_setup_suggestion',
+		'cf7aiv_backfill'
+	];
+
+	var BUSY_LABEL = {
+		cf7aiv_setup_scan: 'Analysing, this can take up to a minute',
+		cf7aiv_validate_ga4: 'Validating with GA4',
+		cf7aiv_test_microsoft: 'Sending the test event',
+		cf7aiv_setup_suggestion: 'Applying',
+		cf7aiv_backfill: 'Scheduling'
+	};
+
+	document.addEventListener('submit', function (event) {
+		var form = event.target;
+		if (!form || form.tagName !== 'FORM' || event.defaultPrevented) { return; }
+		var action = form.querySelector('input[name="action"]');
+		if (!action || SLOW_ACTIONS.indexOf(action.value) === -1) { return; }
+
+		var button = form.querySelector('button[type="submit"], input[type="submit"]');
+		if (!button || button.getAttribute('data-cf7aiv-busy') === 'true') { return; }
+
+		// The label is replaced rather than the button disabled before submit,
+		// because a disabled control is omitted from the submitted data in some
+		// browsers and the action would lose its own button value.
+		button.setAttribute('data-cf7aiv-busy', 'true');
+		button.setAttribute('aria-busy', 'true');
+		var label = BUSY_LABEL[action.value] || 'Working';
+		if ('textContent' in button) { button.textContent = label + '…'; }
+		else { button.value = label + '…'; }
+
+		var status = document.createElement('p');
+		status.className = 'cf7aiv-busy-status';
+		status.setAttribute('role', 'status');
+		status.setAttribute('aria-live', 'polite');
+		status.textContent = label + '. This page will update when it finishes.';
+		if (button.parentNode) { button.parentNode.appendChild(status); }
+
+		window.setTimeout(function () { button.disabled = true; }, 0);
+	}, true);
+}());

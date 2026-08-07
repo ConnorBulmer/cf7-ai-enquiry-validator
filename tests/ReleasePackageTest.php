@@ -87,14 +87,14 @@ try {
 cf7aiv_release_assert($invalidTagRejected, 'A release tag without the required v prefix must be rejected.');
 
 $pluginRoot = dirname(__DIR__);
-$metadata = ReleasePackager::validateMetadata($pluginRoot, '0.2.24');
+$metadata = ReleasePackager::validateMetadata($pluginRoot, '0.2.25');
 cf7aiv_release_assert(
 	$metadata === [
-		'plugin_header' => '0.2.24',
-		'version_constant' => '0.2.24',
-		'stable_tag' => '0.2.24',
+		'plugin_header' => '0.2.25',
+		'version_constant' => '0.2.25',
+		'stable_tag' => '0.2.25',
 	],
-	'All release identities must agree on 0.2.24.',
+	'All release identities must agree on 0.2.25.',
 );
 
 $fixtureRoot = sys_get_temp_dir() . '/cf7aiv-release-fixture-' . bin2hex(random_bytes(6));

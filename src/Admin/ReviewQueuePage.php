@@ -28,7 +28,7 @@ final class ReviewQueuePage {
 		wp_nonce_field('cf7aiv_bulk_review');
 		echo '<div class="tablenav top cf7aiv-toolbar cf7aiv-bulk-toolbar"><label for="cf7aiv-review-action">Bulk review action</label><select id="cf7aiv-review-action" name="review_action"><option value="confirm">Confirm prediction</option><option value="approve_no_send">Approve without send</option><option value="approve_dispatch">Approve and dispatch</option><option value="reject">Reject</option><option value="reanalyse">Reanalyse</option></select><button type="submit" class="button">Apply</button></div>';
 		ob_start();
-		echo '<table class="widefat striped"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Outcome</th><th scope="col">Tier</th><th scope="col">Decision state</th><th scope="col">Evidence codes</th><th scope="col">Missing evidence</th><th scope="col">Ambiguity</th><th scope="col">Policy</th><th scope="col">Source</th><th scope="col">Attribution</th><th scope="col">Consent</th><th scope="col">Review</th><th scope="col">Delivery status</th>';
+		echo '<table class="widefat striped"><thead><tr><th scope="col">Select</th><th scope="col">Item</th><th scope="col">Outcome</th><th scope="col">Tier</th><th scope="col">Decision state</th><th scope="col">Evidence codes</th><th scope="col">Missing evidence</th><th scope="col">Ambiguity</th><th scope="col">Policy</th><th scope="col">Source</th><th scope="col">Attribution</th><th scope="col">Consent</th><th scope="col">Review</th><th scope="col">Why it failed</th><th scope="col">Delivery status</th>';
 		if ($advanced) {
 			echo '<th scope="col">AI diagnostic, not dispatch score.</th>';
 		}
@@ -46,7 +46,9 @@ final class ReviewQueuePage {
 			echo '<td>' . self::e(implode(', ', self::codes($row['ambiguity_json'] ?? null))) . '</td>';
 			echo '<td>' . self::e((string) ($row['policy_version'] ?? '')) . '</td><td>' . self::e((string) ($row['source_type'] ?? '')) . '</td>';
 			echo '<td>' . (! empty($row['attribution_ready']) ? 'Ready' : 'Unavailable') . '</td><td>' . self::e(self::consent((string) ($row['consent_encrypted'] ?? ''))) . '</td>';
-			echo '<td>' . self::e((string) ($row['review_state'] ?? '')) . '</td><td>' . self::e((string) ($row['destination_status'] ?? 'not sent')) . '</td>';
+			echo '<td>' . self::e((string) ($row['review_state'] ?? '')) . '</td>';
+			echo '<td>' . self::e(self::failureReason((string) ($row['review_state'] ?? ''), (string) ($row['last_error'] ?? ''))) . '</td>';
+			echo '<td>' . self::e((string) ($row['destination_status'] ?? 'not sent')) . '</td>';
 			if ($advanced) {
 				echo '<td>' . self::e((string) ($row['confidence'] ?? 'Unavailable')) . '</td>';
 			}
@@ -70,7 +72,7 @@ final class ReviewQueuePage {
 		}
 		$where = $state !== '' && method_exists($wpdb, 'prepare') ? $wpdb->prepare(' WHERE item.review_state=%s', $state) : '';
 		$offset = ($page - 1) * 50;
-		$sql = "SELECT item.id,item.tier_id,item.outcome_id,item.reason_code,item.confidence,item.decision_state,item.evidence_json,item.missing_evidence_json,item.ambiguity_json,item.policy_version,item.source_type,item.source_reference,item.attribution_ready,item.consent_encrypted,item.review_state,item.review_revision,item.created_at,(SELECT delivery.state FROM {$wpdb->prefix}cf7aiv_deliveries delivery WHERE delivery.item_id=item.id ORDER BY delivery.id DESC LIMIT 1) AS destination_status FROM {$wpdb->prefix}cf7aiv_items item{$where} ORDER BY item.created_at ASC LIMIT 50 OFFSET {$offset}";
+		$sql = "SELECT item.id,item.tier_id,item.outcome_id,item.reason_code,item.confidence,item.decision_state,item.evidence_json,item.missing_evidence_json,item.ambiguity_json,item.policy_version,item.source_type,item.source_reference,item.attribution_ready,item.consent_encrypted,item.review_state,item.review_revision,item.last_error,item.created_at,(SELECT delivery.state FROM {$wpdb->prefix}cf7aiv_deliveries delivery WHERE delivery.item_id=item.id ORDER BY delivery.id DESC LIMIT 1) AS destination_status FROM {$wpdb->prefix}cf7aiv_items item{$where} ORDER BY item.created_at ASC LIMIT 50 OFFSET {$offset}";
 		$rows = $wpdb->get_results($sql, ARRAY_A);
 		return is_array($rows) ? $rows : [];
 	}
@@ -152,6 +154,27 @@ final class ReviewQueuePage {
 		foreach ((new ReviewService(new WpReviewStore()))->timingWarnings($id) as $warning) {
 			echo '<div class="notice notice-warning inline"><p>' . self::e($warning) . '</p></div>';
 		}
+	}
+
+	/**
+	 * Why an item failed, for the states where that is the only useful question.
+	 *
+	 * The reason has always been recorded in last_error, and was never shown
+	 * anywhere in the administration screens. An operator looking at a queue of
+	 * items in "error" could see only that they had failed, which left
+	 * re-running them as the only available move - and re-running something that
+	 * fails deterministically just fails again. Observed on a live site where
+	 * every item failed for one fixed reason that took a code read to find.
+	 *
+	 * Shown only for the failure states: on a successful item the column would
+	 * be noise, and a stale reason next to a healthy item reads as a new problem.
+	 * Sanitized through the same path as delivery errors, because it carries
+	 * whatever a provider or the database put in it.
+	 */
+	private static function failureReason(string $reviewState, string $lastError): string {
+		if (! in_array($reviewState, ['error', 'retrying'], true)) { return ''; }
+		$reason = trim(AdminSafe::log($lastError));
+		return $reason === '' ? 'No reason recorded' : $reason;
 	}
 
 	private static function consent(string $encrypted): string {

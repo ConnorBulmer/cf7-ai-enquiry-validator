@@ -2,6 +2,23 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.25 — 2026-08-08
+
+- Added the recorded classification failure reason to the Review Queue. It was
+  written to `last_error` on every failure and displayed nowhere, so a queue of
+  failed items showed only that they had failed and left re-running them as the
+  only available move. It is shown for failed and retrying items only, and
+  sanitized through the same path as delivery errors.
+- Added GA4 debug validation state to Integrations. Validation recorded its
+  result silently, and live delivery refuses to leave dry-run until it passes,
+  so the next step could fail with nothing on screen to explain it.
+- Added progress feedback to the administration actions that call a provider or
+  Google synchronously and can take tens of seconds. They submitted an ordinary
+  form and gave no cursor change, no disabled button and no message, so the
+  screen appeared inert and the action was pressed repeatedly, queueing
+  duplicate provider calls.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.24 — 2026-08-08
 
 - Fixed attribution never being captured on sites using Complianz. The script

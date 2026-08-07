@@ -176,7 +176,24 @@ final class IntegrationsPage {
 		self::transitionForm('cf7aiv_automation_transition', 'cf7aiv_automation_transition', 'Return automation to shadow', 'shadow', 'google');
 		echo '<p>Live automation is an explicit transition. Classification and delivery safeguards still apply.</p></fieldset>';
 
-		echo '<fieldset><legend>GA4 delivery lifecycle</legend><h3>GA4 validation and live transition</h3><form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_validate_ga4">';
+		echo '<fieldset><legend>GA4 delivery lifecycle</legend><h3>GA4 validation and live transition</h3>';
+		/*
+		 * Validation writes debug_validated and then said nothing. The button
+		 * could be pressed and there was no way to learn whether it had worked,
+		 * which also made the next step opaque: live delivery silently refuses
+		 * unless this has passed, so an operator could enable live, see no error,
+		 * and still be in dry-run.
+		 */
+		$ga4 = (array) ($destinations['ga4'] ?? []);
+		$validated = ! empty($ga4['debug_validated']);
+		echo '<p class="cf7aiv-ga4-validation-state">Debug validation: '
+			. ($validated ? AdminUi::badge('Passed', 'positive') : AdminUi::badge('Not validated', 'warning'))
+			. ' <span class="description">'
+			. self::e($validated
+				? 'The Measurement ID and API secret were accepted by GA4. Live delivery can be enabled.'
+				: 'Live delivery stays in dry-run until this passes. Validation sends one zero-value, consent-denied event to the GA4 debug endpoint, which validates without recording it.')
+			. '</span></p>';
+		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_validate_ga4">';
 		wp_nonce_field('cf7aiv_validate_ga4');
 		echo '<input type="hidden" name="return_tab" value="google"><p class="cf7aiv-actions"><button class="button button-secondary" type="submit">Validate GA4 debug endpoint</button></p></form>';
 		self::transitionForm('cf7aiv_ga_transition', 'cf7aiv_ga_transition', 'Enable GA4 live delivery', 'live', 'google');
