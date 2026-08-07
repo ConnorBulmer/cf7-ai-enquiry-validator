@@ -158,6 +158,34 @@ cf7aiv_integration_assert(
 	'OpenAI reasoning sanitization must normalize capable unsupported input to off and retain fail-closed unsupported values only for unsupported or invalid input.'
 );
 
+foreach ([
+	['selected' => 'deepseek', 'setting' => 'deepseek_reasoning_effort', 'effort' => 'standard', 'provider' => CF7AIV\Providers\DeepSeekProvider::class],
+	['selected' => 'openai', 'setting' => 'openai_reasoning_effort', 'effort' => 'deep', 'provider' => CF7AIV\Providers\OpenAIProvider::class],
+] as $setupCase) {
+	$sanitizedSetup = CF7AIV\Admin\SettingsSanitizer::sanitize([
+		'providers' => [
+			'selected' => $setupCase['selected'],
+			$setupCase['setting'] => $setupCase['effort'],
+		],
+	]);
+	$GLOBALS['cf7aiv_integration_options'][CF7AIV\Infrastructure\Settings::OPTION] = [
+		'providers' => [
+			'selected' => $sanitizedSetup['providers']['selected'],
+			$setupCase['setting'] => $sanitizedSetup['providers'][$setupCase['setting']],
+		],
+	];
+	$setupMethod = new ReflectionMethod(CF7AIV\Admin\AdminHooks::class, 'setupService');
+	$setupMethod->setAccessible(true);
+	$setupService = $setupMethod->invoke(null);
+	$setupProviderProperty = new ReflectionProperty($setupService, 'provider');
+	$setupProviderProperty->setAccessible(true);
+	$setupProvider = $setupProviderProperty->getValue($setupService);
+	$reasoningProperty = new ReflectionProperty($setupProvider, 'reasoningEffort');
+	$reasoningProperty->setAccessible(true);
+	cf7aiv_integration_assert($setupProvider instanceof $setupCase['provider'], "Setup service must construct the selected {$setupCase['selected']} provider.");
+	cf7aiv_integration_assert($reasoningProperty->getValue($setupProvider) === $sanitizedSetup['providers'][$setupCase['setting']], "Setup service must pass the sanitized {$setupCase['setting']} setting to its provider adapter.");
+}
+
 $GLOBALS['wpdb'] = new class {
 	public string $prefix = 'wp_';
 	public function prepare(string $sql, mixed ...$arguments): string { return str_replace('%s', "'wp_db7_forms'", $sql); }

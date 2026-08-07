@@ -173,6 +173,67 @@ $mockRequest = new CF7AIV\Domain\ClassificationRequest(
 	allowedAmbiguityFlags: [],
 );
 
+final class ProviderSuggestionCaptureTransport implements CF7AIV\Infrastructure\HttpTransportInterface {
+	public ?array $lastPayload = null;
+
+	public function __construct(private readonly string $provider) {}
+
+	public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse {
+		$this->lastPayload = json_decode((string) ($arguments['body'] ?? ''), true, 64, JSON_THROW_ON_ERROR);
+		$suggestions = json_encode(['suggestions' => [[
+			'type' => 'service',
+			'value' => 'Website design',
+			'source_refs' => ['pack:general'],
+		]]], JSON_THROW_ON_ERROR);
+		$body = $this->provider === 'openai'
+			? json_encode(['output_text' => $suggestions], JSON_THROW_ON_ERROR)
+			: json_encode(['choices' => [['message' => ['content' => $suggestions]]],], JSON_THROW_ON_ERROR);
+		return new CF7AIV\Infrastructure\HttpResponse(200, $body);
+	}
+}
+
+$suggestionRequest = new CF7AIV\Domain\PolicySuggestionRequest('general', [
+	'pages' => [['id' => 1, 'title' => 'Services', 'url' => 'https://example.test/services', 'text' => 'Public service information. private@example.test token=TOP-SECRET']],
+	'forms' => [],
+]);
+
+foreach ([
+	['effort' => 'off', 'thinking' => 'disabled', 'max_tokens' => 900],
+	['effort' => 'standard', 'thinking' => 'enabled', 'max_tokens' => 900],
+	['effort' => 'deep', 'thinking' => 'enabled', 'max_tokens' => 1600],
+] as $case) {
+	$transport = new ProviderSuggestionCaptureTransport('deepseek');
+	$provider = new CF7AIV\Providers\DeepSeekProvider($transport, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-v4-flash', 30, $case['effort']);
+	$provider->suggestPolicy($suggestionRequest);
+	$payload = $transport->lastPayload ?? [];
+	$wire = json_encode($payload, JSON_THROW_ON_ERROR);
+	provider_assert(($payload['thinking']['type'] ?? '') === $case['thinking'], "DeepSeek {$case['effort']} suggestions must map to the matching thinking capability.");
+	provider_assert(($payload['max_tokens'] ?? 0) === $case['max_tokens'], "DeepSeek {$case['effort']} suggestions must use the classification-equivalent bounded output budget.");
+	provider_assert(($payload['response_format']['type'] ?? '') === 'json_object' && str_contains((string) ($payload['messages'][0]['content'] ?? ''), 'Required JSON Schema'), 'DeepSeek suggestions must retain strict JSON mode and the fixed schema prompt.');
+	provider_assert(! str_contains($wire, 'private@example.test') && ! str_contains($wire, 'TOP-SECRET'), 'DeepSeek suggestion payloads must retain privacy redaction.');
+	if ($case['effort'] === 'off') {
+		provider_assert(($payload['temperature'] ?? null) === 0, 'DeepSeek off suggestions must retain deterministic temperature handling.');
+	} else {
+		provider_assert(! array_key_exists('temperature', $payload), "DeepSeek {$case['effort']} suggestions must use the reasoning capability instead of forced temperature zero.");
+	}
+}
+
+foreach ([
+	['effort' => 'off', 'mapped' => 'none', 'max_output_tokens' => 1500],
+	['effort' => 'standard', 'mapped' => 'medium', 'max_output_tokens' => 3000],
+	['effort' => 'deep', 'mapped' => 'high', 'max_output_tokens' => 6000],
+] as $case) {
+	$transport = new ProviderSuggestionCaptureTransport('openai');
+	$provider = new CF7AIV\Providers\OpenAIProvider($transport, 'key', 'https://api.openai.com/v1/responses', 'gpt-5.4-mini', 30, $case['effort']);
+	$provider->suggestPolicy($suggestionRequest);
+	$payload = $transport->lastPayload ?? [];
+	$wire = json_encode($payload, JSON_THROW_ON_ERROR);
+	provider_assert(($payload['reasoning']['effort'] ?? '') === $case['mapped'], "OpenAI {$case['effort']} suggestions must map to the documented reasoning capability.");
+	provider_assert(($payload['max_output_tokens'] ?? 0) === $case['max_output_tokens'], "OpenAI {$case['effort']} suggestions must use a bounded output budget.");
+	provider_assert(($payload['store'] ?? true) === false && ($payload['text']['format']['type'] ?? '') === 'json_schema' && ($payload['text']['format']['strict'] ?? false) === true, 'OpenAI suggestions must retain store=false and strict JSON schema output.');
+	provider_assert(! str_contains($wire, 'private@example.test') && ! str_contains($wire, 'TOP-SECRET'), 'OpenAI suggestion payloads must retain privacy redaction.');
+}
+
 // The mock transport returns a minimal valid-schema response for SCHEMA_V1.
 // We need the ResultValidator schema to permit our minimal JSON.  Let us just
 // test the payload structure by overriding the mock result to match v1 schema.

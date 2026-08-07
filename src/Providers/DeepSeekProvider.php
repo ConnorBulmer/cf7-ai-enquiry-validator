@@ -41,6 +41,11 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 
 	public function suggestPolicy(PolicySuggestionRequest $request): PolicySuggestionResult {
 		$schema = json_encode(PolicySuggestionResult::jsonSchema($request->allowedSourceRefs()), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		$reasoningEffort = $this->reasoningEffort;
+		$thinking = match ($reasoningEffort) {
+			'standard', 'deep' => ['type' => 'enabled'],
+			default => ['type' => 'disabled'],
+		};
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
@@ -48,10 +53,10 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 				['role' => 'user', 'content' => $request->providerProfileJson()],
 			],
 			'response_format' => ['type' => 'json_object'],
-			'thinking' => ['type' => 'disabled'],
-			'temperature' => 0,
-			'max_tokens' => 4000,
+			'thinking' => $thinking,
+			'max_tokens' => $reasoningEffort === 'deep' ? 1600 : 900,
 		];
+		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
 			'timeout' => max(5, min(120, $this->timeout)),
