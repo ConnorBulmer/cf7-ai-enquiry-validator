@@ -31,7 +31,7 @@ final class IntegrationsPage {
 		$testStatus = is_scalar($_GET['microsoft_test'] ?? null) ? (string) $_GET['microsoft_test'] : '';
 		$stage = (string) ($settings['setup']['stage'] ?? 'setup');
 		$automationMode = (string) ($settings['automation']['mode'] ?? 'shadow');
-		$ga4 = (array) ($destinations['ga4'] ?? []);
+		$destinationSafety = self::destinationSafety($destinations);
 
 		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-admin cf7aiv-integrations-page" data-active-tab="' . self::e($activeTab) . '">';
 		echo '<div class="cf7aiv-page-header"><h1>Integrations</h1><p>All credentials are write-only. Blank secret fields retain the currently stored encrypted value.</p></div>';
@@ -39,7 +39,7 @@ final class IntegrationsPage {
 		echo self::statusBadge('Lifecycle: ' . ucfirst($stage), $stage === 'live' ? 'current' : 'review');
 		echo self::statusBadge('Automation: ' . ucfirst($automationMode), $automationMode === 'live' ? 'warning' : '');
 		echo self::statusBadge('AI provider: ' . ucfirst($selectedProvider), '');
-		echo self::statusBadge(! empty($ga4['live_enabled']) ? 'GA4 live delivery' : 'Destinations in dry-run', ! empty($ga4['live_enabled']) ? 'warning' : 'positive');
+		echo self::statusBadge($destinationSafety['label'], $destinationSafety['tone']);
 		echo '</div>';
 
 		if ($saveStatus === 'saved') {
@@ -284,7 +284,7 @@ final class IntegrationsPage {
 	private static function reasoningControl(string $provider, string $model, string $effort): string {
 		$isOpenAi = $provider === 'openai';
 		$options = $isOpenAi ? OpenAIProvider::reasoningOptions($model) : DeepSeekProvider::reasoningOptions($model);
-		$selected = in_array($effort, $options, true) ? $effort : (in_array('unsupported', $options, true) ? 'unsupported' : 'off');
+		$selected = in_array($effort, $options, true) ? $effort : (in_array('unsupported', $options, true) ? 'unsupported' : ($options[0] ?? 'unsupported'));
 		$description = $isOpenAi ? OpenAIProvider::reasoningDescription($model, $selected) : DeepSeekProvider::reasoningDescription($model, $selected);
 		$disabled = $options === ['unsupported'];
 		$name = "cf7aiv[providers][{$provider}_reasoning_effort]";
@@ -327,6 +327,17 @@ final class IntegrationsPage {
 	private static function statusBadge(string $label, string $tone): string {
 		$class = 'cf7aiv-status-badge' . ($tone === '' ? '' : ' is-' . self::e($tone));
 		return '<span class="' . $class . '">' . self::e($label) . '</span>';
+	}
+
+	/** @param array<string,mixed> $destinations @return array{label:string,tone:string} */
+	private static function destinationSafety(array $destinations): array {
+		foreach (['ga4', 'server_gtm', 'microsoft_uet', 'webhook'] as $key) {
+			$config = (array) ($destinations[$key] ?? []);
+			if (! empty($config['enabled']) && empty($config['dry_run'])) {
+				return ['label' => 'Live delivery enabled', 'tone' => 'warning'];
+			}
+		}
+		return ['label' => 'All enabled destinations in dry-run', 'tone' => 'positive'];
 	}
 
 	/** @return array{calls:int,input_tokens:int,output_tokens:int,reasoning_tokens:int} */

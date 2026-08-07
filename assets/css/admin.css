@@ -320,6 +320,19 @@
 	background: var(--cf7aiv-surface-subtle);
 }
 
+.cf7aiv-setup-page .cf7aiv-setup-advanced,
+.cf7aiv-setup-page .cf7aiv-setup-evidence-summary {
+	max-width: 100%;
+	margin-top: var(--cf7aiv-space-4);
+}
+
+.cf7aiv-setup-page .cf7aiv-setup-policy-preview {
+	box-sizing: border-box;
+	max-width: 100%;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
 .cf7aiv-setup-page .cf7aiv-setup-summary-panel h3,
 .cf7aiv-setup-page .cf7aiv-setup-callout h3 {
 	margin-top: 0;

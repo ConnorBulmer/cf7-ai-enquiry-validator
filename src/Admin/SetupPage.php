@@ -10,7 +10,7 @@ use CF7AIV\Infrastructure\Settings;
 final class SetupPage {
 	public static function render(): void {
 		self::capability();
-		$settings = (array) get_option(Settings::OPTION, Settings::defaults());
+		$settings = Settings::withDefaults((array) get_option(Settings::OPTION, Settings::defaults()));
 		$stage = (string) ($settings['setup']['stage'] ?? 'setup');
 		$automationMode = (string) ($settings['automation']['mode'] ?? 'shadow');
 		if (! in_array($automationMode, ['shadow', 'live'], true)) {
@@ -22,7 +22,11 @@ final class SetupPage {
 			$selectedPack = (string) array_key_first($packs);
 		}
 		$selectedPackDefinition = is_array($packs[$selectedPack] ?? null) ? $packs[$selectedPack] : [];
-		$selectedPackLabel = (string) ($selectedPackDefinition['pack']['label'] ?? $selectedPack);
+		$selectedPackLabel = self::bounded((string) ($selectedPackDefinition['pack']['label'] ?? $selectedPack), 120);
+		$providers = (array) ($settings['providers'] ?? []);
+		$selectedProvider = in_array((string) ($providers['selected'] ?? 'deepseek'), ['deepseek', 'openai'], true) ? (string) $providers['selected'] : 'deepseek';
+		$selectedModel = self::bounded((string) ($providers[$selectedProvider . '_model'] ?? ''), 100);
+		$destinationSafety = self::destinationSafety((array) ($settings['destinations'] ?? []));
 		$draftSummary = (array) ($settings['setup']['draft_summary'] ?? []);
 		$stepLabels = [
 			'context' => 'Choose context',
@@ -60,9 +64,11 @@ final class SetupPage {
 		echo '</ol><p>Automation is currently ' . self::e($automationMode) . ' mode. Lifecycle changes do not enable delivery.</p></div>';
 		echo '<div class="cf7aiv-setup-field-group"><label for="cf7aiv-guided-pack">Starter pack</label><select id="cf7aiv-guided-pack" name="pack_key" form="cf7aiv-setup-scan-form" data-setup-pack required>';
 		foreach ($packs as $key => $pack) {
-			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e((string) ($pack['pack']['label'] ?? $key)) . '</option>';
+			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e(self::bounded((string) ($pack['pack']['label'] ?? $key), 120)) . '</option>';
 		}
 		echo '</select><p class="description">The pack supplies a validated starting policy. You can change the draft rules before publishing.</p></div>';
+		$policyPreview = self::policyPreview($selectedPackDefinition);
+		echo '<details class="cf7aiv-setup-advanced"><summary>Advanced: Read-only starter policy JSON</summary><p>Read-only starter policy JSON preview. Use Policy Lab for editing and publishing.</p><pre aria-label="Read-only starter policy JSON preview" class="cf7aiv-setup-policy-preview">' . self::e($policyPreview) . '</pre><p><a href="' . self::e(admin_url('admin.php?page=cf7aiv-policy')) . '">Edit this policy in Policy Lab</a></p></details>';
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" id="cf7aiv-setup-scan-form" class="cf7aiv-setup-scan-form"><input type="hidden" name="action" value="cf7aiv_setup_scan">';
 		wp_nonce_field('cf7aiv_setup_scan');
 		echo '<p class="cf7aiv-setup-supporting-action">Need help shaping the draft? <button type="submit" class="button button-secondary">Analyse public site and forms</button></p><p class="description">Only public page copy and safe form structure are sent. Submission values are never scanned.</p></form>';
@@ -107,15 +113,17 @@ final class SetupPage {
 		echo '<div><dt>Exclusions</dt><dd data-setup-summary="exclusion_codes">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>AI whitelist</dt><dd data-setup-summary="ai_whitelist">Selections are shown above and will be included when the draft is saved.</dd></div>';
 		echo '<div><dt>Draft status</dt><dd>' . self::e((string) ($draftSummary['status'] ?? 'Not saved')) . '</dd></div></dl>';
+		echo self::evidenceSummary($selectedPackDefinition);
 		echo '<div class="cf7aiv-setup-field-group cf7aiv-setup-guided-pack-confirmation"><label for="cf7aiv-guided-draft-pack">Starter pack for this draft</label><select id="cf7aiv-guided-draft-pack" name="guided[pack_key]" data-setup-guided-pack required>';
 		foreach ($packs as $key => $pack) {
-			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e((string) ($pack['pack']['label'] ?? $key)) . '</option>';
+			echo '<option value="' . self::e((string) $key) . '"' . ($selectedPack === (string) $key ? ' selected' : '') . '>' . self::e(self::bounded((string) ($pack['pack']['label'] ?? $key), 120)) . '</option>';
 		}
 		echo '</select><p class="description">Confirm the same pack selected in Context before saving this draft. This control remains available without JavaScript.</p></div>';
 		echo '<div class="cf7aiv-setup-field-group cf7aiv-setup-review-version"><label for="cf7aiv-guided-version">Draft version</label><input id="cf7aiv-guided-version" name="guided[version]" value="' . self::e(gmdate('Ymd-His')) . '" required><p class="description">Use the generated version unless you need a recognizable internal draft label.</p></div>';
 		echo '<p class="cf7aiv-setup-step-actions"><button type="submit" class="button button-primary">Save guided draft</button> <button type="button" class="button button-secondary" data-setup-back="fields">Back to AI fields</button></p></section></form>';
 
 		echo '<section id="cf7aiv-setup-step-finish" class="card cf7aiv-setup-step" data-step="finish"><h2 tabindex="-1">5. Test and finish</h2><p>Choose the next safe action. Setup, Testing, and Live describe lifecycle readiness; automation and destinations remain separately controlled.</p>';
+		echo '<div class="cf7aiv-setup-summary-panel cf7aiv-setup-safety-summary"><h3>Current provider and destination status</h3><dl class="cf7aiv-setup-summary-list"><div><dt>Selected AI provider</dt><dd>' . self::e($selectedProvider === 'openai' ? 'OpenAI' : 'DeepSeek') . '</dd></div><div><dt>Selected model</dt><dd>' . self::e($selectedModel === '' ? 'Not configured' : $selectedModel) . '</dd></div><div><dt>Automation mode</dt><dd>' . self::e($automationMode) . '</dd></div><div><dt>Destination safety</dt><dd><span class="cf7aiv-status-badge is-' . self::e($destinationSafety['tone']) . '">' . self::e($destinationSafety['label']) . '</span></dd></div></dl></div>';
 		echo '<div class="cf7aiv-setup-summary-panel"><h3>Next actions</h3><ul><li><a href="admin.php?page=cf7aiv-policy">Review the draft in Policy Lab</a></li><li><a href="admin.php?page=cf7aiv-integrations">Configure providers and integrations</a></li><li><a href="admin.php?page=cf7aiv-review">Open the Review Queue</a></li><li><a href="admin.php?page=cf7aiv-health">Check Tracking Health and Logs</a></li></ul></div>';
 		echo '<div class="cf7aiv-setup-callout" role="note"><h3>Safety summary</h3><p>Saving a draft does not publish policy, enable automation, send provider tests, or dispatch conversions. Review evidence, consent, attribution, and destination controls before any separate high-risk action.</p></div>';
 		$transition = $stage === 'testing' ? 'live' : 'testing';
@@ -195,6 +203,76 @@ final class SetupPage {
 			return $value;
 		}
 		return is_array($value) ? (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : $json;
+	}
+
+	/** @param array<string,mixed> $definition */
+	private static function policyPreview(array $definition): string {
+		try {
+			$json = json_encode($definition, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
+			return '{}';
+		}
+		return self::bounded($json, 12000);
+	}
+
+	/** @param array<string,mixed> $definition */
+	private static function evidenceSummary(array $definition): string {
+		$catalog = [];
+		foreach (array_slice((array) ($definition['evidence_catalog'] ?? []), 0, 32) as $entry) {
+			if (! is_array($entry)) {
+				continue;
+			}
+			$code = self::bounded((string) ($entry['code'] ?? ''), 64);
+			if ($code !== '') {
+				$catalog[$code] = str_replace('_', ' ', $code);
+			}
+		}
+		$catalogText = $catalog === [] ? 'none listed' : implode(', ', array_map(static fn (string $value): string => $value, array_values($catalog)));
+		$html = '<section class="cf7aiv-setup-evidence-summary" aria-labelledby="cf7aiv-setup-evidence-heading"><h3 id="cf7aiv-setup-evidence-heading">Evidence requirements</h3><p class="description">Available evidence catalog: ' . self::e(self::bounded($catalogText, 1200)) . '.</p><ul>';
+		foreach (array_slice((array) ($definition['tier_definitions'] ?? []), 0, 8) as $tier) {
+			if (! is_array($tier)) {
+				continue;
+			}
+			$required = [];
+			foreach (array_slice((array) ($tier['required_evidence'] ?? []), 0, 8) as $group) {
+				$codes = [];
+				foreach (array_slice((array) $group, 0, 8) as $code) {
+					$code = (string) $code;
+					if (isset($catalog[$code])) {
+						$codes[] = $catalog[$code];
+					}
+				}
+				if ($codes !== []) {
+					$required[] = implode(' or ', $codes);
+				}
+			}
+			$supporting = [];
+			foreach (array_slice((array) ($tier['supporting_evidence'] ?? []), 0, 16) as $code) {
+				$code = (string) $code;
+				if (isset($catalog[$code])) {
+					$supporting[] = $catalog[$code];
+				}
+			}
+			$label = self::bounded((string) ($tier['label'] ?? $tier['id'] ?? 'Outcome'), 120);
+			$minimum = max(0, min(16, (int) ($tier['minimum_supporting_evidence'] ?? 0)));
+			$html .= '<li><strong>' . self::e($label) . '</strong>: <span>Required evidence: ' . self::e($required === [] ? 'none' : self::bounded(implode('; ', $required), 500)) . '; Supporting evidence: ' . self::e($supporting === [] ? 'none' : self::bounded(implode(', ', $supporting), 500)) . '; Minimum supporting evidence: ' . $minimum . '.</span></li>';
+		}
+		return $html . '</ul></section>';
+	}
+
+	/** @param array<string,mixed> $destinations @return array{label:string,tone:string} */
+	private static function destinationSafety(array $destinations): array {
+		foreach (['ga4', 'server_gtm', 'microsoft_uet', 'webhook'] as $key) {
+			$config = (array) ($destinations[$key] ?? []);
+			if (! empty($config['enabled']) && empty($config['dry_run'])) {
+				return ['label' => 'Live delivery enabled', 'tone' => 'warning'];
+			}
+		}
+		return ['label' => 'All enabled destinations in dry-run', 'tone' => 'positive'];
+	}
+
+	private static function bounded(string $value, int $maximum): string {
+		return function_exists('mb_substr') ? mb_substr($value, 0, $maximum) : substr($value, 0, $maximum);
 	}
 
 	private static function capability(): void {

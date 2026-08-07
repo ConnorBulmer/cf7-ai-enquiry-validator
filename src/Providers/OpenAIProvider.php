@@ -37,6 +37,16 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		'gpt-5.4-mini-2026-03-17' => true,
 		'gpt-5.4-nano-2026-03-17' => true,
 	];
+	private const NONE_REASONING_MODELS = [
+		'gpt-5.4' => true,
+		'gpt-5.4-2026-03-05' => true,
+		'gpt-5.4-mini' => true,
+		'gpt-5.4-mini-2026-03-17' => true,
+		'gpt-5.4-nano' => true,
+		'gpt-5.4-nano-2026-03-17' => true,
+	];
+	private const STANDARD_MAX_OUTPUT_TOKENS = 3000;
+	private const DEEP_MAX_OUTPUT_TOKENS = 6000;
 
 	public function __construct(
 		private readonly HttpTransportInterface $transport,
@@ -48,7 +58,10 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 	) {}
 
 	public static function reasoningOptions(string $model): array {
-		return self::supportsReasoning($model) ? ['off', 'standard', 'deep'] : ['unsupported'];
+		if (! self::supportsReasoning($model)) {
+			return ['unsupported'];
+		}
+		return self::supportsNone($model) ? ['off', 'standard', 'deep'] : ['standard', 'deep'];
 	}
 
 	public static function reasoningDescription(string $model, string $effort): string {
@@ -56,9 +69,12 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 			return 'Reasoning is unavailable for this OpenAI model or selected configuration.';
 		}
 		return match ($effort) {
+			'off' => self::supportsNone($model)
+				? 'Reasoning is disabled with the documented reasoning.effort=none setting for this model.'
+				: 'Reasoning cannot be disabled with a documented none setting for this model; standard or deep is required.',
 			'standard' => 'Standard OpenAI reasoning uses a bounded medium reasoning effort and may use more tokens.',
 			'deep' => 'Deep OpenAI reasoning uses a bounded high reasoning effort and may use more tokens.',
-			default => 'Reasoning is off for this OpenAI model.'
+			default => 'Reasoning is unavailable for this OpenAI model or selected configuration.'
 		};
 	}
 
@@ -71,8 +87,12 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 			'instructions' => 'Suggest compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.',
 			'input' => [['role' => 'user', 'content' => [['type' => 'input_text', 'text' => $request->providerProfileJson()]]]],
 			'text' => ['format' => ['type' => 'json_schema', 'name' => 'cf7aiv_policy_suggestions', 'strict' => true, 'schema' => PolicySuggestionResult::jsonSchema($request->allowedSourceRefs())]],
-			'max_output_tokens' => 1500,
+			'max_output_tokens' => $this->maxOutputTokens(1500),
 		];
+		$reasoning = $this->reasoningPayload();
+		if ($reasoning !== null) {
+			$payload['reasoning'] = $reasoning;
+		}
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
 			'timeout' => max(5, min(120, $this->timeout)),
@@ -96,10 +116,11 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 				'strict' => true,
 				'schema' => ResultValidator::jsonSchema($request),
 			]],
-			'max_output_tokens' => $request->policySchema === \CF7AIV\Classification\PolicyValidator::SCHEMA_V2 ? 900 : 500,
+			'max_output_tokens' => $this->maxOutputTokens($request->policySchema === \CF7AIV\Classification\PolicyValidator::SCHEMA_V2 ? 900 : 500),
 		];
-		if (self::supportsReasoning($this->model) && in_array($this->reasoningEffort, ['standard', 'deep'], true)) {
-			$payload['reasoning'] = ['effort' => $this->reasoningEffort === 'deep' ? 'high' : 'medium'];
+		$reasoningPayload = $this->reasoningPayload();
+		if ($reasoningPayload !== null) {
+			$payload['reasoning'] = $reasoningPayload;
 		}
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
@@ -146,5 +167,38 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 
 	private static function supportsReasoning(string $model): bool {
 		return isset(self::REASONING_MODELS[strtolower(trim($model))]);
+	}
+
+	private static function supportsNone(string $model): bool {
+		return isset(self::NONE_REASONING_MODELS[strtolower(trim($model))]);
+	}
+
+	/** @return array{effort:string}|null */
+	private function reasoningPayload(): ?array {
+		return match ($this->effectiveReasoningEffort()) {
+			'off' => ['effort' => 'none'],
+			'standard' => ['effort' => 'medium'],
+			'deep' => ['effort' => 'high'],
+			default => null,
+		};
+	}
+
+	private function effectiveReasoningEffort(): ?string {
+		$options = self::reasoningOptions($this->model);
+		if ($options === ['unsupported']) {
+			return null;
+		}
+		if (in_array($this->reasoningEffort, $options, true)) {
+			return $this->reasoningEffort;
+		}
+		return $options[0] ?? null;
+	}
+
+	private function maxOutputTokens(int $base): int {
+		return match ($this->effectiveReasoningEffort()) {
+			'standard' => self::STANDARD_MAX_OUTPUT_TOKENS,
+			'deep' => self::DEEP_MAX_OUTPUT_TOKENS,
+			default => $base,
+		};
 	}
 }

@@ -96,6 +96,12 @@ provider_assert(is_string($dsDescDeep) && $dsDescDeep !== '', 'DeepSeek deep rea
 $oaiOptionsSupported = CF7AIV\Providers\OpenAIProvider::reasoningOptions('o4-mini');
 provider_assert(is_array($oaiOptionsSupported), 'OpenAIProvider::reasoningOptions() must return an array for o4-mini.');
 provider_assert(in_array('standard', $oaiOptionsSupported, true), 'OpenAI reasoning options must include standard for o4-mini.');
+provider_assert(in_array('deep', $oaiOptionsSupported, true), 'OpenAI reasoning options must include deep for o4-mini.');
+provider_assert(! in_array('off', $oaiOptionsSupported, true), 'OpenAI o4-mini must not claim documented reasoning.effort=none support.');
+foreach (['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] as $noneModel) {
+	$noneOptions = CF7AIV\Providers\OpenAIProvider::reasoningOptions($noneModel);
+	provider_assert(in_array('off', $noneOptions, true), "OpenAI {$noneModel} must expose the documented off reasoning control.");
+}
 foreach (['o4-mini-2025-04-16', 'gpt-5.4-2026-03-05', 'gpt-5.4-mini-2026-03-17', 'gpt-5.4-nano-2026-03-17'] as $snapshotModel) {
 	$snapshotOptions = CF7AIV\Providers\OpenAIProvider::reasoningOptions($snapshotModel);
 	provider_assert(in_array('standard', $snapshotOptions, true), "OpenAI reasoning options must support documented snapshot {$snapshotModel}.");
@@ -108,6 +114,8 @@ provider_assert(! in_array('standard', $oaiOptionsUnsupported, true), 'OpenAI gp
 $oaiAliasOptions = CF7AIV\Providers\OpenAIProvider::reasoningOptions('gpt-5-chat-latest');
 provider_assert(in_array('unsupported', $oaiAliasOptions, true), 'OpenAI gpt-5-chat-latest must render reasoning as unsupported.');
 provider_assert(! in_array('standard', $oaiAliasOptions, true), 'OpenAI gpt-5-chat-latest must not expose standard reasoning options.');
+$oaiUnknownOptions = CF7AIV\Providers\OpenAIProvider::reasoningOptions('model-that-is-not-allow-listed');
+provider_assert($oaiUnknownOptions === ['unsupported'], 'OpenAI unknown models must fail closed without reasoning controls.');
 
 $oaiDesc = CF7AIV\Providers\OpenAIProvider::reasoningDescription('gpt-5.4-mini', 'unsupported');
 provider_assert(is_string($oaiDesc) && $oaiDesc !== '', 'OpenAI unsupported reasoning description must be a non-empty string.');
@@ -258,7 +266,33 @@ $oaiSupportedTransport = new class implements CF7AIV\Infrastructure\HttpTranspor
 $oaiSupportedInstance = new CF7AIV\Providers\OpenAIProvider($oaiSupportedTransport, 'key', 'https://api.openai.com/v1/responses', 'o4-mini', 30, 'standard');
 try { $oaiSupportedInstance->classify($mockRequest); } catch (Throwable) {}
 provider_assert(($oaiSupportedTransport->lastPayload['reasoning']['effort'] ?? '') === 'medium', 'OpenAI standard reasoning must send the documented medium reasoning effort for supported models.');
+provider_assert(($oaiSupportedTransport->lastPayload['max_output_tokens'] ?? 0) === 3000, 'OpenAI standard reasoning must reserve a bounded reasoning and structured-output budget.');
 provider_assert(($oaiSupportedTransport->lastPayload['store'] ?? true) === false, 'OpenAI supported reasoning must retain store=false.');
+
+$oaiDeepTransport = new class implements CF7AIV\Infrastructure\HttpTransportInterface {
+	public ?array $lastPayload = null;
+	public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse {
+		$this->lastPayload = json_decode($arguments['body'], true);
+		$content = json_encode(['tier_id' => 'spam', 'outcome_id' => 'spam', 'ads_eligible' => false, 'flags' => [], 'confidence' => 0.9, 'evidence' => [], 'exclusion_codes' => [], 'ambiguity_flags' => [], 'reasoning_summary' => '']);
+		return new CF7AIV\Infrastructure\HttpResponse(200, json_encode(['output_text' => $content, 'usage' => ['input_tokens' => 10, 'output_tokens' => 20, 'output_tokens_details' => ['reasoning_tokens' => 10]]]) ?: '');
+	}
+};
+$oaiDeepInstance = new CF7AIV\Providers\OpenAIProvider($oaiDeepTransport, 'key', 'https://api.openai.com/v1/responses', 'o4-mini', 30, 'deep');
+try { $oaiDeepInstance->classify($mockRequest); } catch (Throwable) {}
+provider_assert(($oaiDeepTransport->lastPayload['reasoning']['effort'] ?? '') === 'high', 'OpenAI deep reasoning must send the documented high reasoning effort for supported models.');
+provider_assert(($oaiDeepTransport->lastPayload['max_output_tokens'] ?? 0) === 6000, 'OpenAI deep reasoning must reserve a larger bounded reasoning and structured-output budget.');
+
+$oaiNoneTransport = new class implements CF7AIV\Infrastructure\HttpTransportInterface {
+	public ?array $lastPayload = null;
+	public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse {
+		$this->lastPayload = json_decode($arguments['body'], true);
+		$content = json_encode(['tier_id' => 'spam', 'outcome_id' => 'spam', 'ads_eligible' => false, 'flags' => [], 'confidence' => 0.9, 'evidence' => [], 'exclusion_codes' => [], 'ambiguity_flags' => [], 'reasoning_summary' => '']);
+		return new CF7AIV\Infrastructure\HttpResponse(200, json_encode(['output_text' => $content, 'usage' => ['input_tokens' => 10, 'output_tokens' => 20, 'output_tokens_details' => ['reasoning_tokens' => 0]]]) ?: '');
+	}
+};
+$oaiNoneInstance = new CF7AIV\Providers\OpenAIProvider($oaiNoneTransport, 'key', 'https://api.openai.com/v1/responses', 'gpt-5.4', 30, 'off');
+try { $oaiNoneInstance->classify($mockRequest); } catch (Throwable) {}
+provider_assert(($oaiNoneTransport->lastPayload['reasoning']['effort'] ?? '') === 'none', 'GPT-5.4 off must send the documented reasoning.effort=none value.');
 
 // ─── ClassificationHooks uses settings for reasoning effort ──────────────────
 

@@ -300,6 +300,9 @@ admin_assert(str_contains($setup, 'cf7aiv-setup-page'), 'Setup needs a dedicated
 admin_assert(str_contains($setup, 'cf7aiv-setup-progress'), 'Setup needs progress navigation.');
 admin_assert(substr_count($setup, 'cf7aiv-setup-step') >= 5, 'Setup needs five guided steps.');
 admin_assert(str_contains($setup, 'Save guided draft'), 'Setup needs a clear draft-save action.');
+admin_assert(str_contains($setup, '<details class="cf7aiv-setup-advanced">') && str_contains($setup, 'Read-only starter policy JSON') && str_contains($setup, 'Edit this policy in Policy Lab'), 'Setup must disclose a bounded read-only starter policy JSON preview with a Policy Lab editing link.');
+admin_assert(str_contains($setup, 'Evidence requirements') && str_contains($setup, 'Required evidence') && str_contains($setup, 'Supporting evidence') && str_contains($setup, 'Minimum supporting evidence'), 'Setup Review must summarize selected-pack evidence requirements.');
+admin_assert(str_contains($setup, '&quot;evidence_catalog&quot;') && str_contains($setup, 'service_fit') && str_contains($setup, 'Residential care enquiry') && str_contains($setup, 'Required evidence: service fit'), 'Setup disclosures must use the selected pack evidence catalog codes and tier definitions.');
 $scanForm = [];
 preg_match('/(<form[^>]*id="cf7aiv-setup-scan-form"[^>]*>.*?<\/form>)/s', $setup, $scanForm);
 admin_assert(
@@ -338,7 +341,18 @@ foreach (['cf7aiv_setup_scan','cf7aiv_setup_suggestion','cf7aiv_save_guided_poli
 	admin_assert(str_contains($setup, 'value="' . $action . '"'), "Setup must retain {$action}.");
 }
 admin_assert(str_contains($setup, 'explicit_opt_in') && str_contains($setup, 'whitelist_fingerprint'), 'Calibration must retain explicit opt-in and whitelist binding.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected']='openai';
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['openai_model']='gpt-5.4-mini';
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['server_gtm']=['enabled'=>true,'dry_run'=>false];
+ob_start();CF7AIV\Admin\AdminPages::setup();$liveDestinationSetup=ob_get_clean();
+admin_assert(str_contains($liveDestinationSetup,'Selected AI provider')&&str_contains($liveDestinationSetup,'OpenAI')&&str_contains($liveDestinationSetup,'gpt-5.4-mini')&&str_contains($liveDestinationSetup,'Live delivery enabled')&&!str_contains($liveDestinationSetup,'All enabled destinations in dry-run'),'Setup Finish must render the actual selected provider/model and a non-GA4 live destination warning.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['server_gtm']=['enabled'=>false,'dry_run'=>true];
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected']='deepseek';
 ob_start();CF7AIV\Admin\IntegrationsPage::render();$integrations=ob_get_clean();foreach(['deepseek_api_key','openai_api_key','deepseek_base_url','openai_base_url','ga4_api_secret','microsoft_uet_token','webhook_secret','delete_on_uninstall','cf7aiv_automation_transition','cf7aiv_ga_transition','cf7aiv_mapping_publish','cf7aiv_mapping_enable','cf7aiv_mapping_disable','cf7aiv_save_consent','Return automation to shadow','Disable GA4 live / return to dry-run'] as $control){admin_assert(str_contains($integrations,$control),"Integrations must render functional control {$control}.");}admin_assert(!str_contains($integrations,'ga-secret'),'Integrations must never render stored secret values.');admin_assert(str_contains($integrations,'<div class="wrap cf7aiv-admin">'),'Integrations must use the shared admin wrapper.');foreach(['cf7aiv-mapping-key','cf7aiv-mapping-version','cf7aiv-mapping-tier','cf7aiv-mapping-destination','cf7aiv-mapping-event','cf7aiv-mapping-value','cf7aiv-mapping-currency','cf7aiv_mapping_publish-key','cf7aiv_mapping_publish-version','cf7aiv_mapping_enable-key','cf7aiv_mapping_enable-version','cf7aiv_mapping_disable-key','cf7aiv_mapping_disable-version'] as $mappingFieldId){admin_assert(str_contains($integrations,'for="'.$mappingFieldId.'"')&&str_contains($integrations,'id="'.$mappingFieldId.'"'),'Mapping fields need associated labels and stable IDs.');}foreach(['Destination mapping lifecycle','Automation lifecycle','GA4 delivery lifecycle'] as $lifecycleLegend){admin_assert(str_contains($integrations,'<legend>'.$lifecycleLegend.'</legend>'),"Integrations must group {$lifecycleLegend} controls.");}
+ $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['server_gtm']=['enabled'=>true,'dry_run'=>false];
+  ob_start();CF7AIV\Admin\IntegrationsPage::render();$liveDestinationIntegrations=ob_get_clean();
+  admin_assert(str_contains($liveDestinationIntegrations,'Live delivery enabled')&&!str_contains($liveDestinationIntegrations,'Destinations in dry-run'),'Integrations safety context must include enabled non-GA4 destinations when reporting live delivery.');
+  $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['server_gtm']=['enabled'=>false,'dry_run'=>true];
 admin_assert(str_contains($integrations, 'cf7aiv-integrations-page'), 'Integrations needs a dedicated root.');
 admin_assert(str_contains($integrations, 'cf7aiv-integration-tabs'), 'Integrations needs tab navigation.');
 admin_assert(str_contains($integrations, 'cf7aiv-save-bar'), 'Integrations needs a persistent save bar.');
