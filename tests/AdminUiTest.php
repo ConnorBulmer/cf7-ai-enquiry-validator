@@ -58,7 +58,27 @@ ui_assert(substr_count($setup, 'cf7aiv-setup-step') >= 5, 'Setup needs five guid
 ui_assert(str_contains($setup, 'Save guided draft'), 'Setup needs a clear draft-save action.');
 
 $table = AdminUi::labelCountTable('Counts by state', [['label' => '<classified>', 'total' => '2']]);
-ui_assert(str_contains($table, '<caption>Counts by state</caption>') && str_contains($table, '&lt;classified&gt;') && str_contains($table, '<td>2</td>'), 'Count tables must be semantic and escaped.');
+ui_assert(str_contains($table, '<caption class="screen-reader-text">Counts by state</caption>') && str_contains($table, '&lt;classified&gt;') && str_contains($table, '<td>2</td>'), 'Count tables must be semantic and escaped.');
+// The caption stays in the markup for assistive technology but must not be
+// painted, because panel() already prints the same string as a visible heading.
+ui_assert(! str_contains($table, '<caption>'), 'Table captions must not duplicate the visible panel heading.');
+
+// Policy-defined identifiers must reach administrators as readable text, but
+// only where the caller knows the value is an identifier. The table helper must
+// stay verbatim so destination and source keys remain matchable.
+ui_assert(AdminUi::humanLabel('retained_marketing') === 'Retained marketing', 'Tier identifiers must be humanised for display.');
+ui_assert(AdminUi::humanLabel('legitimate_non_conversion') === 'Legitimate non conversion', 'Underscored identifiers must humanise.');
+$verbatim = AdminUi::labelCountTable('Counts by tier', [['label' => 'list-paused-destination', 'total' => '1']]);
+ui_assert(str_contains($verbatim, '<th scope="row">list-paused-destination</th>'), 'Table helpers must not humanise keys that must stay matchable.');
+ui_assert(AdminUi::humanLabel('excluded') === 'Excluded', 'Single-word identifiers must capitalise so they match multi-word ones.');
+ui_assert(AdminUi::humanLabel('ga4') === 'Ga4', 'Single-word humanising is why this must only be called on policy identifiers.');
+ui_assert(AdminUi::humanLabel('Already a sentence, untouched.') === 'Already a sentence, untouched.', 'Prose labels must pass through unchanged.');
+ui_assert(AdminUi::humanLabel('') === '', 'Empty labels must stay empty.');
+
+// A metric may carry a follow-up link, and must escape it.
+$linked = AdminUi::metric('Attribution readiness', '2 / 9', 'Items ready.', ['href' => 'admin.php?page=cf7aiv-review&x=1', 'text' => 'See which']);
+ui_assert(str_contains($linked, 'cf7aiv-metric-action') && str_contains($linked, '&amp;x=1'), 'Metric actions must render and escape their href.');
+ui_assert(! str_contains(AdminUi::metric('Queue age', '0'), 'cf7aiv-metric-action'), 'Metrics without an action must not render an empty link.');
 
 $keys = AdminUi::keyValueTable('Health checks', [['label' => 'Landing navigation', 'value' => '<read-only>']]);
 ui_assert(str_contains($keys, '<th scope="row">Landing navigation</th>') && str_contains($keys, '&lt;read-only&gt;'), 'Key/value tables must escape values.');

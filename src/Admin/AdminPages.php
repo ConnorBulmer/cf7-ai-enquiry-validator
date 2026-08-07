@@ -25,6 +25,12 @@ final class AdminPages {
 		$distributionPanels = '';
 		foreach (['by_state' => ['Counts by state', 'No classified states yet.'], 'by_tier' => ['Counts by tier', 'No classified tiers yet.'], 'by_reason' => ['Counts by reason', 'No classification reasons yet.']] as $key => [$title, $empty]) {
 			$rows = (array) ($metrics[$key] ?? []);
+			// These three are policy identifiers, so they are humanised here
+			// rather than in the table helper, which also renders keys that must
+			// stay verbatim.
+			foreach ($rows as $index => $row) {
+				$rows[$index]['label'] = AdminUi::humanLabel((string) (((array) $row)['label'] ?? ''));
+			}
 			$body = $rows === [] ? AdminUi::emptyState($empty) : AdminUi::labelCountTable($title, $rows);
 			$distributionPanels .= AdminUi::panel($title, $body, 'cf7aiv-distribution-panel');
 		}
@@ -37,8 +43,11 @@ final class AdminPages {
 		$perTierRows = [];
 		foreach ((array) ($quality['per_tier'] ?? []) as $tier => $counts) {
 			$counts = (array) $counts;
-			$perTierRows[] = ['label' => (string) $tier . ' (predicted)', 'total' => (int) ($counts['predicted'] ?? 0)];
-			$perTierRows[] = ['label' => (string) $tier . ' (reviewed)', 'total' => (int) ($counts['reviewed'] ?? 0)];
+			// Humanise before the suffix is appended; the combined string is no
+			// longer a bare identifier, so labelCountTable would leave it as-is.
+			$tierLabel = AdminUi::humanLabel((string) $tier);
+			$perTierRows[] = ['label' => $tierLabel . ' (predicted)', 'total' => (int) ($counts['predicted'] ?? 0)];
+			$perTierRows[] = ['label' => $tierLabel . ' (reviewed)', 'total' => (int) ($counts['reviewed'] ?? 0)];
 		}
 		$qualityBody = $reviewed === 0
 			? AdminUi::emptyState('No human-reviewed enquiries yet.') . AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
@@ -61,7 +70,16 @@ final class AdminPages {
 			. '</p></div>';
 		echo '<div class="cf7aiv-metric-grid">'
 			. AdminUi::metric('Queue age', AdminUi::duration($queueAge), 'Oldest pending or review item.')
-			. AdminUi::metric('Attribution readiness', (int) ($metrics['attribution_ready'] ?? 0) . ' / ' . (int) ($metrics['attribution_total'] ?? 0), 'Items ready for attribution.')
+			. AdminUi::metric(
+				'Attribution readiness',
+				(int) ($metrics['attribution_ready'] ?? 0) . ' / ' . (int) ($metrics['attribution_total'] ?? 0),
+				'Items ready for attribution.',
+				// The obvious next question is which ones are not ready and why.
+				// The reasons are already recorded per item, so link to them.
+				(int) ($metrics['attribution_ready'] ?? 0) < (int) ($metrics['attribution_total'] ?? 0)
+					? ['href' => 'admin.php?page=cf7aiv-review&review_state=', 'text' => 'See which enquiries are not ready']
+					: null
+			)
 			. AdminUi::metric('API errors', (string) (int) ($metrics['api_errors'] ?? 0), 'Failed delivery attempts.')
 			. AdminUi::metric('Reviewed count', (string) $reviewed, 'Human-reviewed enquiries.')
 			. '</div>';
@@ -118,7 +136,7 @@ final class AdminPages {
 		}
 		$deliveryTable = '';
 		if (is_array($logs) && $logs !== []) {
-			$deliveryTable = '<table class="widefat striped"><caption>Sanitized delivery errors</caption><thead><tr><th scope="col">ID</th><th scope="col">Destination</th><th scope="col">State</th><th scope="col">Last error</th><th scope="col">Updated</th></tr></thead><tbody>';
+			$deliveryTable = '<table class="widefat striped">' . AdminUi::caption('Sanitized delivery errors') . '<thead><tr><th scope="col">ID</th><th scope="col">Destination</th><th scope="col">State</th><th scope="col">Last error</th><th scope="col">Updated</th></tr></thead><tbody>';
 			foreach ($logs as $log) {
 				$log = (array) $log;
 				$deliveryTable .= '<tr><td>' . self::e((string) ($log['id'] ?? '')) . '</td><td>' . self::e((string) ($log['destination_key'] ?? '')) . '</td><td>' . self::e((string) ($log['state'] ?? '')) . '</td><td>' . self::e((string) ($log['last_error'] ?? '')) . '</td><td>' . self::e((string) ($log['updated_at'] ?? '')) . '</td></tr>';
@@ -131,9 +149,30 @@ final class AdminPages {
 		ob_start();
 		wp_nonce_field('cf7aiv_backfill');
 		$calibrationForm .= (string) ob_get_clean();
+		/*
+		 * Only offer sources that can actually supply records.
+		 *
+		 * Every registered source used to be rendered unselected and enabled, so
+		 * the browser selected the first one. On an install with Flamingo
+		 * registered but empty, that made the default a source the panel beside
+		 * it reported as Unavailable; scheduling against it does nothing and
+		 * looks broken.
+		 */
+		$sources = (array) ($health['sources'] ?? []);
+		$firstAvailable = '';
+		foreach ($sources as $sourceKey => $state) {
+			if (! empty(((array) $state)['available'])) { $firstAvailable = (string) $sourceKey; break; }
+		}
 		$calibrationForm .= '<label for="cf7aiv-health-source">Source</label><select id="cf7aiv-health-source" name="source">';
-		foreach (array_keys((array) ($health['sources'] ?? [])) as $sourceKey) {
-			$calibrationForm .= '<option value="' . self::e((string) $sourceKey) . '">' . self::e((string) $sourceKey) . '</option>';
+		if ($firstAvailable === '') {
+			$calibrationForm .= '<option value="" selected disabled>No source has records yet</option>';
+		}
+		foreach ($sources as $sourceKey => $state) {
+			$available = ! empty(((array) $state)['available']);
+			$calibrationForm .= '<option value="' . self::e((string) $sourceKey) . '"'
+				. ($available ? '' : ' disabled')
+				. ((string) $sourceKey === $firstAvailable ? ' selected' : '')
+				. '>' . self::e((string) $sourceKey . ($available ? '' : ' (unavailable)')) . '</option>';
 		}
 		$calibrationForm .= '</select><label for="cf7aiv-health-from">From</label><input id="cf7aiv-health-from" type="date" name="date_from" value="' . self::e($dateFrom) . '" required>';
 		$calibrationForm .= '<label for="cf7aiv-health-to">To</label><input id="cf7aiv-health-to" type="date" name="date_to" value="' . self::e($dateTo) . '" required>';
@@ -176,13 +215,13 @@ final class AdminPages {
 			return AdminUi::emptyState('No reviewed outcome data yet.');
 		}
 
-		$table = '<table class="widefat striped cf7aiv-compact-table"><caption>Reviewed confusion matrix</caption><thead><tr><th scope="col">Predicted outcome</th>';
+		$table = '<table class="widefat striped cf7aiv-compact-table">' . AdminUi::caption('Reviewed confusion matrix') . '<thead><tr><th scope="col">Predicted outcome</th>';
 		foreach ($outcomes as $outcome) {
-			$table .= '<th scope="col">' . self::e($outcome) . '</th>';
+			$table .= '<th scope="col">' . self::e(AdminUi::humanLabel($outcome)) . '</th>';
 		}
 		$table .= '</tr></thead><tbody>';
 		foreach ($outcomes as $predicted) {
-			$table .= '<tr><th scope="row">' . self::e($predicted) . '</th>';
+			$table .= '<tr><th scope="row">' . self::e(AdminUi::humanLabel($predicted)) . '</th>';
 			foreach ($outcomes as $reviewed) {
 				$table .= '<td>' . self::e((string) (int) ($matrix[$predicted][$reviewed] ?? 0)) . '</td>';
 			}

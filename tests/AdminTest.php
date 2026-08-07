@@ -236,7 +236,10 @@ $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]=array_replace_
 ob_start();CF7AIV\Admin\AdminPages::overview();$overview=ob_get_clean();admin_assert(str_contains($overview,'AI Enquiry Validator')&&str_contains($overview,'Overview')&&str_contains($overview,'Attribution readiness')&&str_contains($overview,'Queue age')&&str_contains($overview,'Paused destinations'),'Overview screen must render setup/shadow, attribution, queue, and destination metrics.');
 admin_assert(! str_contains($overview, '<pre>'), 'Overview must not expose raw JSON presentation.');
 admin_assert(str_contains($overview, 'cf7aiv-page-header') && str_contains($overview, 'cf7aiv-metric-grid'), 'Overview must use the shared header and metric grid.');
-admin_assert(str_contains($overview, '<caption>Counts by state</caption>') && str_contains($overview, '<caption>Counts by tier</caption>') && str_contains($overview, '<caption>Counts by reason</caption>'), 'Overview distributions must render as separate semantic tables.');
+admin_assert(str_contains($overview, '<caption class="screen-reader-text">Counts by state</caption>') && str_contains($overview, '<caption class="screen-reader-text">Counts by tier</caption>') && str_contains($overview, '<caption class="screen-reader-text">Counts by reason</caption>'), 'Overview distributions must render as separate semantic tables.');
+admin_assert(! str_contains($overview, '<caption>'), 'Overview captions must not repeat the visible panel headings.');
+admin_assert(str_contains($overview, '<th scope="row">Ads primary</th>'), 'Overview must humanise policy tier identifiers.');
+admin_assert(! str_contains($overview, '<th scope="row">ads_primary</th>'), 'Overview must not show raw tier identifiers.');
 admin_assert(str_contains($overview, 'No human-reviewed enquiries yet.'), 'Zero reviewed data must render an explanatory empty state.');
 admin_assert(str_contains($overview, 'No destinations are paused.'), 'No paused destinations must render an explicit empty state.');
 admin_assert(str_contains($overview, '14 hours 34 minutes') || str_contains($overview, 'No pending queue'), 'Queue age must be human-readable rather than raw seconds.');
@@ -252,7 +255,10 @@ $GLOBALS['wpdb']->qualityRows=$populatedQualityRows;
 $GLOBALS['admin_options']['cf7aiv_paused_destinations']=['<paused-destination>'=>'private implementation value'];
 ob_start();CF7AIV\Admin\AdminPages::overview();$populatedOverview=ob_get_clean();
 admin_assert(str_contains($populatedOverview,'&lt;script&gt;alert(1)&lt;/script&gt;')&&!str_contains($populatedOverview,'<script>alert(1)</script>')&&str_contains($populatedOverview,'&lt;reason&gt;'),'Overview distribution labels must remain escaped in semantic tables.');
-admin_assert(str_contains($populatedOverview,'<caption>Reviewed confusion matrix</caption>')&&str_contains($populatedOverview,'<caption>Reviewed per-tier counts</caption>')&&str_contains($populatedOverview,'ads_primary (predicted)</th><td>2</td>')&&str_contains($populatedOverview,'<th scope="col">excluded</th>')&&str_contains($populatedOverview,'<th scope="row">primary_opportunity</th><td>0</td><td>0</td><td>1</td><td>1</td><td>0</td><td>0</td>')&&str_contains($populatedOverview,'&lt;matrix-predicted&gt;')&&str_contains($populatedOverview,'&lt;matrix-reviewed&gt;')&&!str_contains($populatedOverview,'<matrix-predicted>'),'Overview quality must render escaped matrix union headers, integer counts, and per-tier counts.');
+admin_assert(str_contains($populatedOverview,'<caption class="screen-reader-text">Reviewed confusion matrix</caption>')&&str_contains($populatedOverview,'<caption class="screen-reader-text">Reviewed per-tier counts</caption>')&&str_contains($populatedOverview,'Ads primary (predicted)</th><td>2</td>')&&str_contains($populatedOverview,'<th scope="col">Excluded</th>')&&str_contains($populatedOverview,'<th scope="row">Primary opportunity</th><td>0</td><td>0</td><td>1</td><td>1</td><td>0</td><td>0</td>')&&str_contains($populatedOverview,'&lt;matrix-predicted&gt;')&&str_contains($populatedOverview,'&lt;matrix-reviewed&gt;')&&!str_contains($populatedOverview,'<matrix-predicted>'),'Overview quality must render escaped matrix union headers, integer counts, and per-tier counts.');
+// Humanising must never weaken escaping: a hostile identifier is not an
+// identifier by the humanise pattern, so it passes through and is escaped.
+admin_assert(! str_contains($populatedOverview, '<matrix-reviewed>'), 'Humanised matrix headers must stay escaped.');
 admin_assert(str_contains($populatedOverview,'&lt;paused-destination&gt;')&&str_contains($populatedOverview,'>Paused<')&&!str_contains($populatedOverview,'private implementation value'),'Paused destinations must render only escaped names and the Paused status label.');
 admin_assert(str_contains($populatedOverview,'Human-reviewed quality')&&str_contains($populatedOverview,'2 of 5')&&str_contains($populatedOverview,'<th scope="row">False positives</th><td>1</td>')&&!str_contains($populatedOverview,'Review precision')&&!str_contains(strtolower($populatedOverview),'unreviewed accuracy'),'Overview percentages must pair counts with human-reviewed quality labels and Ads-policy false positives.');
 $GLOBALS['admin_options']['cf7aiv_paused_destinations']=['list-paused-destination'];
@@ -279,9 +285,14 @@ $GLOBALS['wpdb']->deliveryRows=[
 ];
 ob_start();CF7AIV\Admin\AdminPages::health();$healthPage=ob_get_clean();
 admin_assert(! str_contains($healthPage, '<pre>'), 'Tracking Health must not expose raw JSON presentation.');
-admin_assert(str_contains($healthPage, '<caption>Submission source health</caption>'), 'Source health must use a semantic table.');
+admin_assert(str_contains($healthPage, '<caption class="screen-reader-text">Submission source health</caption>'), 'Source health must use a semantic table.');
+// Calibration must not default to a source that cannot supply records: the
+// select used to render every source enabled and unselected, so the browser
+// chose the first one even when the panel beside it reported it unavailable.
+admin_assert(str_contains($healthPage, 'disabled') && str_contains($healthPage, '(unavailable)'), 'Unavailable calibration sources must be disabled and labelled.');
+admin_assert((bool) preg_match('/<option value="[^"]*"[^>]* selected>/', $healthPage), 'An available calibration source must be preselected.');
 admin_assert(str_contains($healthPage, 'Available') && str_contains($healthPage, 'Unavailable'), 'Availability must be stated in text.');
-admin_assert(str_contains($healthPage, '<caption>Read-only checks</caption>'), 'Read-only checks must be structured.');
+admin_assert(str_contains($healthPage, '<caption class="screen-reader-text">Read-only checks</caption>'), 'Read-only checks must be structured.');
 admin_assert(str_contains($healthPage, 'cf7aiv-table-region') && str_contains($healthPage, 'aria-label="Sanitized delivery errors"'), 'Delivery logs must scroll locally in a labelled region.');
 admin_assert(str_contains($healthPage, '&lt;script&gt;') && ! str_contains($healthPage, '<script>'), 'Sanitised delivery error text must remain escaped.');
 admin_assert(! str_contains($healthPage, 'private implementation value'), 'Tracking Health must render only paused destination names and never associative private values.');
@@ -313,7 +324,10 @@ $visiblePreviews = array_values(array_filter($previewPacks, static fn (array $ma
 $visibleEvidence = array_values(array_filter($evidencePacks, static fn (array $match): bool => ! str_contains($match[0] ?? '', ' hidden')));
 admin_assert(count($previewPacks) >= 2 && count($evidencePacks) >= 2 && $agencyPreview !== [] && $agencyEvidence !== [], 'Setup must server-render bounded preview and evidence sections for each selectable pack.');
 admin_assert(str_contains((string) ($agencyPreview[2] ?? ''), 'retained_marketing') && str_contains((string) ($agencyEvidence[2] ?? ''), 'Retained marketing enquiry'), 'Each pack preview and evidence section must contain that pack\'s own policy data so an unsaved selection cannot silently retain the saved pack disclosure.');
-admin_assert(count($visiblePreviews) === 1 && ($visiblePreviews[0][1] ?? '') === 'care_supported_living' && count($visibleEvidence) === 1 && ($visibleEvidence[0][1] ?? '') === 'care_supported_living', 'No-JavaScript output must show exactly the saved pack in both disclosures while other pack state remains hidden.');
+// The default is the sector-agnostic pack. It used to be whichever pack came
+// first in packs.json - care_supported_living - so every installation opened
+// setup pre-set to a care-sector policy regardless of the business.
+admin_assert(count($visiblePreviews) === 1 && ($visiblePreviews[0][1] ?? '') === 'custom_business' && count($visibleEvidence) === 1 && ($visibleEvidence[0][1] ?? '') === 'custom_business', 'No-JavaScript output must show exactly the saved pack in both disclosures while other pack state remains hidden.');
 admin_assert(str_contains($setup, 'Without JavaScript, these disclosures reflect the saved starter pack until this page reloads.'), 'Setup must state the truthful no-JavaScript preview boundary.');
 $setupJs = file_get_contents(__DIR__ . '/../assets/js/admin.js');
 admin_assert(is_string($setupJs) && str_contains($setupJs, 'data-setup-pack-preview') && str_contains($setupJs, 'data-setup-pack-evidence') && str_contains($setupJs, 'hidden = !isActive'), 'Setup JavaScript must switch both per-pack disclosures through the rendered markup contract.');

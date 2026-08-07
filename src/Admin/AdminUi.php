@@ -9,10 +9,17 @@ final class AdminUi {
 		return '<span class="cf7aiv-status-badge is-' . $tone . '">' . self::e($label) . '</span>';
 	}
 
-	public static function metric(string $label, string $value, string $description = ''): string {
+	/**
+	 * @param array{href:string,text:string}|null $action Optional follow-up link,
+	 *        for metrics where the obvious next question is "which ones, and why?"
+	 */
+	public static function metric(string $label, string $value, string $description = '', ?array $action = null): string {
 		$html = '<div class="cf7aiv-metric"><dl><dt>' . self::e($label) . '</dt><dd>' . self::e($value) . '</dd></dl>';
 		if ($description !== '') {
 			$html .= '<p>' . self::e($description) . '</p>';
+		}
+		if ($action !== null && ($action['href'] ?? '') !== '' && ($action['text'] ?? '') !== '') {
+			$html .= '<p class="cf7aiv-metric-action"><a href="' . self::e((string) $action['href']) . '">' . self::e((string) $action['text']) . '</a></p>';
 		}
 		return $html . '</div>';
 	}
@@ -30,7 +37,7 @@ final class AdminUi {
 
 	/** @param array<int,array{label:mixed,total:mixed}> $rows */
 	public static function labelCountTable(string $caption, array $rows): string {
-		$html = '<table class="widefat striped cf7aiv-compact-table cf7aiv-count-grid"><caption>' . self::e($caption) . '</caption><thead><tr><th scope="col">Label</th><th scope="col">Count</th></tr></thead><tbody>';
+		$html = '<table class="widefat striped cf7aiv-compact-table cf7aiv-count-grid">' . self::caption($caption) . '<thead><tr><th scope="col">Label</th><th scope="col">Count</th></tr></thead><tbody>';
 		foreach ($rows as $row) {
 			$html .= '<tr><th scope="row">' . self::e((string) ($row['label'] ?? '')) . '</th><td>' . self::e((string) ($row['total'] ?? '0')) . '</td></tr>';
 		}
@@ -39,11 +46,55 @@ final class AdminUi {
 
 	/** @param array<int,array{label:mixed,value:mixed}> $rows */
 	public static function keyValueTable(string $caption, array $rows): string {
-		$html = '<table class="widefat striped cf7aiv-key-value-table"><caption>' . self::e($caption) . '</caption><tbody>';
+		$html = '<table class="widefat striped cf7aiv-key-value-table">' . self::caption($caption) . '<tbody>';
 		foreach ($rows as $row) {
 			$html .= '<tr><th scope="row">' . self::e((string) ($row['label'] ?? '')) . '</th><td>' . self::e((string) ($row['value'] ?? '')) . '</td></tr>';
 		}
 		return $html . '</tbody></table>';
+	}
+
+	/**
+	 * A caption that assistive technology reads but sight users do not see twice.
+	 *
+	 * Every table on these screens sits inside panel(), which already prints the
+	 * same string as an <h2>. Printing it again as a visible caption gave each
+	 * panel a duplicated heading. The caption still belongs in the markup - a
+	 * table without one is harder to place when tabbing through a long screen -
+	 * so it is hidden visually rather than removed.
+	 */
+	public static function caption(string $caption): string {
+		return '<caption class="screen-reader-text">' . self::e($caption) . '</caption>';
+	}
+
+	/**
+	 * Turn an internal identifier into something a person can read.
+	 *
+	 * Tier, outcome and reason identifiers are policy-defined keys such as
+	 * retained_marketing or legitimate_non_conversion, and they were being shown
+	 * to administrators verbatim. Policies are user-authored, so a fixed
+	 * translation table cannot cover them; deriving the label from the key does,
+	 * and it stays correct when someone adds a tier tomorrow.
+	 *
+	 * Anything that does not look like an identifier - a sentence, a value that
+	 * already contains spaces or capitals - is returned untouched.
+	 *
+	 * Call it where the value is known to be a policy identifier. It is
+	 * deliberately not applied inside the table helpers: destination keys,
+	 * submission source keys and health check names travel through those too, and
+	 * an operator needs those verbatim to match them against configuration.
+	 * Prettifying "list-paused-destination" into "List paused destination" would
+	 * make it unmatchable.
+	 */
+	public static function humanLabel(string $value): string {
+		$trimmed = trim($value);
+		// Single lowercase words are identifiers too - "excluded", "qualified" -
+		// and leaving them alone put them next to "General legitimate" looking
+		// like a different class of thing.
+		if ($trimmed === '' || preg_match('/^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$/', $trimmed) !== 1) {
+			return $value;
+		}
+		$words = str_replace(['_', '-'], ' ', $trimmed);
+		return ucfirst($words);
 	}
 
 	public static function tableRegion(string $label, string $table): string {

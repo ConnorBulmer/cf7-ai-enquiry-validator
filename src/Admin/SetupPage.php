@@ -17,9 +17,9 @@ final class SetupPage {
 			$automationMode = 'shadow';
 		}
 		$packs = (new PolicyPackRegistry())->all();
-		$selectedPack = (string) ($settings['setup']['selected_pack'] ?? array_key_first($packs));
+		$selectedPack = (string) ($settings['setup']['selected_pack'] ?? self::defaultPack($packs));
 		if (! isset($packs[$selectedPack])) {
-			$selectedPack = (string) array_key_first($packs);
+			$selectedPack = self::defaultPack($packs);
 		}
 		$selectedPackDefinition = is_array($packs[$selectedPack] ?? null) ? $packs[$selectedPack] : [];
 		$selectedPackLabel = self::bounded((string) ($selectedPackDefinition['pack']['label'] ?? $selectedPack), 120);
@@ -286,6 +286,25 @@ final class SetupPage {
 
 	private static function bounded(string $value, int $maximum): string {
 		return function_exists('mb_substr') ? mb_substr($value, 0, $maximum) : substr($value, 0, $maximum);
+	}
+
+	/**
+	 * The starter pack a fresh install should land on.
+	 *
+	 * This used to be whichever pack happened to come first in packs.json, which
+	 * is care_supported_living. Every installation, whatever the business,
+	 * therefore opened setup pre-set to a care-sector policy - and an
+	 * administrator accepting the defaults would publish it. The sector-agnostic
+	 * pack is the honest default; a specific vertical should be a deliberate
+	 * choice.
+	 *
+	 * @param array<string,mixed> $packs
+	 */
+	private static function defaultPack(array $packs): string {
+		foreach (['custom_business', 'general'] as $neutral) {
+			if (isset($packs[$neutral])) { return $neutral; }
+		}
+		return (string) array_key_first($packs);
 	}
 
 	private static function capability(): void {

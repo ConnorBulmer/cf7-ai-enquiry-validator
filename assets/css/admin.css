@@ -50,6 +50,30 @@
 
 .cf7aiv-admin .cf7aiv-panel-grid {
 	max-width: 1100px;
+	/*
+	 * Size each panel to its own content.
+	 *
+	 * Grid stretches items to the tallest row by default, so a panel holding a
+	 * single row of counts was drawn the same height as the reviewed-quality
+	 * panel beside it - several hundred pixels of empty card, and a lot of
+	 * scrolling for very little information.
+	 */
+	align-items: start;
+	/*
+	 * 190px let five panels share one row, which squeezed the reviewed
+	 * confusion matrix into a column narrower than a single column heading.
+	 */
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+/*
+ * The reviewed-quality panel carries a matrix rather than a short list, so it
+ * gets two columns wherever the grid is wide enough to give them.
+ */
+@media (min-width: 900px) {
+	.cf7aiv-admin .cf7aiv-panel-grid .cf7aiv-quality-panel {
+		grid-column: span 2;
+	}
 }
 
 .cf7aiv-admin .cf7aiv-panel-grid .cf7aiv-panel {
