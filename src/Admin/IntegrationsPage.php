@@ -290,11 +290,15 @@ final class IntegrationsPage {
 	}
 
 	private static function verificationSupported(string $selected): bool {
-		$providers = function_exists('apply_filters') ? (array) apply_filters('cf7aiv_ai_providers', []) : [];
-		if (isset($providers[$selected])) {
-			return $providers[$selected] instanceof VerificationCapableProviderInterface;
+		try {
+			$providers = function_exists('apply_filters') ? (array) apply_filters('cf7aiv_ai_providers', []) : [];
+			if (isset($providers[$selected])) {
+				return $providers[$selected] instanceof VerificationCapableProviderInterface;
+			}
+			return $selected === 'deepseek' && is_a(DeepSeekProvider::class, VerificationCapableProviderInterface::class, true);
+		} catch (\Throwable) {
+			return false;
 		}
-		return $selected === 'deepseek' && is_a(DeepSeekProvider::class, VerificationCapableProviderInterface::class, true);
 	}
 
 	private static function activeTab(mixed $value): string {

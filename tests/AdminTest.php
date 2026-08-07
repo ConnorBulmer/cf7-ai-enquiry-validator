@@ -508,6 +508,9 @@ admin_assert(($GLOBALS['admin_options']['cf7aiv_secrets']['openai_api_key']??'')
 admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=provider'),'A corrupt-secret failure must preserve the validated active tab.');
 admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1'),'A corrupt-secret failure must expose only the failed save status.');
 admin_assert(!str_contains((string)($GLOBALS['admin_redirect']??''),'Invalid encrypted'),'A corrupt-secret failure must not expose decryption details in the redirect.');
+$corruptRenderThrew=false;$corruptRenderMessage='';ob_start();$_GET=['tab'=>'provider','failed'=>'1'];
+try{CF7AIV\Admin\IntegrationsPage::render();}catch(RuntimeException $error){$corruptRenderThrew=true;$corruptRenderMessage=$error->getMessage();}$corruptIntegrations=ob_get_clean();unset($_GET);
+admin_assert(!$corruptRenderThrew&&$corruptRenderMessage===''&&str_contains($corruptIntegrations,'Integration settings could not be saved')&&str_contains($corruptIntegrations,'Not supported by the selected provider')&&!str_contains($corruptIntegrations,'Invalid encrypted'),'Integrations must render bounded failure and unavailable-capability copy when a stored provider secret is corrupt.');
 $providerBeforeModeToggle=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected'];
 $_POST=['_wpnonce'=>'nonce','cf7aiv'=>['ui'=>['advanced_mode'=>'1']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$toggledAdvancedPolicy=ob_get_clean();
