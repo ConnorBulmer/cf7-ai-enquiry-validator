@@ -2,6 +2,29 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.20 — 2026-08-07
+
+- Fixed administration actions presenting rejected input as a site failure. All
+  twenty `admin_post` handlers are now registered through a single guard, so a
+  value the plugin is right to reject returns HTTP 400 carrying the reason
+  instead of rendering WordPress's critical-error page, mailing the site
+  administrator and logging a fatal.
+- Changed unexpected administration faults to a generic HTTP 500 with the detail
+  written to the error log and broadcast on `cf7aiv_admin_action_failed`, so
+  internal messages are no longer echoed to the browser.
+- Added `cf7aiv_admin_action_refused` and `CF7AIV_DEBUG` logging for refusals,
+  which are otherwise visible only to the administrator who caused them.
+- Fixed deliberate denials being reported as server faults where `wp_die` is
+  filtered to throw rather than end the request.
+- Fixed calibration offering an action that cannot succeed: unavailable sources
+  are disabled, the submit button is disabled with a reason when no source has
+  records, and a stale whitelist fingerprint is refused rather than raised.
+- Fixed misleading administration defaults and unreadable Overview presentation:
+  a neutral starter pack is preselected instead of a sector-specific one, policy
+  identifiers are shown as readable labels, table captions no longer duplicate
+  the visible panel heading, and the panel grid no longer overflows.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.19 — 2026-08-07
 
 - Added a guided, five-step Setup workflow with safe starter-pack previews,

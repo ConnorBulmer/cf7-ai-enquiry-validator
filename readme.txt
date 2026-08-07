@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.19
+Stable tag: 0.2.20
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.20 =
+* Rejected administration input now returns a controlled HTTP 400 carrying the reason, instead of rendering WordPress's critical-error page and mailing the site administrator.
+* Unexpected administration faults return a generic HTTP 500 with the detail logged and broadcast on `cf7aiv_admin_action_failed`; refusals are broadcast on `cf7aiv_admin_action_refused`.
+* Corrects misleading Setup and calibration defaults, disables actions that cannot succeed, and makes Overview labels and tables readable.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.19 =
 * Adds guided five-step Setup, tabbed provider-aware Integrations, truthful save/failure status, aggregate destination safety, and reversible admin UX coverage.

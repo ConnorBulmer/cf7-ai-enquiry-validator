@@ -73,6 +73,28 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.20 administration failure handling
+
+Version 0.2.20 changes what an administrator sees when an action cannot be
+carried out. Every `admin_post` handler validates its input and passes it to a
+service that rejects bad values; those rejections were uncaught, so WordPress
+rendered its critical-error page, mailed the site administrator and logged a
+fatal for what was a typed-in value the plugin was right to refuse.
+
+Handlers are now registered through a single guard. A rejected value returns
+HTTP 400 carrying the reason it was rejected. An unexpected fault returns a
+generic HTTP 500, with the real detail written to the error log and broadcast on
+`cf7aiv_admin_action_failed` rather than shown in the browser. Refusals are
+broadcast on `cf7aiv_admin_action_refused` and logged under `CF7AIV_DEBUG`,
+because a refusal is otherwise visible only to the administrator who caused it.
+Denials keep their own 403 where `wp_die` is filtered to throw.
+
+This release also corrects misleading defaults and presentation found by working
+through the screens as an operator: a neutral starter pack is preselected,
+calibration no longer offers actions that cannot succeed, policy identifiers are
+shown as readable labels, and Overview tables no longer duplicate their heading
+or overflow. Schema remains version 10, so no migration is required.
+
 ### Version 0.2.19 guided administration and provider reasoning
 
 Version 0.2.19 adds a five-step guided Setup workflow and a tabbed
@@ -465,7 +487,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.19 --output-dir=dist
+php tools/build-release.php --tag=v0.2.20 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -483,16 +505,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.19`:
+For version `0.2.20`:
 
 ```bash
-git tag v0.2.19
-git push origin v0.2.19
+git tag v0.2.20
+git push origin v0.2.20
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.19.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.20.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.
