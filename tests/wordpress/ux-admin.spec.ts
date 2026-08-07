@@ -199,7 +199,7 @@ async function openAdminPage(browser: Browser, trackedPages: TrackedPage[], page
 		throw new Error('Configured storage state is authenticated but does not have the administrator capability required by the plugin screens.');
 	}
 	await expect(page.locator('#wpadminbar')).toBeVisible();
-	await expect(page.locator('.cf7aiv-admin')).toBeVisible();
+	await expect(page.locator('.cf7aiv-admin').last()).toBeVisible();
 	return { context, page };
 }
 
@@ -260,7 +260,7 @@ for (const viewport of viewports) {
 			await expect(page.locator('.cf7aiv-setup-page')).toBeVisible();
 			await expect(page.getByRole('list', { name: 'Setup progress' })).toBeVisible();
 			await expect(page.locator('.cf7aiv-setup-step')).toHaveCount(5);
-			await expect(page.getByLabel('Starter pack')).toBeVisible();
+			await expect(page.getByLabel('Starter pack', { exact: true })).toBeVisible();
 			await expectLabeledControlsAndNonces(page);
 			await page.getByRole('button', { name: 'Continue to qualification' }).click();
 			const businessDescription = page.locator('#cf7aiv-business-description');
@@ -303,7 +303,7 @@ for (const viewport of viewports) {
 			for (const [index, tabName] of tabNames.entries()) {
 				await tabs.nth(index).click();
 				await expect(tabs.nth(index)).toHaveAttribute('aria-selected', 'true');
-				await expect(page.locator(`.cf7aiv-integration-tab-panel[data-tab="${tabName}"]`)).toBeVisible();
+				await expect(page.locator(`.cf7aiv-integration-tab-panel[data-tab="${tabName}"]`).first()).toBeVisible();
 				await expectNoOverflow(page, `Integrations ${viewport.width}x${viewport.height} ${tabName}`);
 			}
 			expect(nonGetRequests).toEqual([]);
