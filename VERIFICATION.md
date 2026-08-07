@@ -1,4 +1,127 @@
-# Final staging verification - HEAD 44be503 / v0.2.18 candidate
+# Final staging verification - HEAD 927ca19 / v0.2.18 candidate
+
+Status: **DONE_WITH_CONCERNS**. This final verification applies only to
+`https://staging.mosaicpublicity.co.uk`. No live transition, mapping change,
+public form submission, destination transport, high-risk action, GitHub tag,
+GitHub release, or live-site operation was performed.
+
+## Candidate And Local Gates
+
+- Source HEAD: `927ca19c46f6b0bfb9273d52a0671f4714d25137`.
+- Exact build command: `php tools/build-release.php --tag=v0.2.18 --output-dir=dist`.
+- Candidate: `dist/cf7-ai-enquiry-validator-0.2.18.zip`, 234 entries,
+  417240 bytes.
+- Reproducible SHA-256:
+  `581ef207ba80d41f9c3a6ed0e03553d7a641946e94f73f832b6220c70c7c87c3`.
+- An independent build in
+  `C:\Users\Conno\AppData\Local\Temp\opencode\cf7aiv-v0218-independent`
+  produced the same bytes, size, generated checksum, and SHA-256. The archive
+  has one `cf7-ai-enquiry-validator/` root, normalized
+  `1980-01-01 00:00:00 UTC` entry mtimes, and zero credential-pattern matches.
+- Local gates: 28/28 standalone PHP tests passed; 157/157 non-vendor PHP
+  files passed lint; `AttributionJsTest.js`, attribution syntax, admin syntax,
+  and `git diff --check` passed. The expected non-fatal migration retry
+  diagnostic was emitted by `DedupRegressionTest.php`.
+
+## Staging Deployment
+
+- Fresh rollback backup, outside the public root:
+  `/home/sites/24a/9/9af8850299/backups/20260807-132718Z-cf7aiv-0.2.18-final-verification-predeploy-927ca19`.
+- Backup directory mode is `0700`. `rollback-plugin` and `pre-replace-plugin`
+  each contain 234 files and zero symlinks. The active plugin tree contains
+  234 files and zero symlinks.
+- The uploaded candidate is mode `0600`, 417240 bytes, and its remote SHA-256
+  equals the local candidate hash above. The extraction workspace and remote
+  audit SQL file were removed; the rollback backup and candidate remain.
+- Post-deploy readback confirms active plugin `0.2.18` and schema `10`.
+
+## Runtime Safety
+
+- The standard staging wrapper reports PHP `8.0.30`, below the plugin minimum.
+  Provider/runtime checks used explicit PHP `8.3.33` through:
+
+  ```text
+  /usr/bin/php83 /usr/local/bin/wp --path=/home/sites/24a/9/9af8850299/staging_html --url=https://staging.mosaicpublicity.co.uk
+  ```
+
+- Automation remains `shadow`; GA4, server GTM, Microsoft UET, and webhook
+  all remain `dry_run=true`. Action Scheduler is available.
+- Health reports Flamingo unavailable and CFDB7 available with 15 records.
+- Doctor reports `classified=9`, `captured_unclassified=0`, and the two
+  pre-existing published/enabled GA4 mappings; this run did not change them.
+- Deterministic isolated pipeline and configured DeepSeek isolated pipeline
+  passed with PII-free context/envelopes, idempotency, and
+  `production_state_touched=false`. Their destination calls were isolated
+  self-test calls, not staging transports.
+- GA4 strict validation passed with `live_request_sent=false` and no event
+  collected. The safe queue pass and read-only diagnosis for item 1 passed.
+- Read-only dry-run reported `safe=true` and explicitly sent no AI or
+  destination request.
+
+## Browser Result
+
+The final command ran from `tests/wordpress` with:
+
+```text
+CF7AIV_BASE_URL=https://staging.mosaicpublicity.co.uk
+CF7AIV_CONTACT_URL=/contact/
+CF7AIV_ALLOW_REVERSIBLE_SAVES=1
+CF7AIV_AUTH_STATE=node_modules/.task6-v0218-rerun-storage-state.json
+npm exec -- playwright test ux-admin.spec.ts --output=test-results/task-6-v0218-final
+```
+
+- Exact result: **17 passed, 0 failed, 0 skipped, 0 flaky** in 53.9 seconds.
+- The guided draft save passed. Its exact ignored manifest is
+  `tests/wordpress/test-results/task-6-v0218-final/guided-draft-cleanup-manifest.json`.
+- Manifest action: `cf7aiv_save_guided_policy`. Exact cleanup predicate:
+  `cf7aiv_policies` where `policy_key=global`,
+  `version=pw-ux-af92b383-8a30-4a15-9ce4-60815731f61a`,
+  `status=draft`, and `policy_format=cf7aiv-policy/v2`.
+- Browser diagnostics contained 17 blocks, zero page errors, and zero HTTP
+  error responses. Two unrelated teardown request failures were WordPress
+  core `load-scripts.php` and `wp-includes/js/dist/components.min.js`, both
+  `net::ERR_ABORTED`; no plugin-specific browser failure was observed.
+- Screenshots, diagnostics, JSON results, traces, and manifests remain under
+  ignored `tests/wordpress/test-results/`.
+- The temporary administrator login check returned HTTP 403 for an invalid
+  authenticated nonce. No public form was submitted and no risky admin action
+  was accepted.
+
+## Cleanup And Proof
+
+- The final manifest predicate matched exactly one row before deletion and
+  zero rows afterward. The earlier diagnostic run's exact draft row was also
+  cleaned with the same full predicate before the final run; no prefix, date,
+  pack, or broad policy deletion was used.
+- The complete server-side `cf7aiv_settings` snapshot was taken before the
+  browser run without printing its value. Pre-run and post-cleanup files are
+  mode `0600`, 1069 bytes, and both hash to:
+  `ae6b0e54d26878eda75544ff3c48fb85b1a870893e9d042e01f010c048483a45`.
+  The full option was restored server-side with explicit PHP 8.3.33.
+- The temporary administrator (ID 25), ignored storage state, login helper,
+  extraction workspace, intermediate snapshots, and audit file are absent.
+  The `cf7aiv-task6` user search is zero; remote `task6` and `v0218` endpoint
+  file searches are zero.
+- Count-only marker audit returned zero matches in options, CFDB7, posts,
+  postmeta, users, usermeta, all CF7AIV tables, and Action Scheduler. Audited
+  markers included pipeline/dry-run identifiers, isolated provider fixtures,
+  browser consent/query markers, and both exact guided-draft UUIDs.
+
+## Concerns
+
+- The normal staging wrapper remains below the plugin minimum at PHP `8.0.30`;
+  future provider/runtime checks must continue using explicit PHP `8.3.33`.
+- Flamingo is unavailable while CFDB7 is available. The two existing published
+  GA4 mappings were observed but not published, enabled, disabled, or changed.
+- This verification proves safe staging behavior and isolated provider checks;
+  it does not claim live automation, live destination collection, accepted
+  production mail flow, or real campaign attribution.
+
+## Previous HEAD 44be503 Verification (Superseded)
+
+The following section records the prior candidate and its guided-save failure.
+It is retained as historical evidence and is superseded by the final HEAD
+`927ca19` section above.
 
 Status: **DONE_WITH_CONCERNS**. This verification applies only to
 `https://staging.mosaicpublicity.co.uk`. No live transition, GitHub tag or
