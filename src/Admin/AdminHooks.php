@@ -36,7 +36,8 @@ final class AdminHooks {
 		add_menu_page('AI Enquiry Validator','AI Enquiry Validator','manage_options','cf7aiv',[AdminPages::class,'overview'],'dashicons-filter',58);
 		add_submenu_page('cf7aiv','Overview','Overview','manage_options','cf7aiv',[AdminPages::class,'overview']);add_submenu_page('cf7aiv','Review Queue','Review Queue','manage_options','cf7aiv-review',[AdminPages::class,'reviewQueue']);add_submenu_page('cf7aiv','Policy Lab','Policy Lab','manage_options','cf7aiv-policy',[AdminPages::class,'policyLab']);add_submenu_page('cf7aiv','Integrations','Integrations','manage_options','cf7aiv-integrations',[IntegrationsPage::class,'render']);add_submenu_page('cf7aiv','Tracking Health & Logs','Tracking Health & Logs','manage_options','cf7aiv-health',[AdminPages::class,'health']);add_submenu_page('cf7aiv','Setup','Setup','manage_options','cf7aiv-setup',[AdminPages::class,'setup']);
 	}
-	public static function settings():void{if(function_exists('register_setting')){register_setting('cf7aiv',Settings::OPTION,['sanitize_callback'=>[SettingsSanitizer::class,'sanitize']]);}}
+	// Custom admin-post handlers sanitize form input; do not re-sanitize internal state updates here.
+	public static function settings():void{if(function_exists('register_setting')){register_setting('cf7aiv',Settings::OPTION);}}
 	public static function enqueueAssets(string $hookSuffix):void{
 		$page=substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($_GET['page']??''))??'',0,100);
 		$pluginScreen=str_starts_with($page,'cf7aiv')||str_starts_with($hookSuffix,'toplevel_page_cf7aiv')||str_contains($hookSuffix,'_page_cf7aiv');

@@ -2,7 +2,7 @@
 /** Standalone administration, review, privacy, and operations tests. */
 declare(strict_types=1);
 function admin_assert(bool $condition, string $message): void { if (! $condition) { throw new RuntimeException($message); } }
-$GLOBALS['admin_actions'] = []; $GLOBALS['admin_filters'] = []; $GLOBALS['admin_menus'] = []; $GLOBALS['admin_submenus'] = []; $GLOBALS['admin_fired'] = []; $GLOBALS['admin_options'] = []; $GLOBALS['admin_enqueued_styles'] = []; $GLOBALS['admin_enqueued_scripts'] = []; $GLOBALS['admin_allowed'] = true; $GLOBALS['admin_nonce_valid'] = true; $GLOBALS['admin_throw_action'] = null; $GLOBALS['admin_update_option_failure'] = false;
+$GLOBALS['admin_actions'] = []; $GLOBALS['admin_filters'] = []; $GLOBALS['admin_menus'] = []; $GLOBALS['admin_submenus'] = []; $GLOBALS['admin_fired'] = []; $GLOBALS['admin_options'] = []; $GLOBALS['admin_option_sanitizers'] = []; $GLOBALS['admin_enqueued_styles'] = []; $GLOBALS['admin_enqueued_scripts'] = []; $GLOBALS['admin_allowed'] = true; $GLOBALS['admin_nonce_valid'] = true; $GLOBALS['admin_throw_action'] = null; $GLOBALS['admin_update_option_failure'] = false;
 function add_action(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['admin_actions'][$hook][] = [$callback,$priority,$acceptedArgs]; }
 function add_filter(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['admin_filters'][$hook][] = [$callback,$priority,$acceptedArgs]; }
 function do_action(string $hook, mixed ...$args): void { $GLOBALS['admin_fired'][] = [$hook,$args]; if ($GLOBALS['admin_throw_action'] === $hook) { throw new RuntimeException('Observer failure.'); } }
@@ -10,7 +10,7 @@ function apply_filters(string $hook, mixed $value, mixed ...$arguments): mixed {
 function plugin_dir_url(string $file): string { return 'https://example.test/plugin/'; }
 function as_enqueue_async_action(string $hook='',array $args=[],string $group='',bool $unique=false): int { $GLOBALS['admin_async'][]=compact('hook','args','group','unique'); return 1; }
 function get_option(string $key, mixed $default = false): mixed { return $GLOBALS['admin_options'][$key] ?? $default; }
-function update_option(string $key, mixed $value, bool $autoload = false): bool { if ($GLOBALS['admin_update_option_failure']) { return false; } $GLOBALS['admin_options'][$key] = $value; return true; }
+function update_option(string $key, mixed $value, bool $autoload = false): bool { if ($GLOBALS['admin_update_option_failure']) { return false; } if (isset($GLOBALS['admin_option_sanitizers'][$key])) { $value = ($GLOBALS['admin_option_sanitizers'][$key])($value); } $GLOBALS['admin_options'][$key] = $value; return true; }
 function add_option(string $key, mixed $value, string $deprecated = '', bool $autoload = true): bool { $GLOBALS['admin_options'][$key] = $value; return true; }
 function current_user_can(string $capability): bool { return $GLOBALS['admin_allowed']; }
 function wp_verify_nonce(string $nonce, string $action): int|false { return $GLOBALS['admin_nonce_valid'] ? 1 : false; }
@@ -28,7 +28,7 @@ function wp_safe_redirect(string $url): bool { $GLOBALS['admin_redirect'] = $url
 function wp_nonce_field(string $action, string $name = '_wpnonce'): void { echo '<input type="hidden" name="' . $name . '" value="nonce">'; }
 function add_menu_page(mixed ...$args): string { $GLOBALS['admin_menus'][] = $args; return 'toplevel'; }
 function add_submenu_page(mixed ...$args): string { $GLOBALS['admin_submenus'][] = $args; return 'submenu'; }
-function register_setting(mixed ...$args): bool { return true; }
+function register_setting(mixed ...$args): bool { if (isset($args[1], $args[2]['sanitize_callback']) && is_callable($args[2]['sanitize_callback'])) { $GLOBALS['admin_option_sanitizers'][(string) $args[1]] = $args[2]['sanitize_callback']; } return true; }
 function wp_enqueue_style(string $handle, string $src, array $dependencies = [], string|bool|null $version = false): void { $GLOBALS['admin_enqueued_styles'][] = compact('handle', 'src', 'dependencies', 'version'); }
 function wp_enqueue_script(string $handle, string $src, array $dependencies = [], string|bool|null $version = false, array|bool $args = []): void { $GLOBALS['admin_enqueued_scripts'][] = compact('handle', 'src', 'dependencies', 'version', 'args'); }
 function sanitize_text_field(string $value): string { return trim(strip_tags($value)); }
@@ -506,6 +506,7 @@ admin_assert(count($GLOBALS['admin_enqueued_scripts'])===1&&str_ends_with($GLOBA
 foreach(['admin_post_cf7aiv_review','admin_post_cf7aiv_bulk_review','admin_post_cf7aiv_save_settings','admin_post_cf7aiv_save_guided_policy','admin_post_cf7aiv_lifecycle_transition','admin_post_cf7aiv_automation_transition','admin_post_cf7aiv_ga_transition','admin_post_cf7aiv_save_consent','admin_post_cf7aiv_policy_import','admin_post_cf7aiv_policy_publish','admin_post_cf7aiv_save_mapping','admin_post_cf7aiv_mapping_publish','admin_post_cf7aiv_mapping_enable','admin_post_cf7aiv_mapping_disable','admin_post_cf7aiv_validate_ga4','admin_post_cf7aiv_test_microsoft','admin_post_cf7aiv_setup','admin_post_cf7aiv_backfill','admin_enqueue_scripts','cf7aiv_backfill_batch','cf7aiv_daily_maintenance'] as $hook){admin_assert(isset($GLOBALS['admin_actions'][$hook]),"Required secured/operational hook {$hook} must be registered.");}
 
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]=CF7AIV\Infrastructure\Settings::defaults();
+$GLOBALS['admin_option_sanitizers']=[];CF7AIV\Admin\AdminHooks::settings();
 $GLOBALS['wpdb']->queries=[];
 $GLOBALS['wpdb']->acceptedSuggestions=[['suggestion_type'=>'service','value_json'=>'"Conversion optimisation"','provenance_json'=>'["page:1"]']];
 $_POST=['_wpnonce'=>'nonce','guided'=>[
@@ -519,7 +520,7 @@ $_POST=['_wpnonce'=>'nonce','guided'=>[
 ],'return_page'=>'policy'];CF7AIV\Admin\AdminHooks::saveGuidedPolicy();unset($_POST);
 $guidedSettings=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION];
 $guidedQueries=json_encode($GLOBALS['wpdb']->queries,JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
-admin_assert(($guidedSettings['setup']['draft_summary']['version']??'')==='guided-v1'&&($guidedSettings['setup']['draft_summary']['pack_key']??'')==='agency'&&($guidedSettings['setup']['draft_summary']['status']??'')==='draft','A guided save must persist a non-sensitive draft summary.');
+admin_assert(($guidedSettings['setup']['selected_pack']??'')==='agency'&&($guidedSettings['setup']['draft_summary']['version']??'')==='guided-v1'&&($guidedSettings['setup']['draft_summary']['pack_key']??'')==='agency'&&($guidedSettings['setup']['draft_summary']['status']??'')==='draft','A guided save must persist its selected pack and non-sensitive draft summary.');
 admin_assert(str_contains($guidedQueries,'cf7aiv-policy/v2')&&str_contains($guidedQueries,'Conversion optimisation')&&str_contains($guidedQueries,'Web design')&&!str_contains($guidedQueries,"status='published'"),'Guided values and accepted safe suggestions must be validated into a v2 draft without silent publication.');
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$guidedPolicyPage=ob_get_clean();
 admin_assert(str_contains($guidedPolicyPage,'Publish reviewed draft')&&str_contains($guidedPolicyPage,'value="guided-v1"')&&str_contains($guidedPolicyPage,'cf7aiv_policy_publish'),'Simple Policy Lab must provide an explicit guarded publish action for its saved draft summary.');
