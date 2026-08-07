@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { test as base, expect, type Browser, type Page } from '@playwright/test';
 
@@ -15,6 +16,7 @@ const authStatePath = configuredAuthState && fs.existsSync(path.resolve(configur
 const authUnavailableReason = configuredAuthState === ''
 	? 'Authenticated UX tests require CF7AIV_AUTH_STATE or CF7AIV_STORAGE_STATE pointing to an existing administrator storage-state file.'
 	: 'Authenticated UX tests require the configured administrator storage-state file to exist.';
+const allowReversibleSaves = process.env.CF7AIV_ALLOW_REVERSIBLE_SAVES?.trim() === '1';
 const defaultContactPath = '/portability-fixture/';
 const viewports = [
 	{ width: 1440, height: 1000 },
@@ -151,6 +153,15 @@ function requireBaseURL(): string {
 function requireAuthState(): string {
 	test.skip(authStatePath === null, authUnavailableReason);
 	return authStatePath as string;
+}
+
+function skipMutatingWithoutOptIn(): void {
+	test.skip(!allowReversibleSaves, 'Mutating admin acceptance paths require CF7AIV_ALLOW_REVERSIBLE_SAVES=1.');
+}
+
+function postAction(postData: string | null): string {
+	const action = postData?.match(/(?:^|&)action=([^&]+)/)?.[1] || '';
+	return decodeURIComponent(action.replace(/\+/g, ' '));
 }
 
 function siteURL(target: string): string {
@@ -401,6 +412,177 @@ test('dirty integration changes can be discarded without an admin POST', async (
 		expect(adminPostRequests).toEqual([]);
 		await page.screenshot({ path: testInfo.outputPath('integrations-discarded.png'), fullPage: true });
 	} finally {
+		await context.close();
+	}
+});
+
+test('unsaved starter-pack switch updates policy preview and evidence without a request', async ({ browser, trackedPages }) => {
+	const { context, page } = await openAdminPage(browser, trackedPages, 'cf7aiv-setup');
+	const nonGetRequests: string[] = [];
+	page.on('request', (request) => {
+		if (request.method() !== 'GET') {
+			nonGetRequests.push(`${request.method()} ${safeRequestURL(request.url())}`);
+		}
+	});
+	try {
+		const starterPack = page.getByLabel('Starter pack', { exact: true });
+		const originalPack = await starterPack.inputValue();
+		const packOptions = await starterPack.locator('option').evaluateAll((options) => options.map((option) => ({
+			value: (option as HTMLOptionElement).value,
+			label: option.textContent?.trim() || '',
+		})));
+		const alternatePack = packOptions.find((option) => option.value !== originalPack);
+		expect(alternatePack, 'The setup contract requires at least two starter packs.').toBeDefined();
+
+		const activePreview = page.locator('[data-setup-pack-preview]:not([hidden])');
+		const activeEvidence = page.locator('[data-setup-pack-evidence]:not([hidden])');
+		await expect(activePreview).toHaveAttribute('data-setup-pack-preview', originalPack);
+		await expect(activeEvidence).toHaveAttribute('data-setup-pack-evidence', originalPack);
+		const originalPreview = await activePreview.textContent();
+		const originalEvidence = await activeEvidence.textContent();
+
+		await starterPack.selectOption(alternatePack!.value);
+		await expect(page.locator('[data-setup-pack-preview]:not([hidden])')).toHaveAttribute('data-setup-pack-preview', alternatePack!.value);
+		await expect(page.locator('[data-setup-pack-evidence]:not([hidden])')).toHaveAttribute('data-setup-pack-evidence', alternatePack!.value);
+		expect(await page.locator('[data-setup-pack-preview]:not([hidden])').textContent()).not.toBe(originalPreview);
+		expect(await page.locator('[data-setup-pack-evidence]:not([hidden])').textContent()).not.toBe(originalEvidence);
+		expect(nonGetRequests).toEqual([]);
+	} finally {
+		await context.close();
+	}
+});
+
+test('opt-in ordinary Integrations save round-trips the exact timeout setting', async ({ browser, trackedPages }) => {
+	skipMutatingWithoutOptIn();
+	const { context, page } = await openAdminPage(browser, trackedPages, 'cf7aiv-integrations');
+	const submittedActions: string[] = [];
+	let originalTimeout: string | null = null;
+	const submitOrdinarySave = async (): Promise<void> => {
+		const requestPromise = page.waitForRequest((request) => request.method() === 'POST' && /\/wp-admin\/admin-post\.php/i.test(request.url()));
+		await page.locator('#cf7aiv-integrations-form').getByRole('button', { name: 'Save changes', exact: true }).first().click();
+		const request = await requestPromise;
+		const action = postAction(request.postData());
+		submittedActions.push(action);
+		expect(action).toBe('cf7aiv_save_settings');
+		await expect(page).toHaveURL(/\/wp-admin\/admin\.php\?/);
+	};
+
+	try {
+		await page.getByRole('tab', { name: 'AI provider', exact: true }).click();
+		const timeout = page.getByLabel('Timeout', { exact: true });
+		originalTimeout = await timeout.inputValue();
+		const originalNumber = Number(originalTimeout);
+		const changedTimeout = String(originalNumber >= 60 ? originalNumber - 1 : originalNumber + 1);
+		await timeout.fill(changedTimeout);
+		await expect(page.locator('#cf7aiv-integrations-form').getByRole('button', { name: 'Save changes', exact: true }).first()).toBeEnabled();
+
+		await submitOrdinarySave();
+		const savedURL = new URL(page.url());
+		expect(savedURL.searchParams.get('tab')).toBe('provider');
+		expect(savedURL.searchParams.get('saved')).toBe('1');
+		await expect(page.locator('.cf7aiv-integrations-page')).toHaveAttribute('data-active-tab', 'provider');
+		await expect(page.getByRole('tab', { name: 'AI provider', exact: true })).toHaveAttribute('aria-selected', 'true');
+	} finally {
+		try {
+			if (originalTimeout !== null && !page.isClosed()) {
+				await page.getByRole('tab', { name: 'AI provider', exact: true }).click();
+				await page.getByLabel('Timeout', { exact: true }).fill(originalTimeout);
+				await submitOrdinarySave();
+				const restoredURL = new URL(page.url());
+				expect(restoredURL.searchParams.get('tab')).toBe('provider');
+				expect(restoredURL.searchParams.get('saved')).toBe('1');
+				await expect(page.getByLabel('Timeout', { exact: true })).toHaveValue(originalTimeout);
+				expect(submittedActions).toEqual(['cf7aiv_save_settings', 'cf7aiv_save_settings']);
+			}
+		} finally {
+			await context.close();
+		}
+	}
+});
+
+test('opt-in guided Setup draft save records an exact cleanup manifest without publishing', async ({ browser, trackedPages }, testInfo) => {
+	skipMutatingWithoutOptIn();
+	const { context, page } = await openAdminPage(browser, trackedPages, 'cf7aiv-setup');
+	const syntheticVersion = `pw-ux-${randomUUID()}`;
+	const submittedActions: string[] = [];
+	let submitted = false;
+	let priorSelectedPack = '';
+	let priorPackLabel = '';
+	let priorDraftStatus = '';
+	let priorPolicyKey: string | null = null;
+	let priorDraftVersion: string | null = null;
+
+	try {
+		const starterPack = page.getByLabel('Starter pack', { exact: true });
+		priorSelectedPack = await starterPack.inputValue();
+		priorPackLabel = (await starterPack.locator('option:checked').textContent())?.trim() || '';
+		const draftStatusRow = page.locator('.cf7aiv-setup-step[data-step="review"] dl > div').filter({ hasText: 'Draft status' });
+		priorDraftStatus = (await draftStatusRow.locator('dd').textContent())?.trim() || 'Not saved';
+
+		const policyPage = await context.newPage();
+		trackPage(policyPage, trackedPages);
+		await protectTransport(policyPage);
+		await policyPage.goto(siteURL('/wp-admin/admin.php?page=cf7aiv-policy'), { waitUntil: 'domcontentloaded' });
+		const existingDraftForm = policyPage.locator('form').filter({ has: policyPage.getByRole('button', { name: 'Publish reviewed draft', exact: true }) });
+		if (await existingDraftForm.count()) {
+			priorPolicyKey = await existingDraftForm.locator('input[name="policy_key"]').inputValue();
+			priorDraftVersion = await existingDraftForm.locator('input[name="version"]').inputValue();
+		}
+		await policyPage.close();
+
+		await page.getByRole('button', { name: 'Continue to qualification', exact: true }).click();
+		await page.locator('#cf7aiv-business-description').fill(`Playwright reversible draft ${syntheticVersion}`);
+		await page.getByRole('button', { name: 'Continue to AI fields', exact: true }).click();
+		await page.getByRole('button', { name: 'Review draft', exact: true }).click();
+		await expect(page.locator('.cf7aiv-setup-step[data-step="review"]')).toBeVisible();
+		await page.locator('#cf7aiv-guided-draft-pack').selectOption(priorSelectedPack);
+		await page.locator('#cf7aiv-guided-version').fill(syntheticVersion);
+
+		const requestPromise = page.waitForRequest((request) => request.method() === 'POST' && /\/wp-admin\/admin-post\.php/i.test(request.url()));
+		await page.getByRole('button', { name: 'Save guided draft', exact: true }).click();
+		const request = await requestPromise;
+		const action = postAction(request.postData());
+		submittedActions.push(action);
+		submitted = action === 'cf7aiv_save_guided_policy';
+		expect(action).toBe('cf7aiv_save_guided_policy');
+		await expect(page).toHaveURL(/\/wp-admin\/admin\.php\?/);
+		const redirectedURL = new URL(page.url());
+		expect(redirectedURL.searchParams.get('page')).toBe('cf7aiv-setup');
+		await expect(page.locator('.cf7aiv-setup-step[data-step="review"] dl > div').filter({ hasText: 'Draft status' }).locator('dd')).toHaveText('draft');
+		await expect(page.locator('.cf7aiv-setup-page')).toBeVisible();
+		expect(submittedActions).toEqual(['cf7aiv_save_guided_policy']);
+	} finally {
+		// The orchestrator owns cleanup: delete only this exact draft row, then restore the
+		// captured settings paths. This manifest intentionally exposes the synthetic marker.
+		await testInfo.attach('guided-draft-cleanup-manifest', {
+			body: JSON.stringify({
+				cleanup_contract: 'Delete only the cf7aiv-policy/v2 row with policy_key=global, version equal to synthetic_version, and status=draft. Never publish or delete by pack, prefix, or test date. Restore the prior cf7aiv_settings setup paths from this manifest or the orchestrator snapshot.',
+				submitted,
+				submitted_actions: submittedActions,
+				policy_row: {
+					table: 'cf7aiv_policies',
+					policy_key: 'global',
+					version: syntheticVersion,
+					status: 'draft',
+					policy_format: 'cf7aiv-policy/v2',
+				},
+				settings_option: {
+					option_name: 'cf7aiv_settings',
+					changed_paths: ['setup.selected_pack', 'setup.draft_summary'],
+					prior: {
+						selected_pack: priorSelectedPack,
+						draft_summary: {
+							policy_key: priorPolicyKey,
+							version: priorDraftVersion,
+							pack_key: priorSelectedPack,
+							pack_label: priorPackLabel,
+							status: priorDraftStatus,
+						},
+					},
+				},
+			}, null, 2),
+			contentType: 'application/json',
+		});
 		await context.close();
 	}
 });
