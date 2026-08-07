@@ -302,6 +302,7 @@
 				var isActive = panel.getAttribute('data-provider') === selected;
 				panel.classList.toggle('is-active', isActive);
 				panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+				panel.disabled = !isActive;
 				panel.hidden = !isActive;
 			});
 		};

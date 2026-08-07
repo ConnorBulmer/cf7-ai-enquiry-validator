@@ -2,7 +2,7 @@
 /** Standalone administration, review, privacy, and operations tests. */
 declare(strict_types=1);
 function admin_assert(bool $condition, string $message): void { if (! $condition) { throw new RuntimeException($message); } }
-$GLOBALS['admin_actions'] = []; $GLOBALS['admin_filters'] = []; $GLOBALS['admin_menus'] = []; $GLOBALS['admin_submenus'] = []; $GLOBALS['admin_fired'] = []; $GLOBALS['admin_options'] = []; $GLOBALS['admin_enqueued_styles'] = []; $GLOBALS['admin_enqueued_scripts'] = []; $GLOBALS['admin_allowed'] = true; $GLOBALS['admin_nonce_valid'] = true; $GLOBALS['admin_throw_action'] = null;
+$GLOBALS['admin_actions'] = []; $GLOBALS['admin_filters'] = []; $GLOBALS['admin_menus'] = []; $GLOBALS['admin_submenus'] = []; $GLOBALS['admin_fired'] = []; $GLOBALS['admin_options'] = []; $GLOBALS['admin_enqueued_styles'] = []; $GLOBALS['admin_enqueued_scripts'] = []; $GLOBALS['admin_allowed'] = true; $GLOBALS['admin_nonce_valid'] = true; $GLOBALS['admin_throw_action'] = null; $GLOBALS['admin_update_option_failure'] = false;
 function add_action(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['admin_actions'][$hook][] = [$callback,$priority,$acceptedArgs]; }
 function add_filter(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['admin_filters'][$hook][] = [$callback,$priority,$acceptedArgs]; }
 function do_action(string $hook, mixed ...$args): void { $GLOBALS['admin_fired'][] = [$hook,$args]; if ($GLOBALS['admin_throw_action'] === $hook) { throw new RuntimeException('Observer failure.'); } }
@@ -10,7 +10,7 @@ function apply_filters(string $hook, mixed $value, mixed ...$arguments): mixed {
 function plugin_dir_url(string $file): string { return 'https://example.test/plugin/'; }
 function as_enqueue_async_action(string $hook='',array $args=[],string $group='',bool $unique=false): int { $GLOBALS['admin_async'][]=compact('hook','args','group','unique'); return 1; }
 function get_option(string $key, mixed $default = false): mixed { return $GLOBALS['admin_options'][$key] ?? $default; }
-function update_option(string $key, mixed $value, bool $autoload = false): bool { $GLOBALS['admin_options'][$key] = $value; return true; }
+function update_option(string $key, mixed $value, bool $autoload = false): bool { if ($GLOBALS['admin_update_option_failure']) { return false; } $GLOBALS['admin_options'][$key] = $value; return true; }
 function add_option(string $key, mixed $value, string $deprecated = '', bool $autoload = true): bool { $GLOBALS['admin_options'][$key] = $value; return true; }
 function current_user_can(string $capability): bool { return $GLOBALS['admin_allowed']; }
 function wp_verify_nonce(string $nonce, string $action): int|false { return $GLOBALS['admin_nonce_valid'] ? 1 : false; }
@@ -340,6 +340,7 @@ admin_assert(str_contains($integrations, 'cf7aiv-integration-tabs'), 'Integratio
 admin_assert(str_contains($integrations, 'cf7aiv-save-bar'), 'Integrations needs a persistent save bar.');
 admin_assert(str_contains($integrations, 'data-provider="deepseek"'), 'DeepSeek controls need a provider scope.');
 admin_assert(str_contains($integrations, 'data-provider="openai"'), 'OpenAI controls need a provider scope.');
+admin_assert(preg_match('/<fieldset[^>]*data-provider="openai"[^>]*data-provider-panel="true"[^>]*disabled/', $integrations) === 1, 'Inactive provider controls must be disabled and excluded from the ordinary POST.');
 foreach(['cf7aiv_test_microsoft','SEND_ZERO_VALUE_MICROSOFT_TEST','Microsoft UET transport test'] as $control){admin_assert(str_contains($integrations,$control),"Integrations must render guarded Microsoft control {$control}.");}
 admin_assert(substr_count($integrations, 'class="card cf7aiv-integration-panel') >= 7, 'Integration concerns must be grouped into native panels.');
 admin_assert(str_contains($integrations, 'uses only a one-off synthetic anonymous ID required by CAPI'), 'Microsoft test copy must describe the required synthetic ID.');
@@ -490,6 +491,15 @@ admin_assert(str_contains($slashedPolicyQueries,'form:6262')&&str_contains($slas
 $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['automation']['verification_mode']='automatic_candidates';
 $_POST=['_wpnonce'=>'nonce','cf7aiv'=>['automation'=>['verification_mode'=>'off']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
 admin_assert($GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['automation']['verification_mode']==='off','Submitting a capable provider form with verification unchecked must persist off.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']=array_merge(CF7AIV\Infrastructure\Settings::defaults()['providers'],['selected'=>'deepseek','deepseek_model'=>'preserved-deepseek-model','deepseek_base_url'=>'https://deepseek.example.test','deepseek_reasoning_effort'=>'deep','openai_model'=>'old-openai-model','openai_base_url'=>'https://openai.example.test','openai_reasoning_effort'=>'unsupported','timeout'=>15]);
+$_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'provider','cf7aiv'=>['providers'=>['selected'=>'openai','openai_model'=>'new-openai-model','openai_base_url'=>'https://api.openai.com/v1/responses','openai_reasoning_effort'=>'unsupported','timeout'=>'20']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
+$partialProviderSave=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers'];
+admin_assert(($partialProviderSave['selected']??'')==='openai'&&($partialProviderSave['openai_model']??'')==='new-openai-model'&&($partialProviderSave['deepseek_model']??'')==='preserved-deepseek-model'&&($partialProviderSave['deepseek_base_url']??'')==='https://deepseek.example.test'&&($partialProviderSave['deepseek_reasoning_effort']??'')==='deep','A partial provider POST must save the selected provider while preserving excluded inactive-provider settings.');
+admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=provider')&&str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1'),'A successful ordinary save must redirect to its active tab with a saved status only.');
+$GLOBALS['admin_update_option_failure']=true;$_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'google','cf7aiv'=>['providers'=>['selected'=>'openai','openai_model'=>'failed-openai-model']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);$GLOBALS['admin_update_option_failure']=false;
+admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=google')&&str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1'),'A failed ordinary save must redirect to its active tab with a failure status and no success status.');
+ob_start();$_GET=['tab'=>'google','failed'=>'1'];CF7AIV\Admin\IntegrationsPage::render();$failedIntegrationNotice=ob_get_clean();unset($_GET);
+admin_assert(str_contains($failedIntegrationNotice,'Integration settings could not be saved')&&!str_contains($failedIntegrationNotice,'RuntimeException'),'Failed Integrations saves must expose bounded notice copy without exception details.');
 $providerBeforeModeToggle=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected'];
 $_POST=['_wpnonce'=>'nonce','cf7aiv'=>['ui'=>['advanced_mode'=>'1']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$toggledAdvancedPolicy=ob_get_clean();

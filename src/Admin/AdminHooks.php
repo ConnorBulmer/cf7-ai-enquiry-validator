@@ -18,6 +18,14 @@ use CF7AIV\Providers\OpenAIProvider;
 use InvalidArgumentException;
 
 final class AdminHooks {
+	private static bool $settingsSave = false;
+	private static bool $settingsSaveValidationFailed = false;
+	/** @var array<string,mixed> */
+	private static array $settingsSaveInput = [];
+	/** @var array<string,mixed> */
+	private static array $settingsSaveSanitized = [];
+	private static string $settingsSaveReturnTab = '';
+
 	public static function register():void{
 		add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
 		add_action('admin_post_cf7aiv_review',[self::class,'review']);add_action('admin_post_cf7aiv_bulk_review',[self::class,'bulkReview']);add_action('admin_post_cf7aiv_save_settings',[self::class,'saveSettings']);add_action('admin_post_cf7aiv_save_guided_policy',[self::class,'saveGuidedPolicy']);add_action('admin_post_cf7aiv_lifecycle_transition',[self::class,'lifecycleTransition']);add_action('admin_post_cf7aiv_automation_transition',[self::class,'automationTransition']);add_action('admin_post_cf7aiv_ga_transition',[self::class,'gaTransition']);add_action('admin_post_cf7aiv_save_consent',[self::class,'saveConsent']);add_action('admin_post_cf7aiv_policy_import',[self::class,'policyImport']);add_action('admin_post_cf7aiv_policy_publish',[self::class,'policyPublish']);add_action('admin_post_cf7aiv_save_mapping',[self::class,'saveMapping']);add_action('admin_post_cf7aiv_mapping_publish',[self::class,'mappingPublish']);add_action('admin_post_cf7aiv_mapping_enable',[self::class,'mappingEnable']);add_action('admin_post_cf7aiv_mapping_disable',[self::class,'mappingDisable']);add_action('admin_post_cf7aiv_validate_ga4',[self::class,'validateGa4']);add_action('admin_post_cf7aiv_test_microsoft',[self::class,'testMicrosoft']);add_action('admin_post_cf7aiv_setup',[self::class,'completeSetup']);add_action('admin_post_cf7aiv_setup_scan',[self::class,'setupScan']);add_action('admin_post_cf7aiv_setup_suggestion',[self::class,'setupSuggestion']);add_action('admin_post_cf7aiv_backfill',[self::class,'backfill']);
@@ -73,12 +81,36 @@ final class AdminHooks {
 	public static function backfill():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_backfill');$source=substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($post['source']??''))??'',0,32);$rawForms=$post['form_ids']??[];if(!is_array($rawForms)){$rawForms=preg_split('/\s*,\s*/',(string)$rawForms,-1,PREG_SPLIT_NO_EMPTY)?:[];}$explicit=in_array($post['explicit_opt_in']??null,[true,1,'1','true','on','yes'],true);$snapshot=CalibrationPolicySnapshot::active();$submitted=(string)($post['whitelist_fingerprint']??'');if($submitted===''||!hash_equals($snapshot['fingerprint'],$submitted)){throw new \InvalidArgumentException('Published policy fields changed after preview. Review the current whitelist and opt in again.');}(new CalibrationService())->schedule($source,['explicit_opt_in'=>$explicit,'form_ids'=>$rawForms,'date_from'=>(string)($post['date_from']??gmdate('Y-m-d',strtotime('-1 year'))),'date_to'=>(string)($post['date_to']??gmdate('Y-m-d')),'maximum'=>(int)($post['maximum']??25),'ai_whitelist_snapshot'=>$snapshot['fields'],'whitelist_fingerprint'=>$snapshot['fingerprint']],function_exists('get_current_user_id')?get_current_user_id():0);self::redirect('admin.php?page=cf7aiv-health');}
 	/** @param array<string,mixed> $arguments */ public static function backfillBatch(string $sourceKey,array $arguments=[],int $batchSize=25):void{(new CalibrationBatchWorker(new WpCalibrationRunStore()))->process($sourceKey,$arguments,$batchSize);}
 	public static function daily():void{$settings=(array)get_option(Settings::OPTION,Settings::defaults());(new RetentionService())->cleanup((int)($settings['privacy']['retention_days']??90));(new DigestService())->send();}
-	/** @return array<string,mixed> */ private static function post():array{$value=$_POST??[];if(!is_array($value)){return [];}$value=function_exists('wp_unslash')?wp_unslash($value):$value;return is_array($value)?$value:[];}
+	/** @return array<string,mixed> */
+	private static function post():array{
+		self::$settingsSave=false;self::$settingsSaveValidationFailed=false;self::$settingsSaveInput=[];self::$settingsSaveSanitized=[];self::$settingsSaveReturnTab='';
+		$value=$_POST??[];
+		if(!is_array($value)){return [];}
+		$value=function_exists('wp_unslash')?wp_unslash($value):$value;
+		if(!is_array($value)){return [];}
+		if(isset($value['cf7aiv'])&&is_array($value['cf7aiv'])){
+			self::$settingsSave=true;self::$settingsSaveReturnTab=is_scalar($value['return_tab']??null)?(string)$value['return_tab']:'';$settings=(array)get_option(Settings::OPTION,Settings::defaults());$input=(array)$value['cf7aiv'];
+			if(array_key_exists('providers',$input)&&is_array($input['providers'])){foreach((array)($settings['providers']??[]) as $key=>$stored){if(!array_key_exists($key,$input['providers'])){$value['cf7aiv']['providers'][$key]=$stored;}}}
+			self::$settingsSaveInput=(array)$value['cf7aiv'];
+			try{self::$settingsSaveSanitized=SettingsSanitizer::sanitize(self::$settingsSaveInput);}catch(\Throwable){self::$settingsSaveValidationFailed=true;$value['cf7aiv']=[];self::$settingsSaveInput=[];self::$settingsSaveSanitized=[];}
+		}
+		return $value;
+	}
+	private static function settingsSaveSucceeded():bool{
+		if(self::$settingsSaveValidationFailed){return false;}$input=self::$settingsSaveInput;$sanitized=self::$settingsSaveSanitized;$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));
+		if(isset($input['ui'])&&($settings['ui']['advanced_mode']??null)!==($sanitized['ui']['advanced_mode']??null)){return false;}
+		if(isset($input['providers'])&&(array)($settings['providers']??[])!==(array)($sanitized['providers']??[])){return false;}
+		if(isset($input['privacy'])&&(array)($settings['privacy']??[])!==($sanitized['privacy']??[])){return false;}
+		if(isset($input['automation'])){$expected=(string)($sanitized['automation']['verification_mode']??Settings::VERIFICATION_OFF);if(!self::verificationSupported((string)($settings['providers']['selected']??'deepseek'))){$expected=Settings::VERIFICATION_OFF;}if((string)($settings['automation']['verification_mode']??'')!==$expected){return false;}}
+		foreach((array)($input['destinations']??[]) as $key=>$given){if(!in_array((string)$key,['ga4','server_gtm','microsoft_uet','webhook'],true)||!is_array($given)){continue;}foreach(['enabled','dry_run','allow_insecure','measurement_id','tag_id','url','endpoint_url'] as $field){if(array_key_exists($field,$given)&&(($settings['destinations'][$key][$field]??null)!==($sanitized['destinations'][$key][$field]??null))){return false;}}}
+		foreach(SettingsSanitizer::secrets($input) as $key=>$value){if(Crypto::secret($key)!==$value){return false;}}
+		return true;
+	}
 	private static function setupService():SetupSuggestionService{$settings=(array)get_option(Settings::OPTION,Settings::defaults());$providerSettings=(array)($settings['providers']??[]);$transport=new WordPressHttpTransport();$selected=(string)($providerSettings['selected']??'deepseek');$timeout=(int)($providerSettings['timeout']??15);$provider=$selected==='openai'?new OpenAIProvider($transport,Crypto::secret('openai_api_key'),(string)($providerSettings['openai_base_url']??'https://api.openai.com/v1/responses'),(string)($providerSettings['openai_model']??'gpt-5.4-mini'),$timeout):new DeepSeekProvider($transport,Crypto::secret('deepseek_api_key'),(string)($providerSettings['deepseek_base_url']??'https://api.deepseek.com/chat/completions'),(string)($providerSettings['deepseek_model']??'deepseek-v4-flash'),$timeout);return new SetupSuggestionService(new SiteProfileScanner(),$provider,new SetupSuggestionRepository());}
 	/** @return list<array<string,mixed>> */ private static function acceptedSetupSuggestions():array{global $wpdb;if(!isset($wpdb->prefix)||!method_exists($wpdb,'get_results')){return [];}$rows=$wpdb->get_results("SELECT suggestion_type,value_json,provenance_json FROM {$wpdb->prefix}cf7aiv_setup_suggestions WHERE status='accepted' ORDER BY id ASC LIMIT 200",ARRAY_A);return is_array($rows)?$rows:[];}
 	private static function hasPublishedV2Policy():bool{global $wpdb;return isset($wpdb->prefix)&&method_exists($wpdb,'get_var')&&(int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cf7aiv_policies WHERE status='published' AND policy_format='cf7aiv-policy/v2'")>0;}
 	private static function verificationSupported(string $selected):bool{$providers=function_exists('apply_filters')?(array)apply_filters('cf7aiv_ai_providers',[]):[];if(isset($providers[$selected])){return $providers[$selected] instanceof VerificationCapableProviderInterface;}return $selected==='deepseek'&&is_a(DeepSeekProvider::class,VerificationCapableProviderInterface::class,true);}
-	private static function redirect(string $path):void{if(str_starts_with($path,'admin.php?page=cf7aiv-integrations')&&is_array($_POST??null)){ $tab=$_POST['return_tab']??'';if(is_scalar($tab)&&in_array((string)$tab,['provider','google','microsoft','webhook','consent'],true)){$path.=(str_contains($path,'?')?'&':'?').'tab='.rawurlencode((string)$tab);}if((string)($_POST['action']??'')==='cf7aiv_save_settings'){$path.='&saved=1';}}if(function_exists('wp_safe_redirect')){wp_safe_redirect(admin_url($path));}}
+	private static function redirect(string $path):void{if(str_starts_with($path,'admin.php?page=cf7aiv-integrations')&&is_array($_POST??null)){ $tab=self::$settingsSaveReturnTab!==''?self::$settingsSaveReturnTab:($_POST['return_tab']??'');if(is_scalar($tab)&&in_array((string)$tab,['provider','google','microsoft','webhook','consent'],true)){$path.=(str_contains($path,'?')?'&':'?').'tab='.rawurlencode((string)$tab);}if(self::$settingsSave){$path.='&'.(self::settingsSaveSucceeded()?'saved=1':'failed=1');}}if(function_exists('wp_safe_redirect')){wp_safe_redirect(admin_url($path));}}
 	private static function identifier(string $value,string $fallback):string{$value=substr(preg_replace('/[^a-zA-Z0-9:_\-]/','',trim($value))??'',0,100);return $value===''?$fallback:$value;}
 	private static function reviewRevision(mixed $value):int{if(is_int($value)&&$value>=0){return $value;}if(is_string($value)&&preg_match('/\A(?:0|[1-9][0-9]*)\z/',$value)===1){$parsed=filter_var($value,FILTER_VALIDATE_INT,['options'=>['min_range'=>0]]);if(is_int($parsed)){return $parsed;}}throw new \InvalidArgumentException('Review revision is required.');}
 }

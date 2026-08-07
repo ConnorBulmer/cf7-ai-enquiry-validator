@@ -161,7 +161,7 @@ final class IntegrationsPage {
 		$label = $provider === 'openai' ? 'OpenAI' : 'DeepSeek';
 		$baseKey = $provider . '_base_url';
 		$modelKey = $provider . '_model';
-		echo '<fieldset class="cf7aiv-provider-fields" data-provider="' . self::e($provider) . '" data-provider-panel="true" aria-hidden="' . ($active ? 'false' : 'true') . '"' . ($active ? '' : ' hidden') . '><legend>' . self::e($label) . ' provider settings</legend><div class="cf7aiv-form-grid">';
+		echo '<fieldset class="cf7aiv-provider-fields" data-provider="' . self::e($provider) . '" data-provider-panel="true" aria-hidden="' . ($active ? 'false' : 'true') . '"' . ($active ? '' : ' disabled hidden') . '><legend>' . self::e($label) . ' provider settings</legend><div class="cf7aiv-form-grid">';
 		echo self::text($label . ' model', 'cf7aiv[providers][' . $modelKey . ']', $model);
 		echo self::text($label . ' base URL', 'cf7aiv[providers][' . $baseKey . ']', (string) ($providers[$baseKey] ?? ''));
 		echo self::secret($label . ' API key', 'cf7aiv[providers][' . $provider . '_api_key]');
