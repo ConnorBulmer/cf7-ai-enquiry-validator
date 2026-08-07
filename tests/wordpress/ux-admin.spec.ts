@@ -262,6 +262,10 @@ for (const viewport of viewports) {
 			await expect(page.locator('.cf7aiv-setup-step')).toHaveCount(5);
 			await expect(page.getByLabel('Starter pack')).toBeVisible();
 			await expectLabeledControlsAndNonces(page);
+			await page.getByRole('button', { name: 'Continue to qualification' }).click();
+			const businessDescription = page.locator('#cf7aiv-business-description');
+			await expect(businessDescription).toBeVisible();
+			await businessDescription.fill('Synthetic responsive QA business context.');
 			const setupSteps = page.locator('.cf7aiv-setup-progress [data-setup-step]');
 			const setupStepNames = await setupSteps.evaluateAll((items) => items.map((item) => item.getAttribute('data-setup-step') || ''));
 			for (const [index, stepName] of setupStepNames.entries()) {
