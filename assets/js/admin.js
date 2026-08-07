@@ -320,6 +320,9 @@
 				bar.setAttribute('data-save-state', state);
 				var status = bar.querySelector('[data-save-status]');
 				if (status) {
+					status.setAttribute('role', 'status');
+					status.setAttribute('aria-live', 'polite');
+					status.setAttribute('aria-atomic', 'true');
 					status.textContent = statusText;
 				}
 				Array.prototype.forEach.call(bar.querySelectorAll('[name="cf7aiv-save"]'), function (button) {

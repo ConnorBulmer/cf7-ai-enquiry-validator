@@ -43,9 +43,9 @@ final class IntegrationsPage {
 		echo '</div>';
 
 		if ($saveStatus === 'saved') {
-			echo '<div class="notice notice-success"><p>Integration settings saved.</p></div>';
+			echo '<div class="notice notice-success" role="status" aria-live="polite"><p>Integration settings saved.</p></div>';
 		} elseif ($saveStatus === 'failed') {
-			echo '<div class="notice notice-error"><p>Integration settings could not be saved. Review the fields and try again.</p></div>';
+			echo '<div class="notice notice-error" role="alert" aria-live="assertive"><p>Integration settings could not be saved. Review the fields and try again.</p></div>';
 		}
 		$testNotices = [
 			'success' => 'Microsoft accepted the controlled zero-value transport event.',
@@ -66,7 +66,7 @@ final class IntegrationsPage {
 		echo '<div class="cf7aiv-integration-tab-panels">';
 
 		self::panelStart('provider', $activeTab);
-		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2><p class="description">Selected provider: ' . self::e($selectedProvider) . '; model: ' . self::e($selectedModel) . '.</p><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]" data-provider-selector>' . self::option('deepseek', $selectedProvider) . self::option('openai', $selectedProvider) . '</select></label></div>';
+		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2>' . self::inlineError($saveStatus, $activeTab, 'provider') . '<p class="description">Selected provider: ' . self::e($selectedProvider) . '; model: ' . self::e($selectedModel) . '.</p><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]" data-provider-selector>' . self::option('deepseek', $selectedProvider) . self::option('openai', $selectedProvider) . '</select></label></div>';
 		self::providerFields('deepseek', $selectedProvider === 'deepseek', $deepSeekModel, (string) ($providers['deepseek_reasoning_effort'] ?? 'off'), (array) $providers);
 		self::providerFields('openai', $selectedProvider === 'openai', $openAiModel, (string) ($providers['openai_reasoning_effort'] ?? 'unsupported'), (array) $providers);
 		echo '<div class="cf7aiv-form-grid"><label>Timeout <input type="number" min="3" max="60" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? 15) . '"></label></div>';
@@ -96,7 +96,7 @@ final class IntegrationsPage {
 		self::panelEnd();
 
 		self::panelStart('google', $activeTab);
-		echo '<section class="card cf7aiv-integration-panel"><h2>Google conversion route</h2><p>Use direct GA4 for the simplest setup. Existing server-side GTM is available in Advanced mode for sites that already operate a tagging server.</p>';
+		echo '<section class="card cf7aiv-integration-panel"><h2>Google conversion route</h2>' . self::inlineError($saveStatus, $activeTab, 'google') . '<p>Use direct GA4 for the simplest setup. Existing server-side GTM is available in Advanced mode for sites that already operate a tagging server.</p>';
 		self::destinationFields('ga4', 'GA4 Measurement Protocol — Recommended for most users', (array) ($destinations['ga4'] ?? []), ['measurement_id' => 'Measurement ID'], 'ga4_api_secret');
 		if ($advanced) {
 			self::destinationFields('server_gtm', 'Existing server-side GTM', (array) ($destinations['server_gtm'] ?? []), ['endpoint_url' => 'Tagging-server HTTPS base URL', 'measurement_id' => 'Measurement ID'], 'server_gtm_api_secret');
@@ -106,19 +106,19 @@ final class IntegrationsPage {
 		self::panelEnd();
 
 		self::panelStart('microsoft', $activeTab);
-		echo '<section class="card cf7aiv-integration-panel"><h2>Microsoft UET</h2>';
+		echo '<section class="card cf7aiv-integration-panel"><h2>Microsoft UET</h2>' . self::inlineError($saveStatus, $activeTab, 'microsoft');
 		self::destinationFields('microsoft_uet', 'Microsoft UET', (array) ($destinations['microsoft_uet'] ?? []), ['tag_id' => 'Tag ID'], 'microsoft_uet_token');
 		echo '</section>';
 		self::panelEnd();
 
 		self::panelStart('webhook', $activeTab);
-		echo '<section class="card cf7aiv-integration-panel"><h2>Webhook</h2>';
+		echo '<section class="card cf7aiv-integration-panel"><h2>Webhook</h2>' . self::inlineError($saveStatus, $activeTab, 'webhook');
 		self::destinationFields('webhook', 'Webhook', (array) ($destinations['webhook'] ?? []), ['url' => 'HTTPS URL'], 'webhook_secret', true);
 		echo '</section>';
 		self::panelEnd();
 
 		self::panelStart('consent', $activeTab);
-		echo '<section class="card cf7aiv-integration-panel"><h2>Consent &amp; privacy</h2><p class="description">Ordinary retention, uninstall, interface, and enhanced-matching settings are saved together. Consent policy changes use a separate guarded action below.</p><h3>Interface mode</h3><div class="cf7aiv-form-grid"><input type="hidden" name="cf7aiv[ui][advanced_mode]" value="0">';
+		echo '<section class="card cf7aiv-integration-panel"><h2>Consent &amp; privacy</h2>' . self::inlineError($saveStatus, $activeTab, 'consent') . '<p class="description">Ordinary retention, uninstall, interface, and enhanced-matching settings are saved together. Consent policy changes use a separate guarded action below.</p><h3>Interface mode</h3><div class="cf7aiv-form-grid"><input type="hidden" name="cf7aiv[ui][advanced_mode]" value="0">';
 		echo self::checkbox('Advanced mode', 'cf7aiv[ui][advanced_mode]', $advanced) . '</div><p class="description">Advanced mode reveals additional technical policy and provider diagnostics. Hiding it does not discard saved settings.</p>';
 		echo '<fieldset><legend>Privacy and retention</legend><div class="cf7aiv-form-grid"><label>Retention days <input type="number" min="1" max="3650" name="cf7aiv[privacy][retention_days]" value="' . (int) ($privacy['retention_days'] ?? 90) . '"></label>';
 		echo self::checkbox('Delete plugin data on uninstall', 'cf7aiv[privacy][delete_on_uninstall]', ! empty($privacy['delete_on_uninstall']));
@@ -223,6 +223,20 @@ final class IntegrationsPage {
 		echo '<div class="' . $classes . '" data-dirty="' . ($state === 'failed' ? 'true' : 'false') . '" data-save-state="' . self::e($state) . '"><p class="cf7aiv-save-status" role="status" aria-live="polite" data-save-status>' . self::e($statusText) . '</p><div class="cf7aiv-actions"><button type="submit" class="button button-primary" name="cf7aiv-save" value="1">Save changes</button><button type="button" class="button button-secondary" name="cf7aiv-discard" value="1">Discard changes</button></div></div>';
 	}
 
+	private static function inlineError(string $status, string $activeTab, string $group): string {
+		if ($status !== 'failed' || $activeTab !== $group) {
+			return '';
+		}
+		$labels = [
+			'provider' => 'AI provider',
+			'google' => 'Google integration',
+			'microsoft' => 'Microsoft UET',
+			'webhook' => 'Webhook',
+			'consent' => 'Consent and privacy',
+		];
+		return '<p class="cf7aiv-inline-error" role="alert">Review the ' . self::e($labels[$group] ?? 'settings') . ' settings and try again.</p>';
+	}
+
 	private static function destinationFields(string $key, string $label, array $config, array $fields, string $secret, bool $insecure = false): void {
 		echo '<fieldset><legend>' . self::e($label) . '</legend><div class="cf7aiv-form-grid">';
 		foreach ($fields as $name => $fieldLabel) {
@@ -271,9 +285,6 @@ final class IntegrationsPage {
 		$isOpenAi = $provider === 'openai';
 		$options = $isOpenAi ? OpenAIProvider::reasoningOptions($model) : DeepSeekProvider::reasoningOptions($model);
 		$selected = in_array($effort, $options, true) ? $effort : (in_array('unsupported', $options, true) ? 'unsupported' : 'off');
-		if ($effort === 'unsupported' && ! in_array('unsupported', $options, true)) {
-			array_unshift($options, 'unsupported');
-		}
 		$description = $isOpenAi ? OpenAIProvider::reasoningDescription($model, $selected) : DeepSeekProvider::reasoningDescription($model, $selected);
 		$disabled = $options === ['unsupported'];
 		$name = "cf7aiv[providers][{$provider}_reasoning_effort]";

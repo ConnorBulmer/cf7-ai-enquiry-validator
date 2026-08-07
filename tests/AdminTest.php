@@ -323,6 +323,8 @@ foreach (['pack', 'business_description', 'services', 'audiences', 'primary_defi
 foreach (['exclusion_codes', 'ai_whitelist'] as $optionGroup) {
 	admin_assert(str_contains($setup, 'data-setup-option-group="' . $optionGroup . '"'), "Setup must expose the {$optionGroup} option group for review binding.");
 }
+$_GET=['suggestions'=>'2'];ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanStatus=ob_get_clean();unset($_GET);
+admin_assert(str_contains($setupScanStatus,'<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite">')&&str_contains($setupScanStatus,'Site scan complete.'),'Setup scan results must expose a bounded accessible status without adding a second save workflow.');
 admin_assert(str_contains($policy, 'cf7aiv-page-header') && str_contains($policy, 'cf7aiv-actions'), 'Policy Lab must use shared native structure.');
 admin_assert(str_contains($setup, 'cf7aiv-page-header') && str_contains($setup, 'cf7aiv-actions'), 'Setup must use shared native structure.');
 admin_assert(str_contains($policy, 'class="card'), 'Policy Lab must retain native card panels.');
@@ -340,6 +342,16 @@ admin_assert(str_contains($integrations, 'cf7aiv-integration-tabs'), 'Integratio
 admin_assert(str_contains($integrations, 'cf7aiv-save-bar'), 'Integrations needs a persistent save bar.');
 admin_assert(str_contains($integrations, 'data-provider="deepseek"'), 'DeepSeek controls need a provider scope.');
 admin_assert(str_contains($integrations, 'data-provider="openai"'), 'OpenAI controls need a provider scope.');
+preg_match('/<fieldset class="cf7aiv-provider-fields" data-provider="deepseek"[^>]*data-provider-panel="true"[^>]*>/', $integrations, $deepSeekProviderTag);
+admin_assert(isset($deepSeekProviderTag[0]) && preg_match('/\s(?:disabled|hidden)(?:\s|>)/', $deepSeekProviderTag[0]) !== 1 && str_contains($integrations, 'name="cf7aiv[providers][deepseek_reasoning_effort]"'), 'The selected DeepSeek panel must expose only its active provider controls.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected'] = 'openai';
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['openai_model'] = 'gpt-5.4-mini';
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['openai_reasoning_effort'] = 'unsupported';
+ob_start(); CF7AIV\Admin\IntegrationsPage::render(); $openaiIntegrations = ob_get_clean();
+preg_match('/<fieldset class="cf7aiv-provider-fields" data-provider="openai"[^>]*data-provider-panel="true"[^>]*>/', $openaiIntegrations, $openAiProviderTag);
+admin_assert(isset($openAiProviderTag[0]) && preg_match('/\s(?:disabled|hidden)(?:\s|>)/', $openAiProviderTag[0]) !== 1 && str_contains($openaiIntegrations, 'name="cf7aiv[providers][openai_reasoning_effort]"'), 'The selected OpenAI panel must expose only its active provider controls.');
+admin_assert(preg_match('/<fieldset data-provider="openai" class="cf7aiv-reasoning-control">.*?<option value="off" selected/s', $openaiIntegrations) === 1, 'A supported OpenAI model must fall back to off when its stored reasoning value is unsupported.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected'] = 'deepseek';
 admin_assert(preg_match('/<fieldset[^>]*data-provider="openai"[^>]*data-provider-panel="true"[^>]*disabled/', $integrations) === 1, 'Inactive provider controls must be disabled and excluded from the ordinary POST.');
 foreach(['cf7aiv_test_microsoft','SEND_ZERO_VALUE_MICROSOFT_TEST','Microsoft UET transport test'] as $control){admin_assert(str_contains($integrations,$control),"Integrations must render guarded Microsoft control {$control}.");}
 admin_assert(substr_count($integrations, 'class="card cf7aiv-integration-panel') >= 7, 'Integration concerns must be grouped into native panels.');
@@ -495,11 +507,18 @@ $GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']=a
 $_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'provider','cf7aiv'=>['providers'=>['selected'=>'openai','openai_model'=>'new-openai-model','openai_base_url'=>'https://api.openai.com/v1/responses','openai_reasoning_effort'=>'unsupported','timeout'=>'20']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
 $partialProviderSave=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers'];
 admin_assert(($partialProviderSave['selected']??'')==='openai'&&($partialProviderSave['openai_model']??'')==='new-openai-model'&&($partialProviderSave['deepseek_model']??'')==='preserved-deepseek-model'&&($partialProviderSave['deepseek_base_url']??'')==='https://deepseek.example.test'&&($partialProviderSave['deepseek_reasoning_effort']??'')==='deep','A partial provider POST must save the selected provider while preserving excluded inactive-provider settings.');
+$_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'provider','cf7aiv'=>['providers'=>['selected'=>'deepseek','deepseek_model'=>'returned-deepseek-model','deepseek_base_url'=>'https://deepseek.return.test','deepseek_reasoning_effort'=>'standard','timeout'=>'20']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
+$switchedBackProviders=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers'];
+admin_assert(($switchedBackProviders['selected']??'')==='deepseek'&&($switchedBackProviders['openai_model']??'')==='new-openai-model'&&($switchedBackProviders['openai_base_url']??'')==='https://api.openai.com/v1/responses'&&($switchedBackProviders['openai_reasoning_effort']??'')==='unsupported','Switching back must retain the inactive OpenAI settings for a later return.');
 admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=provider')&&str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1'),'A successful ordinary save must redirect to its active tab with a saved status only.');
 $GLOBALS['admin_update_option_failure']=true;$_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'google','cf7aiv'=>['providers'=>['selected'=>'openai','openai_model'=>'failed-openai-model']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);$GLOBALS['admin_update_option_failure']=false;
 admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=google')&&str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1'),'A failed ordinary save must redirect to its active tab with a failure status and no success status.');
 ob_start();$_GET=['tab'=>'google','failed'=>'1'];CF7AIV\Admin\IntegrationsPage::render();$failedIntegrationNotice=ob_get_clean();unset($_GET);
 admin_assert(str_contains($failedIntegrationNotice,'Integration settings could not be saved')&&!str_contains($failedIntegrationNotice,'RuntimeException'),'Failed Integrations saves must expose bounded notice copy without exception details.');
+ob_start();$_GET=['tab'=>'provider','saved'=>'1'];CF7AIV\Admin\IntegrationsPage::render();$savedIntegrationNotice=ob_get_clean();unset($_GET);
+admin_assert(str_contains($savedIntegrationNotice,'<div class="notice notice-success" role="status" aria-live="polite">'),'Successful save notices must be exposed as polite status messages.');
+ob_start();$_GET=['tab'=>'provider','failed'=>'1'];CF7AIV\Admin\IntegrationsPage::render();$failedProviderNotice=ob_get_clean();unset($_GET);
+admin_assert(str_contains($failedProviderNotice,'<div class="notice notice-error" role="alert" aria-live="assertive">')&&preg_match('/<section class="card cf7aiv-integration-panel"><h2>AI provider<\/h2>.*?<p class="cf7aiv-inline-error" role="alert">/s',$failedProviderNotice)===1,'Failed saves must expose an accessible notice and an inline error beside the active provider group.');
 $corruptSecret='corrupt-encrypted-payload';$GLOBALS['admin_options']['cf7aiv_secrets']['openai_api_key']=$corruptSecret;$GLOBALS['admin_update_option_failure']=true;$corruptSecretThrew=false;$corruptSecretMessage='';
 try{$_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'provider','cf7aiv'=>['providers'=>['selected'=>'openai'],'secrets'=>['openai_api_key'=>'replacement-secret']]];CF7AIV\Admin\AdminHooks::saveSettings();}catch(RuntimeException $error){$corruptSecretThrew=true;$corruptSecretMessage=$error->getMessage();}unset($_POST);$GLOBALS['admin_update_option_failure']=false;
 admin_assert(!$corruptSecretThrew,'Corrupt stored secret must not escape the ordinary save handler.');

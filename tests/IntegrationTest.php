@@ -120,6 +120,19 @@ $openAiReasoningProperty = new ReflectionProperty($registeredProviders['openai']
 $deepReasoningProperty->setAccessible(true);
 $openAiReasoningProperty->setAccessible(true);
 cf7aiv_integration_assert($deepReasoningProperty->getValue($registeredProviders['deepseek']) === 'deep' && $openAiReasoningProperty->getValue($registeredProviders['openai']) === 'standard', 'Provider registration must pass hydrated reasoning settings to both provider adapters.');
+$capabilitySanitized = CF7AIV\Admin\SettingsSanitizer::sanitize([
+	'providers' => [
+		'deepseek_model' => 'deepseek-v4-flash',
+		'deepseek_reasoning_effort' => 'invalid',
+		'openai_model' => 'gpt-4o',
+		'openai_reasoning_effort' => 'deep',
+	],
+]);
+cf7aiv_integration_assert(
+	$capabilitySanitized['providers']['deepseek_reasoning_effort'] === 'off'
+	&& $capabilitySanitized['providers']['openai_reasoning_effort'] === 'unsupported',
+	'Reasoning sanitization must fail closed to each provider and model capability default.'
+);
 
 $GLOBALS['wpdb'] = new class {
 	public string $prefix = 'wp_';

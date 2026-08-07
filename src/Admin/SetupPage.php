@@ -43,7 +43,12 @@ final class SetupPage {
 		echo '</ol>';
 
 		if (! empty($_GET['suggestion_error'])) {
-			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert"><p>The site scan could not complete. Review the selected context and try again.</p></div>';
+			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert" aria-live="assertive"><p>The site scan could not complete. Review the selected context and try again.</p></div>';
+		}
+		if (is_scalar($_GET['suggestions'] ?? null)) {
+			$suggestionCount = max(0, (int) $_GET['suggestions']);
+			$suggestionLabel = $suggestionCount === 1 ? 'suggestion' : 'suggestions';
+			echo '<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite"><p>Site scan complete. ' . $suggestionCount . ' pending ' . self::e($suggestionLabel) . ' are ready for review.</p></div>';
 		}
 
 		echo '<section id="cf7aiv-setup-step-context" class="card cf7aiv-setup-step is-active" data-step="context"><h2 tabindex="-1">1. Choose context</h2><p>Select the closest starter pack and confirm the current safety stage before answering qualification questions.</p>';

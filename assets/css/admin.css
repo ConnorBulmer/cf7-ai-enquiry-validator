@@ -496,6 +496,15 @@
 	font-weight: 600;
 }
 
+.cf7aiv-integrations-page .cf7aiv-inline-error {
+	margin: var(--cf7aiv-space-3) 0;
+	padding: var(--cf7aiv-space-2) var(--cf7aiv-space-3);
+	border-left: 4px solid #d63638;
+	background: #fcf0f1;
+	color: #8a2424;
+	font-weight: 600;
+}
+
 .cf7aiv-integrations-page .cf7aiv-save-bar[data-save-state="unsaved"] p,
 .cf7aiv-integrations-page .cf7aiv-save-bar[data-save-state="saving"] p,
 .cf7aiv-integrations-page .cf7aiv-save-bar[data-save-state="failed"] p {
@@ -612,7 +621,8 @@
 	.cf7aiv-admin .card,
 	.cf7aiv-admin .cf7aiv-table-region,
 	.cf7aiv-integrations-page .cf7aiv-save-bar,
-	.cf7aiv-integrations-page .cf7aiv-high-risk {
+	.cf7aiv-integrations-page .cf7aiv-high-risk,
+	.cf7aiv-integrations-page .cf7aiv-inline-error {
 		border: 1px solid ButtonText;
 	}
 }
