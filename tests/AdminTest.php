@@ -500,6 +500,14 @@ $GLOBALS['admin_update_option_failure']=true;$_POST=['_wpnonce'=>'nonce','action
 admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=google')&&str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1'),'A failed ordinary save must redirect to its active tab with a failure status and no success status.');
 ob_start();$_GET=['tab'=>'google','failed'=>'1'];CF7AIV\Admin\IntegrationsPage::render();$failedIntegrationNotice=ob_get_clean();unset($_GET);
 admin_assert(str_contains($failedIntegrationNotice,'Integration settings could not be saved')&&!str_contains($failedIntegrationNotice,'RuntimeException'),'Failed Integrations saves must expose bounded notice copy without exception details.');
+$corruptSecret='corrupt-encrypted-payload';$GLOBALS['admin_options']['cf7aiv_secrets']['openai_api_key']=$corruptSecret;$GLOBALS['admin_update_option_failure']=true;$corruptSecretThrew=false;$corruptSecretMessage='';
+try{$_POST=['_wpnonce'=>'nonce','action'=>'cf7aiv_save_settings','return_tab'=>'provider','cf7aiv'=>['providers'=>['selected'=>'openai'],'secrets'=>['openai_api_key'=>'replacement-secret']]];CF7AIV\Admin\AdminHooks::saveSettings();}catch(RuntimeException $error){$corruptSecretThrew=true;$corruptSecretMessage=$error->getMessage();}unset($_POST);$GLOBALS['admin_update_option_failure']=false;
+admin_assert(!$corruptSecretThrew,'Corrupt stored secret must not escape the ordinary save handler.');
+admin_assert($corruptSecretMessage==='' ,'Corrupt stored secret exception details must not be retained for rendering.');
+admin_assert(($GLOBALS['admin_options']['cf7aiv_secrets']['openai_api_key']??'')===$corruptSecret,'A failed corrupt-secret save must preserve the stored encrypted payload.');
+admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'tab=provider'),'A corrupt-secret failure must preserve the validated active tab.');
+admin_assert(str_contains((string)($GLOBALS['admin_redirect']??''),'failed=1')&&!str_contains((string)($GLOBALS['admin_redirect']??''),'saved=1'),'A corrupt-secret failure must expose only the failed save status.');
+admin_assert(!str_contains((string)($GLOBALS['admin_redirect']??''),'Invalid encrypted'),'A corrupt-secret failure must not expose decryption details in the redirect.');
 $providerBeforeModeToggle=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected'];
 $_POST=['_wpnonce'=>'nonce','cf7aiv'=>['ui'=>['advanced_mode'=>'1']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
 ob_start();CF7AIV\Admin\AdminPages::policyLab();$toggledAdvancedPolicy=ob_get_clean();
