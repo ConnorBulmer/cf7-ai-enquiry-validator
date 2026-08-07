@@ -17,9 +17,7 @@ final class AdminRequestGuard {
 	}
 
 	private static function deny(string $message): void {
-		if (function_exists('wp_die')) {
-			wp_die($message, 'Forbidden', ['response' => 403]);
-		}
+		AdminResponse::halt($message, 'Forbidden', 403);
 		throw new RuntimeException($message);
 	}
 }

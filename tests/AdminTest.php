@@ -299,6 +299,25 @@ try { $_POST = ['_wpnonce'=>'nonce','source'=>'no-such-source','explicit_opt_in'
 catch (InvalidArgumentException) { $refusedCleanly = true; }
 unset($_POST);
 admin_assert($refusedCleanly, 'An unknown calibration source must be refused through the shared refusal path, not raised as an unhandled error.');
+
+// The handler guard renders faults through wp_die. This file defines none, so
+// it is the place to pin the other half of that contract: with nothing to
+// render, the original throwable must arrive intact. Every suite here relies on
+// it - a guard that absorbed faults where wp_die is absent would let genuinely
+// broken code pass silently. AdminHandlerGuardTest covers the rendering side.
+// The guard logs the fault on its way past; capture that rather than let a
+// passing run print to stderr and look like something went wrong.
+$guardLog = tempnam(sys_get_temp_dir(), 'cf7aiv-guard-');
+$previousLog = ini_get('error_log'); $previousLogErrors = ini_get('log_errors');
+ini_set('error_log', (string) $guardLog); ini_set('log_errors', '1');
+$guardFellThrough = false;
+try { (CF7AIV\Admin\AdminHooks::guarded(static function (): void { throw new RuntimeException('Underlying fault.'); }))(); }
+catch (RuntimeException $error) { $guardFellThrough = $error->getMessage() === 'Underlying fault.'; }
+ini_set('error_log', $previousLog === false ? '' : $previousLog); ini_set('log_errors', $previousLogErrors === false ? '1' : $previousLogErrors);
+$guardLogged = is_string($guardLog) && is_file($guardLog) ? (string) file_get_contents($guardLog) : '';
+if (is_string($guardLog) && is_file($guardLog)) { unlink($guardLog); }
+admin_assert($guardFellThrough, 'Without wp_die the handler guard must re-throw the original fault rather than absorb it.');
+admin_assert(str_contains($guardLogged, 'Underlying fault.'), 'A fault passing through the guard must be logged even when it is re-thrown.');
 admin_assert(str_contains($healthPage, 'Available') && str_contains($healthPage, 'Unavailable'), 'Availability must be stated in text.');
 admin_assert(str_contains($healthPage, '<caption class="screen-reader-text">Read-only checks</caption>'), 'Read-only checks must be structured.');
 admin_assert(str_contains($healthPage, 'cf7aiv-table-region') && str_contains($healthPage, 'aria-label="Sanitized delivery errors"'), 'Delivery logs must scroll locally in a labelled region.');

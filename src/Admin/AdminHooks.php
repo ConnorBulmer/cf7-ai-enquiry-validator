@@ -18,6 +18,39 @@ use CF7AIV\Providers\OpenAIProvider;
 use InvalidArgumentException;
 
 final class AdminHooks {
+	/**
+	 * Every admin_post action this plugin answers, and the method that answers it.
+	 *
+	 * Kept as a map rather than twenty add_action calls so that guarded() is
+	 * applied to all of them by construction. A handler added here cannot be
+	 * registered unguarded by accident, which was how the exposure below arose in
+	 * the first place.
+	 *
+	 * @var array<string,string>
+	 */
+	private const HANDLERS = [
+		'cf7aiv_review' => 'review',
+		'cf7aiv_bulk_review' => 'bulkReview',
+		'cf7aiv_save_settings' => 'saveSettings',
+		'cf7aiv_save_guided_policy' => 'saveGuidedPolicy',
+		'cf7aiv_lifecycle_transition' => 'lifecycleTransition',
+		'cf7aiv_automation_transition' => 'automationTransition',
+		'cf7aiv_ga_transition' => 'gaTransition',
+		'cf7aiv_save_consent' => 'saveConsent',
+		'cf7aiv_policy_import' => 'policyImport',
+		'cf7aiv_policy_publish' => 'policyPublish',
+		'cf7aiv_save_mapping' => 'saveMapping',
+		'cf7aiv_mapping_publish' => 'mappingPublish',
+		'cf7aiv_mapping_enable' => 'mappingEnable',
+		'cf7aiv_mapping_disable' => 'mappingDisable',
+		'cf7aiv_validate_ga4' => 'validateGa4',
+		'cf7aiv_test_microsoft' => 'testMicrosoft',
+		'cf7aiv_setup' => 'completeSetup',
+		'cf7aiv_setup_scan' => 'setupScan',
+		'cf7aiv_setup_suggestion' => 'setupSuggestion',
+		'cf7aiv_backfill' => 'backfill',
+	];
+
 	private static bool $settingsSave = false;
 	private static bool $settingsSaveValidationFailed = false;
 	/** @var array<string,mixed> */
@@ -28,7 +61,7 @@ final class AdminHooks {
 
 	public static function register():void{
 		add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
-		add_action('admin_post_cf7aiv_review',[self::class,'review']);add_action('admin_post_cf7aiv_bulk_review',[self::class,'bulkReview']);add_action('admin_post_cf7aiv_save_settings',[self::class,'saveSettings']);add_action('admin_post_cf7aiv_save_guided_policy',[self::class,'saveGuidedPolicy']);add_action('admin_post_cf7aiv_lifecycle_transition',[self::class,'lifecycleTransition']);add_action('admin_post_cf7aiv_automation_transition',[self::class,'automationTransition']);add_action('admin_post_cf7aiv_ga_transition',[self::class,'gaTransition']);add_action('admin_post_cf7aiv_save_consent',[self::class,'saveConsent']);add_action('admin_post_cf7aiv_policy_import',[self::class,'policyImport']);add_action('admin_post_cf7aiv_policy_publish',[self::class,'policyPublish']);add_action('admin_post_cf7aiv_save_mapping',[self::class,'saveMapping']);add_action('admin_post_cf7aiv_mapping_publish',[self::class,'mappingPublish']);add_action('admin_post_cf7aiv_mapping_enable',[self::class,'mappingEnable']);add_action('admin_post_cf7aiv_mapping_disable',[self::class,'mappingDisable']);add_action('admin_post_cf7aiv_validate_ga4',[self::class,'validateGa4']);add_action('admin_post_cf7aiv_test_microsoft',[self::class,'testMicrosoft']);add_action('admin_post_cf7aiv_setup',[self::class,'completeSetup']);add_action('admin_post_cf7aiv_setup_scan',[self::class,'setupScan']);add_action('admin_post_cf7aiv_setup_suggestion',[self::class,'setupSuggestion']);add_action('admin_post_cf7aiv_backfill',[self::class,'backfill']);
+		foreach(self::HANDLERS as $action=>$method){add_action('admin_post_'.$action,self::guarded([self::class,$method]));}
 		add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
 	}
 	public static function schedule():void{if(function_exists('wp_next_scheduled')&&function_exists('wp_schedule_event')&&!wp_next_scheduled('cf7aiv_daily_maintenance')){wp_schedule_event(time()+3600,'daily','cf7aiv_daily_maintenance');}}
@@ -82,7 +115,59 @@ final class AdminHooks {
 	public static function backfill():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_backfill');$source=substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($post['source']??''))??'',0,32);$rawForms=$post['form_ids']??[];if(!is_array($rawForms)){$rawForms=preg_split('/\s*,\s*/',(string)$rawForms,-1,PREG_SPLIT_NO_EMPTY)?:[];}$explicit=in_array($post['explicit_opt_in']??null,[true,1,'1','true','on','yes'],true);$snapshot=CalibrationPolicySnapshot::active();$submitted=(string)($post['whitelist_fingerprint']??'');if($submitted===''||!hash_equals($snapshot['fingerprint'],$submitted)){self::refuse('Published policy fields changed after preview. Review the current whitelist and opt in again.');}try{(new CalibrationService())->schedule($source,['explicit_opt_in'=>$explicit,'form_ids'=>$rawForms,'date_from'=>(string)($post['date_from']??gmdate('Y-m-d',strtotime('-1 year'))),'date_to'=>(string)($post['date_to']??gmdate('Y-m-d')),'maximum'=>(int)($post['maximum']??25),'ai_whitelist_snapshot'=>$snapshot['fields'],'whitelist_fingerprint'=>$snapshot['fingerprint']],function_exists('get_current_user_id')?get_current_user_id():0);}catch(\InvalidArgumentException $error){self::refuse($error->getMessage());}self::redirect('admin.php?page=cf7aiv-health');}
 	/** @param array<string,mixed> $arguments */ public static function backfillBatch(string $sourceKey,array $arguments=[],int $batchSize=25):void{(new CalibrationBatchWorker(new WpCalibrationRunStore()))->process($sourceKey,$arguments,$batchSize);}
 	public static function daily():void{$settings=(array)get_option(Settings::OPTION,Settings::defaults());(new RetentionService())->cleanup((int)($settings['privacy']['retention_days']??90));(new DigestService())->send();}
-	/** @return array<string,mixed> */
+	/**
+	 * Wrap an admin_post handler so a throw becomes an HTTP response.
+	 *
+	 * Every handler here validates input, and most of them hand that input to a
+	 * service that throws InvalidArgumentException when it is wrong. Registered
+	 * bare, that exception left the handler uncaught: WordPress rendered its
+	 * "critical error" page, mailed the site administrator and logged a fatal, for
+	 * what was in fact a typed-in value the plugin was right to reject. The
+	 * administrator saw a broken plugin and lost whatever they had entered.
+	 *
+	 * The split below follows how this codebase already uses exceptions.
+	 * InvalidArgumentException means "the caller passed something wrong", and
+	 * every such message in src/ is written for a person to read - so it is shown,
+	 * with a 400. Anything else is a fault the administrator cannot act on and
+	 * whose message may describe internals, so it is logged in full and reported
+	 * generically with a 500.
+	 *
+	 * @param callable():void $handler
+	 */
+	public static function guarded(callable $handler):\Closure{
+		return static function()use($handler):void{
+			AdminResponse::reset();
+			try{$handler();}catch(\Throwable $error){self::fail($error);}
+		};
+	}
+
+	/**
+	 * Turn a thrown handler into a response.
+	 *
+	 * A handler that already answered - denied for capability or nonce, refused
+	 * for bad input - is left alone. wp_die is not guaranteed to end the request,
+	 * so a deliberate 403 can arrive here as a throwable, and reporting it as an
+	 * unexpected fault would turn "you may not do that" into "the plugin broke".
+	 *
+	 * Outside WordPress there is nothing to render and no fatal page to prevent,
+	 * so the original is re-thrown with its type and stack intact - that is what
+	 * keeps the handlers assertable in tests.
+	 *
+	 * The error_log call is deliberately not behind CF7AIV_DEBUG, unlike
+	 * DiagnosticsService::recordGate. Catching here removes the fatal that
+	 * WordPress would have logged unconditionally, and silently swallowing a real
+	 * fault would be a worse bug than the one being fixed.
+	 */
+	private static function fail(\Throwable $error):void{
+		if(AdminResponse::sent()){throw $error;}
+		if($error instanceof \InvalidArgumentException){self::refuse($error->getMessage());return;}
+		$action=self::currentAction();
+		if(function_exists('do_action')){do_action('cf7aiv_admin_action_failed',$action,$error);}
+		if(function_exists('error_log')){error_log('[CF7AIV admin_action_failed] '.($action===''?'unknown':$action).': '.$error->getMessage().' in '.$error->getFile().':'.$error->getLine());}
+		if(function_exists('wp_die')){wp_die('This action could not be completed. The details were written to the site error log; no settings were changed by the failed step.','Error',['response'=>500]);return;}
+		throw $error;
+	}
+
 	/**
 	 * Refuse a request the administrator is allowed to make but which cannot be
 	 * carried out - a stale policy fingerprint, an unknown form, a source with no
@@ -96,10 +181,25 @@ final class AdminHooks {
 	 * the behaviour stays assertable in tests.
 	 */
 	private static function refuse(string $message):void{
-		if(function_exists('wp_die')){wp_die($message,'Bad Request',['response'=>400]);}
+		$action=self::currentAction();
+		// A refusal is shown on screen, so the administrator who caused it always
+		// knows why. Nobody else does: a refusal that only happens sometimes, or
+		// to someone else, otherwise leaves no trace at all. Broadcast it so it can
+		// be observed, and log it only under CF7AIV_DEBUG - the same balance
+		// DiagnosticsService::recordGate strikes, and for the same reason: routine
+		// refusals are not errors and must not fill the site error log.
+		if(function_exists('do_action')){do_action('cf7aiv_admin_action_refused',$action,$message);}
+		if(defined('CF7AIV_DEBUG')&&CF7AIV_DEBUG&&function_exists('error_log')){error_log('[CF7AIV admin_action_refused] '.($action===''?'unknown':$action).': '.$message);}
+		AdminResponse::halt($message,'Bad Request',400);
 		throw new \InvalidArgumentException($message);
 	}
 
+	/** The admin_post action being served, reduced to identifier characters before it reaches a log or a hook. */
+	private static function currentAction():string{
+		return substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($_POST['action']??''))??'',0,64);
+	}
+
+	/** @return array<string,mixed> */
 	private static function post():array{
 		self::$settingsSave=false;self::$settingsSaveValidationFailed=false;self::$settingsSaveInput=[];self::$settingsSaveSanitized=[];self::$settingsSaveReturnTab='';
 		$value=$_POST??[];
