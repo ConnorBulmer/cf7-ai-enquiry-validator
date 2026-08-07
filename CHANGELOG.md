@@ -2,6 +2,21 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.19 — 2026-08-07
+
+- Added a guided, five-step Setup workflow with safe starter-pack previews,
+  evidence requirements, provider/destination safety status, and no-JavaScript
+  form fallbacks.
+- Reworked Integrations into provider-aware tabs with truthful save/failure
+  status, reversible client-side discard, aggregate destination safety, and
+  preserved high-risk action boundaries.
+- Added model-capability-aware OpenAI reasoning controls, DeepSeek/OpenAI
+  reasoning budgets, and regression coverage for provider payloads and Setup
+  suggestion reasoning.
+- Added responsive Playwright coverage for admin UX, consent-safe public
+  attribution, reversible save round-trips, and exact synthetic cleanup.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.18 — 2026-08-06
 
 - Added a read-only operational doctor and per-item diagnosis command that expose queue, attribution issue-code, consent, destination, mapping, and delivery-gate state without exposing enquiry content or secrets.

@@ -73,6 +73,20 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.19 guided administration and provider reasoning
+
+Version 0.2.19 adds a five-step guided Setup workflow and a tabbed
+Integrations dashboard. Starter-pack previews and evidence requirements remain
+bounded and escaped, provider/destination safety is visible, and ordinary Save
+changes stays separate from lifecycle, mapping, consent, validation, and
+transport actions.
+
+Provider reasoning controls now follow the selected model's documented
+capabilities. DeepSeek and OpenAI suggestions/classification retain bounded
+structured-output budgets, and OpenAI's GPT-5.4-family `none` effort is sent only
+where documented. Unknown or unsupported models fail closed. Schema remains
+version 10, so no migration is required.
+
 ### Version 0.2.18 diagnostics and delivery observability
 
 Version 0.2.18 adds a read-only operational doctor and per-item diagnosis path
@@ -451,7 +465,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.17 --output-dir=dist
+php tools/build-release.php --tag=v0.2.19 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -469,16 +483,16 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.17`:
+For version `0.2.19`:
 
 ```bash
-git tag v0.2.17
-git push origin v0.2.17
+git tag v0.2.19
+git push origin v0.2.19
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
 scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.17.zip`, generates its SHA-256 file and attaches
+`cf7-ai-enquiry-validator-0.2.19.zip`, generates its SHA-256 file and attaches
 both to the GitHub Release. The workflow may also be rerun manually for an
 existing tag from the Actions tab; existing assets with the same names are
 replaced only after the new build passes.
