@@ -199,7 +199,10 @@ async function openAdminPage(browser: Browser, trackedPages: TrackedPage[], page
 		throw new Error('Configured storage state is authenticated but does not have the administrator capability required by the plugin screens.');
 	}
 	await expect(page.locator('#wpadminbar')).toBeVisible();
-	await expect(page.locator('.cf7aiv-admin').last()).toBeVisible();
+	const pageRoot = pageSlug === 'cf7aiv-setup'
+		? page.locator('.cf7aiv-setup-page')
+		: page.locator('.cf7aiv-integrations-page');
+	await expect(pageRoot).toBeVisible();
 	return { context, page };
 }
 
@@ -303,7 +306,7 @@ for (const viewport of viewports) {
 			for (const [index, tabName] of tabNames.entries()) {
 				await tabs.nth(index).click();
 				await expect(tabs.nth(index)).toHaveAttribute('aria-selected', 'true');
-				await expect(page.locator(`.cf7aiv-integration-tab-panel[data-tab="${tabName}"]`).first()).toBeVisible();
+				await expect(page.locator(`#cf7aiv-integration-panel-${tabName}`)).toBeVisible();
 				await expectNoOverflow(page, `Integrations ${viewport.width}x${viewport.height} ${tabName}`);
 			}
 			expect(nonGetRequests).toEqual([]);

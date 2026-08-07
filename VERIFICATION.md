@@ -6,6 +6,77 @@ Mosaic Media Training site. Every ZIP entry receives the fixed ZIP-safe UTC
 mtime `1980-01-01 00:00:00` (`315532800`) instead of inheriting
 checkout-specific source mtimes.
 
+## Task 6 staging verification - v0.2.18 candidate
+
+This section records the integrated staging gate for the reviewed v0.2.18
+candidate. It applies only to `https://staging.mosaicpublicity.co.uk`; no live
+site, GitHub tag, or GitHub release action was used.
+
+### Local gate
+
+Exact commands:
+
+```powershell
+foreach ($file in Get-ChildItem tests -Filter '*Test.php' -File) { php $file.FullName }
+node tests/AttributionJsTest.js
+node --check assets/js/attribution.js
+$files = Get-ChildItem -Recurse -Filter '*.php' -File | Where-Object { $_.FullName -notmatch '\\vendor\\' }
+foreach ($file in $files) { php -l $file.FullName }
+php tools/build-release.php --tag=v0.2.18 --output-dir=dist
+node --check assets/js/admin.js
+git diff --check
+```
+
+Results: 28/28 standalone PHP tests passed; 157/157 non-vendor PHP files
+passed lint; both JavaScript checks passed; the diff check passed; and the
+build passed. The pre-existing fail-closed migration retry diagnostic from
+`DedupRegressionTest.php` remained non-fatal.
+
+The candidate ZIP was
+`cf7-ai-enquiry-validator-0.2.18.zip`, SHA-256
+`139f7217a87d4068f69a49284ac2d6909994e5e5f4b87223fe22e07c5735a669`, with 234
+entries under exactly one `cf7-ai-enquiry-validator/` root. The plugin header,
+version constant, and stable tag all agreed at `0.2.18`; ZIP timestamps were
+normalized and credential-pattern inspection returned zero matches.
+
+### Staging result
+
+The exact ZIP was deployed only to staging after preserving the rollback copy
+outside the public root at
+`/home/sites/24a/9/9af8850299/backups/20260807-082634Z-cf7aiv-0.2.18-predeploy`.
+Post-deploy readback confirmed active plugin `0.2.18`, expected/installed
+schema `10`, automation `shadow`, all four destinations in dry-run, Action
+Scheduler available, and `captured_unclassified=0`.
+
+The default staging WP-CLI runtime is PHP `8.0.30`, below the plugin minimum.
+Provider/runtime checks therefore used the available explicit PHP `8.3.33`
+command with the known staging path and URL. Status, health, doctor, dry-run,
+isolated pipeline, configured DeepSeek pipeline, GA4 validation, safe queue,
+and read-only item diagnosis passed. The configured pipeline reported
+`production_state_touched=false`; GA4 validation reported no live request.
+
+Authenticated Playwright verification passed **14/14** at `1440x1000`,
+`1024x900`, and `390x844`, covering the redesigned admin UX and public
+`/contact/` checks. No form was submitted, no mapping or live transition was
+performed, and no destination transport test was sent.
+
+### Audit and cleanup
+
+A read-only PHP 8.3 exact-marker audit covered CFDB7, WordPress post/meta,
+CF7AIV items, deliveries, review/setup/calibration tables, Action Scheduler,
+and temporary Task 6 users. The 12 synthetic markers were those used by the
+pipeline self-test, authenticated UX suite, and dry-run diagnostics. Every
+table returned zero matching rows; the `cf7aiv-task6` user prefix returned zero
+users. No deletion was needed and the audit made zero mutations.
+
+The final browser cleanup verified zero temporary administrators, no temporary
+storage state, and no temporary endpoint or runner file. The rollback backup
+remains preserved. The unrelated limitation is that Flamingo is unavailable
+while CFDB7 is available; `/contact/` also retains an unrelated third-party
+stylesheet MIME/request warning. These checks do not claim live automation,
+live destination collection, accepted production mail flow, or real campaign
+attribution.
+
 ## Deterministic archive live acceptance — current live source
 
 - Current live source archive: `cf7-ai-enquiry-validator-0.2.16.zip`, **232** entries under
