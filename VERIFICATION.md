@@ -6,6 +6,44 @@ Mosaic Media Training site. Every ZIP entry receives the fixed ZIP-safe UTC
 mtime `1980-01-01 00:00:00` (`315532800`) instead of inheriting
 checkout-specific source mtimes.
 
+## Final-candidate redeployment - v0.2.18
+
+This is the final-candidate staging redeployment after commits `fda38c9` and
+`a28e03d`. It applies only to `https://staging.mosaicpublicity.co.uk`; no
+version file, GitHub tag, or GitHub release was changed.
+
+- Exact build command: `php tools/build-release.php --tag=v0.2.18 --output-dir=dist`.
+- Candidate: `cf7-ai-enquiry-validator-0.2.18.zip`, 234 entries, SHA-256
+  `2b796adf3f7b603b65344ce5004b53ff25cbcee567c9ec719314b5689314bdff`.
+- The independent local hash and the remote uploaded ZIP hash both match the
+  candidate hash; remote ZIP mode is `0600`.
+- Fresh rollback backup was preserved before replacement outside the public
+  root at `/home/sites/24a/9/9af8850299/backups/20260807-105023Z-cf7aiv-0.2.18-final-predeploy`.
+  The backup is mode `0700` with 234 pre-deploy plugin files; its extraction
+  workspace was removed after deployment and the backup remains present.
+- Post-deploy readback confirms active plugin `0.2.18`, expected/installed
+  schema `10`, Action Scheduler available, automation `shadow`, and all four
+  destinations dry-run.
+- The standard wrapper reports remote PHP `8.0.30`; provider/runtime checks
+  used explicit `/usr/bin/php83 /usr/local/bin/wp`, which reports PHP `8.3.33`.
+- Status, health, doctor, read-only dry-run, deterministic isolated pipeline,
+  configured DeepSeek isolated pipeline, GA4 validation, safe queue, and
+  read-only item diagnosis passed. The configured pipeline reported
+  `production_state_touched=false`; GA4 validation reported
+  `live_request_sent=false`.
+- The full `tests/wordpress/ux-admin.spec.ts` run passed **14/14** with zero
+  skips, failures, or unexpected results at `1440x1000`, `1024x900`, and
+  `390x844`, including the public `/contact/` checks. No form, mapping,
+  live transition, or destination transport test was submitted or sent.
+- The temporary administrator, ignored storage state, ignored runner, and
+  remote extraction workspace were deleted. The `cf7aiv-task6` user prefix,
+  exact-marker database audit, and temporary endpoint/runner checks are all
+  zero; the audit made zero mutations.
+- Limitations: Flamingo is unavailable while CFDB7 is available; the public
+  homepage is HTTP 200 and clean but has no CF7 form, while `/contact/` does;
+  this run does not claim live automation, destination collection, accepted
+  production mail flow, or real campaign attribution.
+
 ## Task 6 staging verification - v0.2.18 candidate
 
 This section records the integrated staging gate for the reviewed v0.2.18
