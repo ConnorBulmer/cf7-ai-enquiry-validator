@@ -73,6 +73,25 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.22 reasoning token budgets
+
+Version 0.2.22 fixes reasoning starving the answer it was meant to improve.
+DeepSeek counts reasoning tokens against `max_tokens`, and both the suggestion
+and classification calls sent a single flat budget covering both. With reasoning
+enabled the thinking could consume the allowance, and the JSON answer arrived cut
+mid-object - which surfaced as "response is malformed" several layers from the
+cause, because half a JSON object does not parse.
+
+The answer and the reasoning are now sized separately. The answer allowance
+matches what the OpenAI provider already receives for the identical call, and
+reasoning is granted its own allowance on top instead of competing with it.
+Budgets remain bounded and predictable rather than unlimited.
+
+A reply the model did not finish writing is also detected directly through
+`finish_reason: length` and reported as an exhausted budget, not as malformed
+input, because those need opposite fixes. Schema remains version 10, so no
+migration is required.
+
 ### Version 0.2.21 diagnosable setup failures
 
 Version 0.2.21 makes a failed site scan say why it failed. The service caught
@@ -507,7 +526,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.21 --output-dir=dist
+php tools/build-release.php --tag=v0.2.22 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
@@ -525,11 +544,11 @@ version tag is pushed. Before publishing, update all four release identities:
 3. `Stable tag` in `readme.txt`;
 4. the Git tag, with a required `v` prefix.
 
-For version `0.2.21`:
+For version `0.2.22`:
 
 ```bash
-git tag v0.2.21
-git push origin v0.2.21
+git tag v0.2.22
+git push origin v0.2.22
 ```
 
 GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,

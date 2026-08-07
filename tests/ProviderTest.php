@@ -197,10 +197,14 @@ $suggestionRequest = new CF7AIV\Domain\PolicySuggestionRequest('general', [
 	'forms' => [],
 ]);
 
+// Budgets stay bounded, but reasoning is given its own allowance instead of
+// competing with the answer. Sharing one flat budget let thinking consume it
+// and returned a JSON object cut in half, which surfaced as a malformed
+// response several layers away.
 foreach ([
-	['effort' => 'off', 'thinking' => 'disabled', 'max_tokens' => 900],
-	['effort' => 'standard', 'thinking' => 'enabled', 'max_tokens' => 900],
-	['effort' => 'deep', 'thinking' => 'enabled', 'max_tokens' => 1600],
+	['effort' => 'off', 'thinking' => 'disabled', 'max_tokens' => 1500],
+	['effort' => 'standard', 'thinking' => 'enabled', 'max_tokens' => 3000],
+	['effort' => 'deep', 'thinking' => 'enabled', 'max_tokens' => 4500],
 ] as $case) {
 	$transport = new ProviderSuggestionCaptureTransport('deepseek');
 	$provider = new CF7AIV\Providers\DeepSeekProvider($transport, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-v4-flash', 30, $case['effort']);
@@ -282,9 +286,9 @@ $v1TransportStd = new class implements CF7AIV\Infrastructure\HttpTransportInterf
 $dsStdInstance = new CF7AIV\Providers\DeepSeekProvider($v1TransportStd, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-v4-flash', 30, 'standard');
 try { $dsStdInstance->classify($mockRequest); } catch (Throwable) {}
 provider_assert(($v1TransportStd->lastPayload['thinking']['type'] ?? '') === 'enabled', 'DeepSeek standard must send thinking.type=enabled.');
-provider_assert(($v1TransportStd->lastPayload['max_tokens'] ?? 0) === 900, 'DeepSeek standard must send max_tokens=900.');
+provider_assert(($v1TransportStd->lastPayload['max_tokens'] ?? 0) === 2400, 'DeepSeek standard must send the 900-token answer allowance plus its reasoning allowance.');
 
-// DeepSeek deep → thinking.type = enabled, max_tokens = 1600
+// DeepSeek deep → thinking.type = enabled, answer allowance plus deep reasoning
 $v1TransportDeep = new class implements CF7AIV\Infrastructure\HttpTransportInterface {
 	public ?array $lastPayload = null;
 	public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse {
@@ -297,7 +301,7 @@ $v1TransportDeep = new class implements CF7AIV\Infrastructure\HttpTransportInter
 $dsDeepInstanceP = new CF7AIV\Providers\DeepSeekProvider($v1TransportDeep, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-v4-flash', 30, 'deep');
 try { $dsDeepInstanceP->classify($mockRequest); } catch (Throwable) {}
 provider_assert(($v1TransportDeep->lastPayload['thinking']['type'] ?? '') === 'enabled', 'DeepSeek deep must send thinking.type=enabled.');
-provider_assert(($v1TransportDeep->lastPayload['max_tokens'] ?? 0) === 1600, 'DeepSeek deep must send max_tokens=1600.');
+provider_assert(($v1TransportDeep->lastPayload['max_tokens'] ?? 0) === 3900, 'DeepSeek deep must send the 900-token answer allowance plus its deep reasoning allowance.');
 
 // ─── OpenAI send() payload assertions ────────────────────────────────────────
 

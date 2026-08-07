@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.21
+Stable tag: 0.2.22
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.22 =
+* Fixes DeepSeek reasoning consuming the token budget meant for the answer, which returned a reply cut mid-object and reported it as a malformed response.
+* Sizes the answer and the reasoning allowances separately for both suggestion and classification calls; budgets stay bounded.
+* Reports a reply the model did not finish writing as an exhausted budget instead of malformed input.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.21 =
 * Setup scan failures now state the reason instead of one generic sentence, so a rejected credential, a credential that was never stored, and a host that blocks outbound HTTP are no longer indistinguishable.

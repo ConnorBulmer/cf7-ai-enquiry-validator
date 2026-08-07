@@ -16,6 +16,10 @@ use CF7AIV\Infrastructure\HttpResponse;
 use CF7AIV\Infrastructure\HttpTransportInterface;
 
 final class DeepSeekProvider extends JsonProvider implements VerificationCapableProviderInterface, PolicySuggestionProviderInterface {
+	/** Answer-only allowances, matching what the OpenAI provider is given for the same two calls. */
+	private const SUGGESTION_ANSWER_TOKENS = 1500;
+	private const CLASSIFICATION_ANSWER_TOKENS = 900;
+
 	public function __construct(
 		private readonly HttpTransportInterface $transport,
 		private readonly string $apiKey,
@@ -54,7 +58,7 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 			],
 			'response_format' => ['type' => 'json_object'],
 			'thinking' => $thinking,
-			'max_tokens' => $reasoningEffort === 'deep' ? 1600 : 900,
+			'max_tokens' => $this->tokenBudget($reasoningEffort, self::SUGGESTION_ANSWER_TOKENS),
 		];
 		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
 		$response = $this->transport->post($this->baseUrl, [
@@ -65,6 +69,7 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		$this->assertSuggestionStatus($response);
 		$body = json_decode($response->body, true, 64, JSON_THROW_ON_ERROR);
 		if (! is_array($body)) { throw new PermanentProviderException('DeepSeek returned a malformed suggestion response.'); }
+		$this->assertComplete($body);
 		return PolicySuggestionResult::fromJson(trim($this->extractText($body)));
 	}
 
@@ -88,7 +93,7 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 			],
 			'response_format' => ['type' => 'json_object'],
 			'thinking' => $thinking,
-			'max_tokens' => $reasoningEffort === 'deep' ? 1600 : 900,
+			'max_tokens' => $this->tokenBudget($reasoningEffort, self::CLASSIFICATION_ANSWER_TOKENS),
 		];
 		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
 		return $this->transport->post($this->baseUrl, [
@@ -125,6 +130,46 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 			'output_tokens' => $usage['completion_tokens'] ?? 0,
 			'reasoning_tokens' => $details['reasoning_tokens'] ?? 0,
 		];
+	}
+
+	/**
+	 * Size max_tokens for the answer and the reasoning separately.
+	 *
+	 * DeepSeek counts reasoning tokens against max_tokens, so one flat budget is
+	 * shared between thinking and the JSON answer. At 900 tokens with thinking
+	 * enabled the reasoning could consume the entire allowance and the answer
+	 * came back truncated - or empty - which surfaced as "response is malformed"
+	 * because a JSON object cut in half does not parse. Twenty suggestions carry
+	 * a type, a value and source references each, so the answer alone needs
+	 * roughly what OpenAI is already given for the identical call.
+	 *
+	 * The answer allowance therefore matches the OpenAI provider for the same
+	 * task, and thinking is granted its own allowance on top rather than
+	 * competing with it.
+	 */
+	private function tokenBudget(string $reasoningEffort, int $answerTokens): int {
+		$reasoningAllowance = match ($reasoningEffort) {
+			'deep' => 3000,
+			'standard' => 1500,
+			default => 0,
+		};
+		return $answerTokens + $reasoningAllowance;
+	}
+
+	/**
+	 * Refuse a reply the model did not finish writing.
+	 *
+	 * A truncated answer is not malformed input, it is an exhausted budget, and
+	 * the two need opposite fixes. Without this the JSON decode fails several
+	 * layers away and reports the model as having returned nonsense.
+	 *
+	 * @param array<string,mixed> $body
+	 */
+	private function assertComplete(array $body): void {
+		$reason = $body['choices'][0]['finish_reason'] ?? '';
+		if ($reason === 'length') {
+			throw new PermanentProviderException('DeepSeek stopped at the token budget before finishing the response (finish_reason: length). Raise the reasoning budget or reduce the request.');
+		}
 	}
 
 	/**

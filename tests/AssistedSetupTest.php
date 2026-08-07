@@ -397,7 +397,7 @@ foreach (['openai', 'deepseek'] as $providerKey) {
 	setup_assert($wireSourceRefs === $taintedRequest->allowedSourceRefs(), ucfirst($providerKey) . ' suggestion schema must constrain provenance to the exact finalized pack, page, and form identifiers.');
 	if ($providerKey === 'deepseek') {
 		$deepSeekWire = $wirePayload;
-		setup_assert(($deepSeekWire['max_tokens'] ?? null) === 900, 'DeepSeek assisted setup must use the bounded off-mode JSON output budget.');
+		setup_assert(($deepSeekWire['max_tokens'] ?? null) === 1500, 'DeepSeek assisted setup must use the bounded off-mode JSON output budget.');
 		setup_assert(str_contains((string) ($deepSeekWire['messages'][0]['content'] ?? ''), 'no more than 20 compact'), 'DeepSeek assisted setup must explicitly request the bounded compact suggestion count.');
 	}
 	setup_assert(strlen(json_encode($taintedRequest->providerProfile(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) <= 40000, ucfirst($providerKey) . ' provider profile must remain within the final serialized boundary.');

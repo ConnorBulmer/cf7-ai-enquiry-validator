@@ -2,6 +2,22 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.22 — 2026-08-07
+
+- Fixed DeepSeek reasoning starving the answer it was meant to improve. DeepSeek
+  counts reasoning tokens against `max_tokens`, and both the suggestion and
+  classification calls sent one flat budget for both, so enabling reasoning left
+  too little for the JSON answer. The reply came back cut mid-object and was
+  reported as a malformed response, several layers from the cause.
+- Changed both calls to size the answer and the reasoning separately. The answer
+  allowance now matches what the OpenAI provider is already given for the same
+  call, and reasoning receives its own allowance on top rather than competing
+  with it. Budgets remain bounded and predictable.
+- Added detection of `finish_reason: length`, so a reply the model did not
+  finish writing is reported as an exhausted budget rather than as malformed
+  input. The two need opposite fixes.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.21 — 2026-08-07
 
 - Fixed a setup scan failure being undiagnosable. `SetupSuggestionService` caught
