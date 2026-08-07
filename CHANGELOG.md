@@ -2,6 +2,24 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.23 — 2026-08-07
+
+- Fixed credential fields giving no sign that a credential is stored. Every
+  secret input rendered with an empty value whether one was saved or not, so a
+  fully configured site looked identical to an untouched one. Administrators
+  read that as a failed save and reasonably feared that saving again would erase
+  the key.
+- Added stored/not-set state to each credential field: a badge, a masked
+  placeholder, and an explicit sentence stating that leaving the field blank
+  keeps the stored credential. The mask is a placeholder attribute and never a
+  value, which would otherwise be submitted and saved as the credential.
+- Added explicit removal. Because a blank field means "keep", there was
+  previously no way to remove a stored credential without editing the database.
+  A typed replacement takes precedence over a removal request.
+- A credential supplied through a constant now reports as stored, since
+  `Crypto::secret()` prefers a constant over the database.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.22 — 2026-08-07
 
 - Fixed DeepSeek reasoning starving the answer it was meant to improve. DeepSeek

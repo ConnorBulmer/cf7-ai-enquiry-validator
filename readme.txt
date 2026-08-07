@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.22
+Stable tag: 0.2.23
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.23 =
+* Credential fields now show whether a credential is stored, with a masked placeholder and a plain statement that leaving the field blank keeps it.
+* Adds explicit credential removal, which was previously impossible because a blank field means "keep".
+* A credential supplied through a constant now reports as stored.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.22 =
 * Fixes DeepSeek reasoning consuming the token budget meant for the answer, which returned a reply cut mid-object and reported it as a malformed response.

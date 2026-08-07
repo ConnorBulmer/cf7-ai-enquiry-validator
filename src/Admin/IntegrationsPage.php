@@ -34,7 +34,7 @@ final class IntegrationsPage {
 		$destinationSafety = self::destinationSafety($destinations);
 
 		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-admin cf7aiv-integrations-page" data-active-tab="' . self::e($activeTab) . '">';
-		echo '<div class="cf7aiv-page-header"><h1>Integrations</h1><p>All credentials are write-only. Blank secret fields retain the currently stored encrypted value.</p></div>';
+		echo '<div class="cf7aiv-page-header"><h1>Integrations</h1><p>Credentials are encrypted and never displayed again. Each field shows whether one is stored; leaving a field blank keeps it.</p></div>';
 		echo '<div class="cf7aiv-integration-context" aria-label="Integration status">';
 		echo self::statusBadge('Lifecycle: ' . ucfirst($stage), $stage === 'live' ? 'current' : 'review');
 		echo self::statusBadge('Automation: ' . ucfirst($automationMode), $automationMode === 'live' ? 'warning' : '');
@@ -164,7 +164,7 @@ final class IntegrationsPage {
 		echo '<fieldset class="cf7aiv-provider-fields" data-provider="' . self::e($provider) . '" data-provider-panel="true" aria-hidden="' . ($active ? 'false' : 'true') . '"' . ($active ? '' : ' disabled hidden') . '><legend>' . self::e($label) . ' provider settings</legend><div class="cf7aiv-form-grid">';
 		echo self::text($label . ' model', 'cf7aiv[providers][' . $modelKey . ']', $model);
 		echo self::text($label . ' base URL', 'cf7aiv[providers][' . $baseKey . ']', (string) ($providers[$baseKey] ?? ''));
-		echo self::secret($label . ' API key', 'cf7aiv[providers][' . $provider . '_api_key]');
+		echo self::secret($label . ' API key', 'cf7aiv[providers][' . $provider . '_api_key]', $provider . '_api_key');
 		echo '</div>' . self::reasoningControl($provider, $model, $effort) . '</fieldset>';
 	}
 
@@ -242,7 +242,7 @@ final class IntegrationsPage {
 		foreach ($fields as $name => $fieldLabel) {
 			echo self::text($fieldLabel, "cf7aiv[destinations][{$key}][{$name}]", (string) ($config[$name] ?? ''));
 		}
-		echo self::secret($label . ' secret', "cf7aiv[secrets][{$secret}]");
+		echo self::secret($label . ' secret', "cf7aiv[secrets][{$secret}]", $secret);
 		echo self::checkbox('Enabled', "cf7aiv[destinations][{$key}][enabled]", ! empty($config['enabled']));
 		echo self::checkbox('Dry run', "cf7aiv[destinations][{$key}][dry_run]", ! empty($config['dry_run']));
 		if ($insecure) {
@@ -269,8 +269,61 @@ final class IntegrationsPage {
 		return '<label>' . self::e($label) . ' <input name="' . self::e($name) . '" value="' . self::e($value) . '"></label>';
 	}
 
-	private static function secret(string $label, string $name): string {
-		return '<label>' . self::e($label) . ' <input type="password" autocomplete="new-password" name="' . self::e($name) . '" value=""></label>';
+	/**
+	 * A credential field that says whether a credential is stored.
+	 *
+	 * The value is never rendered and never will be. But the field used to render
+	 * identically whether a key was saved or not, so a fully configured site
+	 * looked exactly like an empty one. Administrators read that as a failed save,
+	 * re-entered the key, and then feared that saving with the field blank would
+	 * erase it - which it does not, because a blank secret is skipped rather than
+	 * stored. Nothing on the screen said so.
+	 *
+	 * So the state is shown instead of the value: a badge, a masked placeholder
+	 * that makes a configured field look configured, and an explicit sentence
+	 * about what blank means. The dots are a placeholder attribute, never a value
+	 * - as a value they would be submitted and saved as the new key.
+	 *
+	 * Removal is offered here too. Because blank means "keep", there was no way
+	 * to take a stored credential out again short of editing the database.
+	 */
+	private static function secret(string $label, string $name, string $secretKey = ''): string {
+		$stored = $secretKey !== '' && self::secretIsStored($secretKey);
+		$fieldId = 'cf7aiv-secret-' . preg_replace('/[^a-z0-9]+/i', '-', $name);
+		$describedBy = $fieldId . '-help';
+
+		$html = '<div class="cf7aiv-secret-field">';
+		$html .= '<label for="' . self::e($fieldId) . '">' . self::e($label) . ' ';
+		$html .= $stored
+			? AdminUi::badge('Stored', 'positive')
+			: AdminUi::badge('Not set', 'neutral');
+		$html .= '</label>';
+		$html .= '<input type="password" autocomplete="new-password" id="' . self::e($fieldId) . '"'
+			. ' name="' . self::e($name) . '" value=""'
+			. ' aria-describedby="' . self::e($describedBy) . '"'
+			. ($stored ? ' placeholder="' . str_repeat('&bull;', 24) . '"' : '')
+			. '>';
+		$html .= '<p class="cf7aiv-secret-help" id="' . self::e($describedBy) . '">'
+			. ($stored
+				? 'A credential is stored and is never displayed. Leave this blank to keep it, or type a new one to replace it.'
+				: 'No credential is stored yet. It is encrypted when saved and is never displayed again.')
+			. '</p>';
+		if ($stored && $secretKey !== '') {
+			$html .= self::checkbox('Remove the stored credential', "cf7aiv[secrets_clear][{$secretKey}]", false);
+		}
+		return $html . '</div>';
+	}
+
+	/**
+	 * Whether a credential exists, without ever reading its value into the page.
+	 *
+	 * A constant counts as stored: Crypto::secret() prefers one over the database,
+	 * so reporting "not set" while a constant is in force would be a lie.
+	 */
+	private static function secretIsStored(string $secretKey): bool {
+		if (defined('CF7AIV_' . strtoupper($secretKey))) { return true; }
+		$stored = function_exists('get_option') ? (array) get_option('cf7aiv_secrets', []) : [];
+		return isset($stored[$secretKey]) && trim((string) $stored[$secretKey]) !== '';
 	}
 
 	private static function checkbox(string $label, string $name, bool $checked, string $value = '1'): string {

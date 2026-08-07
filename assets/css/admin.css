@@ -669,3 +669,27 @@
 		border: 1px solid ButtonText;
 	}
 }
+
+/* A credential field must look different when a credential is stored, because
+   an always-empty box reads as a failed save. */
+.cf7aiv-admin .cf7aiv-secret-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--cf7aiv-space-1);
+}
+
+.cf7aiv-admin .cf7aiv-secret-field input[type="password"] {
+	width: 100%;
+}
+
+.cf7aiv-admin .cf7aiv-secret-help {
+	margin: 0;
+	font-size: 12px;
+	color: #50575e;
+}
+
+@media (prefers-color-scheme: dark) {
+	.cf7aiv-admin .cf7aiv-secret-help {
+		color: #c3c4c7;
+	}
+}

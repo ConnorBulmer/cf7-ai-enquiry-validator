@@ -73,6 +73,28 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.23 credential field state
+
+Version 0.2.23 makes a stored credential visible as stored. Secret inputs are
+write-only by design and the value is never rendered - that has not changed -
+but the field also rendered with an empty value whether a credential was saved
+or not. A fully configured site was indistinguishable from an untouched one, so
+a successful save looked like a failure, and re-entering the key looked safer
+than trusting it.
+
+Each credential field now carries a stored/not-set badge, a masked placeholder
+so a configured field looks configured, and a sentence stating that leaving it
+blank keeps the stored value. The mask is a placeholder attribute rather than a
+value: as a value it would be submitted on the next save and stored as the
+credential itself.
+
+Removal is now possible. Because a blank field means "keep", a stored credential
+could not previously be taken out without editing the database. A typed
+replacement takes precedence over a removal request. A credential supplied
+through a constant reports as stored, because `Crypto::secret()` prefers a
+constant over the database. Schema remains version 10, so no migration is
+required.
+
 ### Version 0.2.22 reasoning token budgets
 
 Version 0.2.22 fixes reasoning starving the answer it was meant to improve.
@@ -526,7 +548,7 @@ node --check assets/js/attribution.js
 Build a release locally with the same packager used by GitHub Actions:
 
 ```bash
-php tools/build-release.php --tag=v0.2.22 --output-dir=dist
+php tools/build-release.php --tag=v0.2.23 --output-dir=dist
 ```
 
 The command refuses malformed tags, version disagreement and credential-like
