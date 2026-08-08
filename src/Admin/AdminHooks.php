@@ -63,7 +63,7 @@ final class AdminHooks {
 	public static function register():void{
 		EventLog::register();add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
 		foreach(self::HANDLERS as $action=>$method){add_action('admin_post_'.$action,self::guarded([self::class,$method]));}
-		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
+		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_setup_scan_job',[self::class,'runSetupScan'],10,2);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
 	}
 	public static function schedule():void{if(function_exists('wp_next_scheduled')&&function_exists('wp_schedule_event')&&!wp_next_scheduled('cf7aiv_daily_maintenance')){wp_schedule_event(time()+3600,'daily','cf7aiv_daily_maintenance');}}
 	public static function menu():void{
@@ -164,7 +164,28 @@ final class AdminHooks {
 	}
 	public static function testMicrosoft():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_microsoft');$status='failed';try{$receipt=(new MicrosoftUetTestService())->transport((string)($post['confirmation']??''));$status=!empty($receipt['successful'])?'success':(!empty($receipt['retryable'])?'retryable':'failed');}catch(InvalidArgumentException){$status='refused';}self::redirect('admin.php?page=cf7aiv-integrations&microsoft_test='.$status);}
 	public static function completeSetup():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$settings['setup_complete']=true;$settings['setup']['stage']='testing';$settings['automation']['mode']='shadow';update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-setup');}
-	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');$service=self::setupService();$count=$service->generate($pack,get_current_user_id());$path='admin.php?page=cf7aiv-setup&suggestions='.$count;if($service->lastError()!==null){$path.='&suggestion_error=1';self::rememberScanDiagnostic($service->lastDiagnostic());}self::redirect($path);}
+	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');EventLog::record('setup_scan','info','Site scan queued.',['pack'=>$pack]);if(Queue::enqueue('cf7aiv_setup_scan_job',[$pack,function_exists('get_current_user_id')?get_current_user_id():0])===false){self::runSetupScan($pack,function_exists('get_current_user_id')?get_current_user_id():0);}self::redirect('admin.php?page=cf7aiv-setup&scan_queued=1');}
+	/**
+	 * Run the site scan away from the administrator's request.
+	 *
+	 * This was the last provider call still made inside an admin request, and
+	 * it is the slowest of them: a whole site profile with reasoning enabled.
+	 * Keeping it synchronous is what forced the provider timeout to stay small
+	 * enough for a web request to survive, which in turn starved classification
+	 * of the thinking time that makes it accurate. Queued, the timeout can be
+	 * sized for the work rather than for the browser.
+	 */
+	public static function runSetupScan(string $pack='general',int $administratorId=0):void{
+		try{
+			$service=self::setupService();
+			$count=$service->generate($pack,$administratorId);
+			if($service->lastError()!==null){
+				EventLog::record('setup_scan','error','Site scan failed. '.(string)$service->lastDiagnostic());
+				return;
+			}
+			EventLog::record('setup_scan','info','Site scan complete.',['suggestions'=>(string)$count]);
+		}catch(\Throwable $error){EventLog::recordFailure('setup_scan',$error);}
+	}
 	/**
 	 * Hand the redacted scan failure to the next page load.
 	 *

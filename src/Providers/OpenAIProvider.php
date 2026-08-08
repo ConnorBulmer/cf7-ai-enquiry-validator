@@ -95,7 +95,7 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		}
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(120, $this->timeout)),
+			'timeout' => max(5, min(300, $this->timeout)),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 		$this->assertSuggestionStatus($response);
@@ -124,7 +124,7 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		}
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(120, $this->timeout)),
+			'timeout' => max(5, min(300, $this->timeout)),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 	}

@@ -76,7 +76,7 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(120, $this->timeout)),
+			'timeout' => max(5, min(300, $this->timeout)),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 		$this->assertSuggestionStatus($response);
@@ -111,7 +111,7 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(120, $this->timeout)),
+			'timeout' => max(5, min(300, $this->timeout)),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 	}
@@ -162,8 +162,8 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	 */
 	private function tokenBudget(string $reasoningEffort, int $answerTokens): int {
 		$reasoningAllowance = match ($reasoningEffort) {
-			'deep' => 3000,
-			'standard' => 1500,
+			'deep' => 8000,
+			'standard' => 3000,
 			default => 0,
 		};
 		return $answerTokens + $reasoningAllowance;

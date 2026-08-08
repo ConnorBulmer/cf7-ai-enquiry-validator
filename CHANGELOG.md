@@ -2,6 +2,23 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.32 — 2026-08-08
+
+- Raised the provider timeout ceiling from 60 to 300 seconds, in the settings
+  field, the sanitizer and both providers. The old ceiling existed because a
+  provider call could hang an administrator's request; classification, GA4
+  validation and the site scan now all run queued, so the limit is sized for the
+  work rather than for a browser.
+- Moved the site scan to a background job, the last provider call still made
+  inside an administrator's request. Its result is reported through the activity
+  log.
+- Raised the reasoning allowances to 3000 for standard and 8000 for deep, so
+  deep reasoning has genuine room to think rather than being cut short by a
+  budget shared with the answer. Reasoning improves classification accuracy, and
+  an inaccurate classification feeding ad bidding costs more than a slow one.
+  Higher reasoning uses more tokens and therefore costs more per enquiry.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.31 — 2026-08-08
 
 - Fixed v2 classifications being cut off by too small a token budget. A

@@ -73,6 +73,23 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.32 time and room to think
+
+Version 0.2.32 lets reasoning actually run.
+
+The provider timeout was capped at 60 seconds and the reasoning allowances were
+small, both because a provider call could hang an administrator's request. That
+constraint has been removed rather than worked around: classification, GA4
+validation and now the site scan all run as queued jobs, so no provider call
+happens inside a web request. The ceiling is 300 seconds, and standard and deep
+reasoning receive 3000 and 8000 tokens of thinking on top of the answer.
+
+This is a deliberate trade. Reasoning is what lets the model weigh an ambiguous
+enquiry rather than pattern-match it, and these classifications feed advertising
+bidding, where a confident wrong answer is more expensive than a slow right one.
+Higher reasoning uses more tokens and costs more per enquiry. Schema remains
+version 10, so no migration is required.
+
 ### Version 0.2.31 room for the answer
 
 Version 0.2.31 raises the classification token allowance, which was smaller than

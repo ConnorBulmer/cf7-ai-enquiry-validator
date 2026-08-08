@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.31
+Stable tag: 0.2.32
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.32 =
+* Raises the provider timeout ceiling to 300 seconds now that every provider call runs in a background job.
+* Moves the site scan to a background job, the last provider call made inside an administrator's request.
+* Gives standard and deep reasoning substantially larger allowances so reasoning is not cut short; higher reasoning costs more per enquiry.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.31 =
 * Fixes v2 classifications being truncated by a token budget smaller than the one used for policy suggestions, then reported as malformed content.

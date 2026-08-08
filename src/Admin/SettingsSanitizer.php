@@ -23,7 +23,7 @@ final class SettingsSanitizer {
 		$deepseekReasoning=(string)($input['providers']['deepseek_reasoning_effort']??'off');$out['providers']['deepseek_reasoning_effort']=in_array($deepseekReasoning,['off','standard','deep'],true)?$deepseekReasoning:'off';
 		$openaiReasoning=(string)($input['providers']['openai_reasoning_effort']??'unsupported');$openaiOptions=\CF7AIV\Providers\OpenAIProvider::reasoningOptions((string)$out['providers']['openai_model']);if(!in_array($openaiReasoning,$openaiOptions,true)&&in_array($openaiReasoning,['off','unsupported'],true)&&!in_array('unsupported',$openaiOptions,true)){$openaiReasoning=$openaiOptions[0]??'unsupported';}$out['providers']['openai_reasoning_effort']=in_array($openaiReasoning,$openaiOptions,true)?$openaiReasoning:'unsupported';
 		foreach(['deepseek_base_url','openai_base_url'] as $key){$url=filter_var((string)($input['providers'][$key]??$out['providers'][$key]),FILTER_VALIDATE_URL);if(is_string($url)&&str_starts_with(strtolower($url),'https://')){$out['providers'][$key]=$url;}}
-		$out['providers']['timeout']=max(3,min(60,(int)($input['providers']['timeout']??15)));
+		$out['providers']['timeout']=max(3,min(300,(int)($input['providers']['timeout']??15)));
 		foreach(['ga4','server_gtm','microsoft_uet','webhook'] as $key){
 			$given=(array)($input['destinations'][$key]??[]);
 			foreach(['enabled','dry_run','allow_insecure'] as $flag){if(array_key_exists($flag,$given)){$out['destinations'][$key][$flag]=self::bool($given[$flag]);}}

@@ -79,7 +79,7 @@ final class IntegrationsPage {
 		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2>' . self::inlineError($saveStatus, $activeTab, 'provider') . '<p class="description">Selected provider: ' . self::e($selectedProvider) . '; model: ' . self::e($selectedModel) . '.</p><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]" data-provider-selector>' . self::option('deepseek', $selectedProvider) . self::option('openai', $selectedProvider) . '</select></label></div>';
 		self::providerFields('deepseek', $selectedProvider === 'deepseek', $deepSeekModel, (string) ($providers['deepseek_reasoning_effort'] ?? 'off'), (array) $providers);
 		self::providerFields('openai', $selectedProvider === 'openai', $openAiModel, (string) ($providers['openai_reasoning_effort'] ?? 'unsupported'), (array) $providers);
-		echo '<div class="cf7aiv-form-grid"><label>Timeout <input type="number" min="3" max="60" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? 15) . '"></label></div>';
+		echo '<div class="cf7aiv-form-grid"><label>Timeout <input type="number" min="3" max="300" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? 15) . '"></label></div>';
 		echo '<p class="description">Higher reasoning effort can increase token use and cost. Optional automatic-candidate verification is a separate second provider call and does not override policy, consent, attribution, mapping, lifecycle, or delivery gates.</p>';
 		echo '<fieldset><legend>Optional verification</legend><div class="cf7aiv-form-grid">';
 		if ($verificationSupported) {

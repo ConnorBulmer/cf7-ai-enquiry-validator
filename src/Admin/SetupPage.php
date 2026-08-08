@@ -46,6 +46,12 @@ final class SetupPage {
 		}
 		echo '</ol>';
 
+		// The scan now runs in the background, so the page reports that it started
+		// rather than pretending to know the outcome. The result lands in the
+		// activity log and in the pending suggestions below.
+		if (! empty($_GET['scan_queued'])) {
+			echo '<div class="notice notice-info cf7aiv-scan-queued" role="status" aria-live="polite"><p>Site scan queued. It runs in the background and can take a minute; reload this page for pending suggestions, or check Tracking Health &amp; Logs for the result.</p></div>';
+		}
 		$suggestionError = ! empty($_GET['suggestion_error']);
 		if ($suggestionError) {
 			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert" aria-live="assertive"><p>The site scan could not complete. Review the selected context and try again.</p>';

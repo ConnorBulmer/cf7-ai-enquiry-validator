@@ -76,4 +76,40 @@ budget_assert(
 	'Both the suggestion and classification calls must size their budget the same way.'
 );
 
+// ─── Reasoning needs both room and time ──────────────────────────────────────
+// Reasoning is the point of the plugin: an inaccurate classification feeding ad
+// bidding is worse than a slow one. The ceilings were sized for a synchronous
+// web request, which starved the thinking that makes classification accurate.
+// Classification, GA4 validation and the site scan all run queued now, so the
+// limits are sized for the work instead of for the browser.
+
+budget_assert($call('deep', $classification) >= 9000, 'Deep reasoning must have genuine room to think.');
+budget_assert($call('standard', $classification) >= 4000, 'Standard reasoning must have room beyond the answer.');
+budget_assert($call('deep', $classification) > $call('standard', $classification), 'Deep must exceed standard.');
+
+$sanitizer = file_get_contents(__DIR__ . '/../src/Admin/SettingsSanitizer.php');
+budget_assert(is_string($sanitizer), 'Sanitizer source must be readable.');
+budget_assert(str_contains($sanitizer, 'min(300'), 'The stored timeout ceiling must allow a long reasoning call.');
+
+$page = file_get_contents(__DIR__ . '/../src/Admin/IntegrationsPage.php');
+budget_assert(is_string($page), 'Integrations source must be readable.');
+budget_assert(str_contains($page, 'max="300"'), 'The timeout field must accept the same ceiling the sanitizer allows.');
+budget_assert(! str_contains($page, 'max="60" name="cf7aiv[providers][timeout]"'), 'The old browser-sized ceiling must be gone.');
+
+foreach (['DeepSeekProvider', 'OpenAIProvider'] as $providerFile) {
+	$src = file_get_contents(__DIR__ . '/../src/Providers/' . $providerFile . '.php');
+	budget_assert(is_string($src), "{$providerFile} source must be readable.");
+	budget_assert(! str_contains($src, 'min(120, $this->timeout)'), "{$providerFile} must not clamp below the configurable ceiling.");
+	budget_assert(str_contains($src, 'min(300, $this->timeout)'), "{$providerFile} must honour the configured timeout.");
+}
+
+// Nothing may call a provider inside an administrator's request any more, or the
+// long timeout becomes a hung page instead of a patient background job.
+$hooks = file_get_contents(__DIR__ . '/../src/Admin/AdminHooks.php');
+budget_assert(is_string($hooks), 'AdminHooks source must be readable.');
+budget_assert(str_contains($hooks, "Queue::enqueue('cf7aiv_setup_scan_job'"), 'The site scan must be queued, not run inline.');
+budget_assert(str_contains($hooks, 'runSetupScan'), 'The queued site scan must have a handler.');
+budget_assert(str_contains($hooks, 'self::runSetupScan($pack'), 'There must be an inline fallback when the queue is unavailable.');
+budget_assert(str_contains($hooks, "add_action('cf7aiv_setup_scan_job'"), 'The site scan job must be registered.');
+
 echo "PASS ProviderTokenBudgetTest\n";
