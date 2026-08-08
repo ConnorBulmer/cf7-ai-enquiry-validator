@@ -104,13 +104,28 @@ visible_assert(str_contains($describe('nonsense'), 'no explanation'), 'A malform
 $many = array_fill(0, 20, ['fieldPath' => 'events', 'description' => str_repeat('long ', 200), 'validationCode' => 'X']);
 visible_assert(strlen($describe($many)) <= 400, 'The reported reason must be length-capped.');
 
-visible_assert(str_contains($integrations, 'takeGa4ValidationReason'), 'The GA4 reason must be surfaced on Integrations.');
+// The reason is persisted beside the flag it explains, not held in a one-read
+// transient. A transient was consumed by whichever page load happened first -
+// including one that rendered it inside a hidden tab panel - so refreshing lost
+// it and the operator saw nothing at all.
+visible_assert(str_contains($integrations, 'last_validation_error'), 'The GA4 reason must be read from stored settings.');
+visible_assert(str_contains($integrations, 'cf7aiv-ga4-blocked'), 'A blocked GA4 destination must be reported at page level, not only inside its tab.');
 
 $hooks = file_get_contents(__DIR__ . '/../src/Admin/AdminHooks.php');
 visible_assert(is_string($hooks), 'AdminHooks source must be readable.');
-visible_assert(str_contains($hooks, 'rememberGa4Validation'), 'The GA4 reason must be recorded when validation fails.');
-visible_assert(str_contains($hooks, 'GA4_VALIDATION_PREFIX'), 'The GA4 reason must use its own transient key.');
+visible_assert(str_contains($hooks, "last_validation_error"), 'The GA4 reason must be recorded when validation fails.');
+visible_assert(! str_contains($hooks, 'takeGa4ValidationReason'), 'The one-read transient must be gone.');
 visible_assert(! str_contains($hooks, 'ga4_reason='), 'The GA4 reason must never enter the query string.');
+
+$settingsSource = file_get_contents(__DIR__ . '/../src/Infrastructure/Settings.php');
+visible_assert(is_string($settingsSource), 'Settings source must be readable.');
+visible_assert(str_contains($settingsSource, "'last_validation_error' => ''"), 'The reason must have a declared default.');
+
+// Success must clear a stale reason, or a fixed problem keeps being reported.
+visible_assert(
+	str_contains($hooks, "['last_validation_error']=\$result->successful?''"),
+	'A successful validation must clear the previous reason.'
+);
 
 // ─── Checkboxes that can actually be cleared ─────────────────────────────────
 // An unchecked box is not submitted, and the sanitizer only overwrites a flag

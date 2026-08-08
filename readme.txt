@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.27
+Stable tag: 0.2.28
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,11 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.28 =
+* Fixes the GA4 validation reason being consumed before it could be seen; it now persists until validation passes.
+* Adds a page-level notice when GA4 is enabled but unvalidated, so a blocked destination is not hidden inside one tab.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.27 =
 * Fixes destination checkboxes silently reverting when cleared, which made the GA4 dry-run flag impossible to turn off.

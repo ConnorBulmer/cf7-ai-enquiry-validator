@@ -2,6 +2,17 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.28 — 2026-08-08
+
+- Fixed the GA4 validation reason never being seen. It was held in a one-read
+  transient, so it was consumed by whichever page load happened first - often one
+  that rendered it inside a hidden tab panel - and refreshing lost it. The reason
+  is now stored beside the flag it explains, persists until validation passes,
+  and is cleared on success so a fixed problem stops being reported.
+- Added a page-level notice when GA4 is enabled but unvalidated, because a
+  destination that cannot go live is not a detail inside one tab.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.27 — 2026-08-08
 
 - Fixed destination checkboxes silently reverting when cleared. An unchecked box

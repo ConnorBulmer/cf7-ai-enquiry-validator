@@ -73,6 +73,22 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.28 a reason that stays put
+
+Version 0.2.28 fixes the GA4 validation reason never reaching the screen. It was
+held in a short-lived, read-once transient, which meant whichever page load
+happened first consumed it - frequently one that rendered it inside a tab panel
+the operator was not looking at - and a refresh a few seconds later found
+nothing. The result was a destination that reported itself blocked while
+offering no explanation, which is the problem the reason was added to solve.
+
+The reason is now stored beside the flag it explains. It persists for as long as
+validation has not passed, and is cleared when it does, so a problem that has
+been fixed stops presenting itself as current. A page-level notice also appears
+whenever GA4 is enabled but unvalidated, because a destination that cannot go
+live is not a detail belonging to one tab. Schema remains version 10, so no
+migration is required.
+
 ### Version 0.2.27 settings that save what you set
 
 Version 0.2.27 fixes destination checkboxes silently reverting when cleared.

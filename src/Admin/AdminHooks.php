@@ -19,7 +19,6 @@ use InvalidArgumentException;
 
 final class AdminHooks {
 	private const SCAN_DIAGNOSTIC_PREFIX = 'cf7aiv_scan_diagnostic_';
-	private const GA4_VALIDATION_PREFIX = 'cf7aiv_ga4_validation_';
 	/**
 	 * Every admin_post action this plugin answers, and the method that answers it.
 	 *
@@ -134,29 +133,7 @@ final class AdminHooks {
 	public static function mappingPublish():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_publish');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->publish($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function mappingEnable():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_enable');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->enable($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function mappingDisable():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_disable');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->disable($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
-	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);$event=new ConversionEvent('cf7aiv-validation','validation','cf7aiv_configuration_check',0.0,'GBP',gmdate(DATE_ATOM),[],['client_id'=>'0.0'],['analytics_storage'=>'denied','ad_storage'=>'denied','ad_user_data'=>'denied','ad_personalization'=>'denied']);$result=(new GA4Destination(new \CF7AIV\Infrastructure\WordPressHttpTransport(),(string)($ga['measurement_id']??''),Crypto::secret('ga4_api_secret'),true,false,false))->send($event);if($result->successful){$settings['destinations']['ga4']['debug_validated']=true;update_option(Settings::OPTION,$settings,false);self::rememberGa4Validation('');}else{self::rememberGa4Validation((string)($result->error??'GA4 validation failed without an explanation.'));}self::redirect('admin.php?page=cf7aiv-integrations');}
-	/**
-	 * Keep the reason GA4 refused, for the next page load.
-	 *
-	 * Validation recorded only a boolean, so a destination that will not
-	 * leave dry-run gave no way to find out why. Stored per administrator and
-	 * read once, for the same reasons as the setup scan reason: a query string
-	 * is logged and retained, and a stale reason reads as a fresh failure.
-	 */
-	private static function rememberGa4Validation(string $reason):void{
-		if(!function_exists('set_transient')||!function_exists('get_current_user_id')){return;}
-		$key=self::GA4_VALIDATION_PREFIX.get_current_user_id();
-		if($reason===''){if(function_exists('delete_transient')){delete_transient($key);}return;}
-		set_transient($key,substr($reason,0,400),300);
-	}
-	/** Read and clear the stored GA4 validation failure reason. */
-	public static function takeGa4ValidationReason():string{
-		if(!function_exists('get_transient')||!function_exists('get_current_user_id')){return '';}
-		$key=self::GA4_VALIDATION_PREFIX.get_current_user_id();
-		$value=get_transient($key);
-		if(function_exists('delete_transient')){delete_transient($key);}
-		return is_string($value)?$value:'';
-	}
+	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);$event=new ConversionEvent('cf7aiv-validation','validation','cf7aiv_configuration_check',0.0,'GBP',gmdate(DATE_ATOM),[],['client_id'=>'0.0'],['analytics_storage'=>'denied','ad_storage'=>'denied','ad_user_data'=>'denied','ad_personalization'=>'denied']);$result=(new GA4Destination(new \CF7AIV\Infrastructure\WordPressHttpTransport(),(string)($ga['measurement_id']??''),Crypto::secret('ga4_api_secret'),true,false,false))->send($event);$settings['destinations']['ga4']['debug_validated']=$result->successful;$settings['destinations']['ga4']['last_validation_error']=$result->successful?'':substr((string)($result->error??'GA4 validation failed without an explanation.'),0,400);update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function testMicrosoft():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_microsoft');$status='failed';try{$receipt=(new MicrosoftUetTestService())->transport((string)($post['confirmation']??''));$status=!empty($receipt['successful'])?'success':(!empty($receipt['retryable'])?'retryable':'failed');}catch(InvalidArgumentException){$status='refused';}self::redirect('admin.php?page=cf7aiv-integrations&microsoft_test='.$status);}
 	public static function completeSetup():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$settings['setup_complete']=true;$settings['setup']['stage']='testing';$settings['automation']['mode']='shadow';update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-setup');}
 	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');$service=self::setupService();$count=$service->generate($pack,get_current_user_id());$path='admin.php?page=cf7aiv-setup&suggestions='.$count;if($service->lastError()!==null){$path.='&suggestion_error=1';self::rememberScanDiagnostic($service->lastDiagnostic());}self::redirect($path);}

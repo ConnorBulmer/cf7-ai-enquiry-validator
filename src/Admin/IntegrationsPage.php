@@ -47,6 +47,16 @@ final class IntegrationsPage {
 		} elseif ($saveStatus === 'failed') {
 			echo '<div class="notice notice-error" role="alert" aria-live="assertive"><p>Integration settings could not be saved. Review the fields and try again.</p></div>';
 		}
+		/*
+		 * A destination that cannot go live is a page-level fact, not a detail
+		 * inside one tab. The reason previously rendered only inside the Google
+		 * panel, so landing on another tab hid it entirely.
+		 */
+		$ga4Config = (array) ($destinations['ga4'] ?? []);
+		if (! empty($ga4Config['enabled']) && empty($ga4Config['debug_validated']) && (string) ($ga4Config['last_validation_error'] ?? '') !== '') {
+			echo '<div class="notice notice-error cf7aiv-ga4-blocked" role="alert"><p><strong>GA4 delivery is blocked.</strong> Debug validation has not passed, so this destination stays in dry-run. GA4 said: <code>'
+				. self::e((string) $ga4Config['last_validation_error']) . '</code></p></div>';
+		}
 		$testNotices = [
 			'success' => 'Microsoft accepted the controlled zero-value transport event.',
 			'retryable' => 'The Microsoft transport test encountered a temporary error; review health logs before retrying.',
@@ -196,8 +206,8 @@ final class IntegrationsPage {
 		// GA4's debug endpoint exists to say what is wrong, so its answer is shown
 		// rather than reduced to "failed". Read once, so a fixed problem stops
 		// being reported as if it were current.
-		$ga4Reason = AdminHooks::takeGa4ValidationReason();
-		if ($ga4Reason !== '') {
+		$ga4Reason = (string) ($ga4['last_validation_error'] ?? '');
+		if (! $validated && $ga4Reason !== '') {
 			echo '<p class="cf7aiv-ga4-validation-reason notice notice-error"><strong>GA4 said:</strong> <code>' . self::e($ga4Reason) . '</code></p>';
 		}
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_validate_ga4">';
