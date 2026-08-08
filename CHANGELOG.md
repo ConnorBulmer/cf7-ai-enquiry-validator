@@ -2,6 +2,23 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.29 — 2026-08-08
+
+- Added a plugin activity log on Tracking Health & Logs. The plugin already
+  broadcast why it refused, failed or gated something, but those facts only
+  reached the PHP error log under `CF7AIV_DEBUG`, which managed hosting
+  frequently does not expose - leaving the plugin able to diagnose its own
+  failures with no way to hand over the answer. Entries are scrubbed of
+  credentials and personal data before storage and capped at 200.
+- Changed GA4 debug validation to run as a queued job instead of inside the
+  administrator's request. Contacting Google can outlive PHP's execution limit
+  on a slow or filtered network, and inline that took the whole request with it:
+  nothing was recorded, and the page reloaded showing no result and no reason.
+  The queued job records its outcome whenever it finishes, and the screen shows
+  a "Checking" state meanwhile. If the queue is unavailable the check still runs
+  inline, because refusing to check at all would be worse.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.28 — 2026-08-08
 
 - Fixed the GA4 validation reason never being seen. It was held in a one-read

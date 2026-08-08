@@ -37,7 +37,7 @@ final class Settings {
 			'delivery' => ['pause_threshold' => 3],
 			'digest' => ['enabled' => false, 'email' => ''],
 			'destinations' => [
-				'ga4' => ['enabled' => false, 'live_enabled' => false, 'debug_validated' => false, 'dry_run' => true, 'last_validation_error' => ''],
+				'ga4' => ['enabled' => false, 'live_enabled' => false, 'debug_validated' => false, 'dry_run' => true, 'last_validation_error' => '', 'validation_state' => 'idle'],
 				'server_gtm' => ['enabled' => false, 'dry_run' => true],
 				'microsoft_uet' => ['enabled' => false, 'dry_run' => true],
 				'webhook' => ['enabled' => false, 'dry_run' => true, 'allow_insecure' => false],

@@ -123,7 +123,7 @@ visible_assert(str_contains($settingsSource, "'last_validation_error' => ''"), '
 
 // Success must clear a stale reason, or a fixed problem keeps being reported.
 visible_assert(
-	str_contains($hooks, "['last_validation_error']=\$result->successful?''"),
+	str_contains($hooks, "['last_validation_error']=\$passed?''"),
 	'A successful validation must clear the previous reason.'
 );
 
@@ -165,5 +165,35 @@ $header = file_get_contents(__DIR__ . '/../cf7-ai-enquiry-validator.php');
 visible_assert(is_string($header), 'Plugin header must be readable.');
 visible_assert(str_contains($header, 'Author: Connor Bulmer'), 'The plugin must name its author.');
 visible_assert(! str_contains($header, 'CF7 AI Enquiry Validator contributors'), 'The placeholder author must be gone.');
+
+// ─── Slow provider work runs off the request ─────────────────────────────────
+// A destination check that contacts Google can outlive PHP's execution limit on
+// a slow or filtered network. Run inline it took the whole request with it, so
+// nothing was recorded and the page simply reloaded with no result and no
+// reason - which is exactly what was observed on a live site.
+
+visible_assert(str_contains($hooks, 'cf7aiv_validate_ga4_job'), 'GA4 validation must have a queued job.');
+visible_assert(str_contains($hooks, 'runGa4Validation'), 'The queued job must have a handler.');
+visible_assert(str_contains($hooks, "Queue::enqueue('cf7aiv_validate_ga4_job')"), 'The admin action must enqueue rather than call inline.');
+// Refusing to check at all when the queue is unavailable would be worse.
+visible_assert(str_contains($hooks, 'self::runGa4Validation();'), 'There must be an inline fallback when the queue is unavailable.');
+visible_assert(str_contains($hooks, "'validation_state'"), 'The queued state must be recorded so the screen can show it.');
+visible_assert(str_contains($integrations, "AdminUi::badge('Checking'"), 'A queued check must be shown as in progress.');
+
+// ─── An activity log the operator can actually reach ─────────────────────────
+// Managed hosting frequently does not expose the PHP error log, which left the
+// plugin diagnosing its own failures with no way to hand over the answer.
+
+$health = file_get_contents(__DIR__ . '/../src/Admin/AdminPages.php');
+visible_assert(is_string($health), 'Health page source must be readable.');
+visible_assert(str_contains($health, 'Plugin activity log'), 'The activity log must appear on Tracking Health and Logs.');
+visible_assert(str_contains($health, 'EventLog::recent'), 'The activity log must read recorded events.');
+
+$eventLog = file_get_contents(__DIR__ . '/../src/Admin/EventLog.php');
+visible_assert(is_string($eventLog), 'Event log source must be readable.');
+visible_assert(str_contains($eventLog, 'AdminSafe::log'), 'Events must be scrubbed before storage, not on display.');
+visible_assert(str_contains($eventLog, "add_action('cf7aiv_admin_action_failed'"), 'Existing failure broadcasts must feed the log.');
+visible_assert(str_contains($eventLog, "add_action('cf7aiv_delivery_gate'"), 'Delivery gate decisions must feed the log.');
+visible_assert(str_contains($hooks, 'EventLog::register();'), 'The log must be attached during registration.');
 
 echo "PASS VisibleStateTest\n";

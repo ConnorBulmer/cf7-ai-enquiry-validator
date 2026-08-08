@@ -73,6 +73,29 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.29 an activity log, and validation off the request
+
+Version 0.2.29 adds a plugin activity log and moves GA4 debug validation into
+the background.
+
+The plugin already broadcast why it refused an action, why a delivery was gated
+and why something failed. Those facts reached the PHP error log under
+`CF7AIV_DEBUG` and nowhere else, and managed hosting frequently does not expose
+that log - so the plugin could diagnose its own failure and had no way to hand
+the answer over. Tracking Health & Logs now carries an activity log fed by the
+same lifecycle actions, scrubbed of credentials and personal data before storage
+rather than on display, and capped at 200 entries so it needs no migration and
+cannot grow without bound.
+
+GA4 debug validation now runs as a queued job. Contacting Google can outlive
+PHP's execution limit on a slow or filtered network, and run inline that took the
+whole request with it: nothing was written, and the page reloaded with no result
+and no reason - indistinguishable from a button that does nothing. The job
+records its outcome whenever it completes, the screen reports a "Checking" state
+while it runs, and an unavailable queue falls back to running inline rather than
+declining to check at all. Schema remains version 10, so no migration is
+required.
+
 ### Version 0.2.28 a reason that stays put
 
 Version 0.2.28 fixes the GA4 validation reason never reaching the screen. It was

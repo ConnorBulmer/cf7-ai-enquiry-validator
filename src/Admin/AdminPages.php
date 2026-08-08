@@ -188,7 +188,41 @@ final class AdminPages {
 		$deliveryBody = $deliveryTable === '' ? AdminUi::emptyState('No delivery errors were recorded.') : AdminUi::tableRegion('Sanitized delivery errors', $deliveryTable);
 		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>Tracking Health &amp; Logs</h1><p>Health tests are read-only and never create Ads conversions.</p></div>';
 		echo '<div class="cf7aiv-panel-grid">' . AdminUi::panel('Submission source health', $sourceBody, 'cf7aiv-health-sources-panel') . AdminUi::panel('Read-only checks', AdminUi::keyValueTable('Read-only checks', $checkRows), 'cf7aiv-health-checks-panel') . AdminUi::panel('Paused destinations', $pausedBody, 'cf7aiv-health-paused-panel') . AdminUi::panel('Historical stratified calibration', $calibrationForm, 'cf7aiv-health-calibration-panel') . '</div>';
-		echo AdminUi::panel('Sanitized delivery errors', $deliveryBody, 'cf7aiv-health-delivery-panel') . '</div>';
+		echo AdminUi::panel('Sanitized delivery errors', $deliveryBody, 'cf7aiv-health-delivery-panel');
+		echo AdminUi::panel('Plugin activity log', self::eventLog(), 'cf7aiv-health-event-panel') . '</div>';
+	}
+
+	/**
+	 * Recent operational events, for hosts where the PHP error log is unreachable.
+	 *
+	 * The plugin broadcasts why it refused, failed or gated something, and until
+	 * now those facts went to the PHP error log under CF7AIV_DEBUG - which
+	 * managed hosting frequently does not expose. The same information is
+	 * recorded here instead, already scrubbed of credentials and personal data,
+	 * and capped so it cannot grow without bound.
+	 */
+	private static function eventLog(): string {
+		$entries = EventLog::recent(50);
+		if ($entries === []) {
+			return AdminUi::emptyState('No plugin activity has been recorded yet.');
+		}
+		$table = '<table class="widefat striped">' . AdminUi::caption('Plugin activity log')
+			. '<thead><tr><th scope="col">When (UTC)</th><th scope="col">Area</th><th scope="col">Level</th><th scope="col">What happened</th></tr></thead><tbody>';
+		foreach ($entries as $entry) {
+			$level = (string) ($entry['level'] ?? 'info');
+			$tone = $level === 'error' ? 'negative' : ($level === 'warning' ? 'warning' : 'neutral');
+			$context = [];
+			foreach ((array) ($entry['context'] ?? []) as $key => $value) {
+				$context[] = $key . '=' . $value;
+			}
+			$table .= '<tr><td>' . self::e((string) ($entry['at'] ?? '')) . '</td>'
+				. '<td>' . self::e(AdminUi::humanLabel((string) ($entry['channel'] ?? ''))) . '</td>'
+				. '<td>' . AdminUi::badge(ucfirst($level), $tone) . '</td>'
+				. '<td>' . self::e((string) ($entry['message'] ?? ''))
+				. ($context === [] ? '' : ' <code>' . self::e(implode(' ', $context)) . '</code>')
+				. '</td></tr>';
+		}
+		return AdminUi::tableRegion('Plugin activity log', $table . '</tbody></table>');
 	}
 
 	public static function setup(): void {

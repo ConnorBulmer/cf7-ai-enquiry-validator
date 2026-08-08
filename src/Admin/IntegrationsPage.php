@@ -196,12 +196,17 @@ final class IntegrationsPage {
 		 */
 		$ga4 = (array) ($destinations['ga4'] ?? []);
 		$validated = ! empty($ga4['debug_validated']);
+		$pending = ! $validated && (string) ($ga4['validation_state'] ?? '') === 'queued';
 		echo '<p class="cf7aiv-ga4-validation-state">Debug validation: '
-			. ($validated ? AdminUi::badge('Passed', 'positive') : AdminUi::badge('Not validated', 'warning'))
+			. ($validated
+				? AdminUi::badge('Passed', 'positive')
+				: ($pending ? AdminUi::badge('Checking', 'neutral') : AdminUi::badge('Not validated', 'warning')))
 			. ' <span class="description">'
 			. self::e($validated
 				? 'The Measurement ID and API secret were accepted by GA4. Live delivery can be enabled.'
-				: 'Live delivery stays in dry-run until this passes. Validation sends one zero-value, consent-denied event to the GA4 debug endpoint, which validates without recording it.')
+				: ($pending
+					? 'The check is queued and runs in the background. Reload this page in a moment for the result; it is also recorded in Tracking Health and Logs.'
+					: 'Live delivery stays in dry-run until this passes. Validation sends one zero-value, consent-denied event to the GA4 debug endpoint, which validates without recording it.'))
 			. '</span></p>';
 		// GA4's debug endpoint exists to say what is wrong, so its answer is shown
 		// rather than reduced to "failed". Read once, so a fixed problem stops

@@ -61,9 +61,9 @@ final class AdminHooks {
 	private static string $settingsSaveReturnTab = '';
 
 	public static function register():void{
-		add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
+		EventLog::register();add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
 		foreach(self::HANDLERS as $action=>$method){add_action('admin_post_'.$action,self::guarded([self::class,$method]));}
-		add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
+		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
 	}
 	public static function schedule():void{if(function_exists('wp_next_scheduled')&&function_exists('wp_schedule_event')&&!wp_next_scheduled('cf7aiv_daily_maintenance')){wp_schedule_event(time()+3600,'daily','cf7aiv_daily_maintenance');}}
 	public static function menu():void{
@@ -133,7 +133,39 @@ final class AdminHooks {
 	public static function mappingPublish():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_publish');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->publish($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function mappingEnable():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_enable');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->enable($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function mappingDisable():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_disable');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->disable($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
-	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);$event=new ConversionEvent('cf7aiv-validation','validation','cf7aiv_configuration_check',0.0,'GBP',gmdate(DATE_ATOM),[],['client_id'=>'0.0'],['analytics_storage'=>'denied','ad_storage'=>'denied','ad_user_data'=>'denied','ad_personalization'=>'denied']);$result=(new GA4Destination(new \CF7AIV\Infrastructure\WordPressHttpTransport(),(string)($ga['measurement_id']??''),Crypto::secret('ga4_api_secret'),true,false,false))->send($event);$settings['destinations']['ga4']['debug_validated']=$result->successful;$settings['destinations']['ga4']['last_validation_error']=$result->successful?'':substr((string)($result->error??'GA4 validation failed without an explanation.'),0,400);update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-integrations');}
+	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);$settings['destinations']['ga4']['validation_state']='queued';$settings['destinations']['ga4']['last_validation_error']='';update_option(Settings::OPTION,$settings,false);EventLog::record('ga4_validation','info','Validation queued.',['measurement_id'=>(string)($ga['measurement_id']??'')]);if(Queue::enqueue('cf7aiv_validate_ga4_job')===false){self::runGa4Validation();}self::redirect('admin.php?page=cf7aiv-integrations');}
+	/**
+	 * Run the GA4 check away from the administrator's request.
+	 *
+	 * It used to run inline. A destination check that contacts Google can
+	 * outlive PHP's execution limit on a slow or filtered network, and when it
+	 * did the request died before anything was recorded - so the screen showed
+	 * no result, no reason, and no sign it had even run. Observed on a live
+	 * site: repeated attempts, each ending with the page simply reloading.
+	 *
+	 * Queued work cannot take the page down with it, and the outcome is written
+	 * whenever it finishes. If the queue is unavailable the check still runs
+	 * inline, because refusing to check at all would be worse.
+	 */
+	public static function runGa4Validation():void{
+		$settings=(array)get_option(Settings::OPTION,Settings::defaults());
+		$ga=(array)($settings['destinations']['ga4']??[]);
+		try{
+			$event=new ConversionEvent('cf7aiv-validation','validation','cf7aiv_configuration_check',0.0,'GBP',gmdate(DATE_ATOM),[],['client_id'=>'0.0'],['analytics_storage'=>'denied','ad_storage'=>'denied','ad_user_data'=>'denied','ad_personalization'=>'denied']);
+			$result=(new GA4Destination(new WordPressHttpTransport(),(string)($ga['measurement_id']??''),Crypto::secret('ga4_api_secret'),true,false,false))->send($event);
+			$reason=$result->successful?'':substr((string)($result->error??'GA4 validation failed without an explanation.'),0,400);
+		}catch(\Throwable $error){
+			$result=null;$reason=DiagnosticsService::describeFailure($error);
+			EventLog::recordFailure('ga4_validation',$error);
+		}
+		$passed=$result!==null&&$result->successful;
+		$settings=(array)get_option(Settings::OPTION,Settings::defaults());
+		$settings['destinations']['ga4']['debug_validated']=$passed;
+		$settings['destinations']['ga4']['last_validation_error']=$passed?'':$reason;
+		$settings['destinations']['ga4']['validation_state']=$passed?'passed':'failed';
+		update_option(Settings::OPTION,$settings,false);
+		EventLog::record('ga4_validation',$passed?'info':'error',$passed?'Validation passed.':('Validation failed. '.$reason));
+	}
 	public static function testMicrosoft():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_microsoft');$status='failed';try{$receipt=(new MicrosoftUetTestService())->transport((string)($post['confirmation']??''));$status=!empty($receipt['successful'])?'success':(!empty($receipt['retryable'])?'retryable':'failed');}catch(InvalidArgumentException){$status='refused';}self::redirect('admin.php?page=cf7aiv-integrations&microsoft_test='.$status);}
 	public static function completeSetup():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$settings['setup_complete']=true;$settings['setup']['stage']='testing';$settings['automation']['mode']='shadow';update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-setup');}
 	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');$service=self::setupService();$count=$service->generate($pack,get_current_user_id());$path='admin.php?page=cf7aiv-setup&suggestions='.$count;if($service->lastError()!==null){$path.='&suggestion_error=1';self::rememberScanDiagnostic($service->lastDiagnostic());}self::redirect($path);}
