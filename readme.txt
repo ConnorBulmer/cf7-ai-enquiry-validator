@@ -1,10 +1,10 @@
 === CF7 AI Enquiry Validator ===
-Contributors: cf7aiv-contributors
+Contributors: connorbulmer
 Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.26
+Stable tag: 0.2.27
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,12 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.27 =
+* Fixes destination checkboxes silently reverting when cleared, which made the GA4 dry-run flag impossible to turn off.
+* States that GA4 dry run is released by the validated lifecycle transition instead of presenting an editable control that refuses.
+* Sets the plugin author to Connor Bulmer.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.26 =
 * Reports what GA4 objected to during debug validation instead of only that it objected.

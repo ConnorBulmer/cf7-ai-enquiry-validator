@@ -112,4 +112,43 @@ visible_assert(str_contains($hooks, 'rememberGa4Validation'), 'The GA4 reason mu
 visible_assert(str_contains($hooks, 'GA4_VALIDATION_PREFIX'), 'The GA4 reason must use its own transient key.');
 visible_assert(! str_contains($hooks, 'ga4_reason='), 'The GA4 reason must never enter the query string.');
 
+// ─── Checkboxes that can actually be cleared ─────────────────────────────────
+// An unchecked box is not submitted, and the sanitizer only overwrites a flag
+// whose key is present, starting from defaults otherwise. Any flag defaulting to
+// true was therefore impossible to turn off: it silently reverted on save.
+
+$checkbox = (new ReflectionClass(CF7AIV\Admin\IntegrationsPage::class))->getMethod('checkbox');
+$checkbox->setAccessible(true);
+$render = static fn (bool $checked, bool $disabled = false, string $note = ''): string
+	=> $checkbox->invoke(null, 'Dry run', 'cf7aiv[destinations][ga4][dry_run]', $checked, '1', $disabled, $note);
+
+$onEditable = $render(true);
+visible_assert(substr_count($onEditable, 'type="hidden"') === 1, 'A checkbox must carry exactly one hidden companion.');
+visible_assert(str_contains($onEditable, 'value="0"'), 'The companion must submit a cleared value when the box is cleared.');
+visible_assert(strpos($onEditable, 'type="hidden"') < strpos($onEditable, 'type="checkbox"'), 'The companion must precede the box so a ticked box wins.');
+
+// Defaults are only honoured when the key is absent, so the key must never be
+// absent. This is the assertion that would have caught the reverting dry-run.
+$offEditable = $render(false);
+visible_assert(str_contains($offEditable, 'value="0"'), 'A cleared box must still submit its key.');
+visible_assert(! str_contains($offEditable, 'checked'), 'A cleared box must not render as checked.');
+
+// A disabled control is not submitted either, so its companion must preserve the
+// current value. Submitting 0 here would take the destination out of dry-run.
+$disabledOn = $render(true, true, 'Governed by the lifecycle transition.');
+visible_assert(str_contains($disabledOn, 'disabled'), 'A governed flag must render as disabled.');
+visible_assert(str_contains($disabledOn, 'type="hidden" value="1"') || str_contains($disabledOn, 'value="1"'), 'A disabled checked box must preserve its value, not clear it.');
+visible_assert(! str_contains(explode('type="checkbox"', $disabledOn)[0], 'value="0"'), 'A disabled checked box must never submit a cleared value.');
+visible_assert(str_contains($disabledOn, 'Governed by the lifecycle transition.'), 'A governed flag must explain what governs it.');
+
+visible_assert(str_contains($integrations, 'Dry run is released by'), 'GA4 dry run must state how it is released.');
+visible_assert(str_contains($integrations, "\$key === 'ga4'"), 'Only GA4 dry run is governed by the lifecycle.');
+
+// ─── Plugin identity ─────────────────────────────────────────────────────────
+
+$header = file_get_contents(__DIR__ . '/../cf7-ai-enquiry-validator.php');
+visible_assert(is_string($header), 'Plugin header must be readable.');
+visible_assert(str_contains($header, 'Author: Connor Bulmer'), 'The plugin must name its author.');
+visible_assert(! str_contains($header, 'CF7 AI Enquiry Validator contributors'), 'The placeholder author must be gone.');
+
 echo "PASS VisibleStateTest\n";

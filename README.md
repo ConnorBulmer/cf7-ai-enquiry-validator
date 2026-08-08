@@ -73,6 +73,24 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.27 settings that save what you set
+
+Version 0.2.27 fixes destination checkboxes silently reverting when cleared.
+
+An unchecked checkbox is not submitted at all. The sanitizer starts from
+`Settings::defaults()` and only overwrites a flag whose key is present, so a
+cleared box left the default in place. Any flag defaulting to true could not be
+turned off: it accepted the change, saved, and came back set, with nothing to
+say why. The GA4 dry-run flag defaults to true, so it was affected. Every
+checkbox now carries a hidden companion field, which is the pattern the
+advanced-mode flag already used.
+
+GA4 dry-run is a separate matter. Live delivery is gated on debug validation
+having passed, so that flag is released by the lifecycle transition and never by
+the settings form. It is now shown as governed by that transition, rather than
+presented as an editable control that quietly refuses. Schema remains version 10,
+so no migration is required.
+
 ### Version 0.2.26 GA4 validation reasons
 
 Version 0.2.26 reports what GA4 objected to, rather than only that it objected.

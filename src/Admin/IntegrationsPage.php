@@ -268,7 +268,25 @@ final class IntegrationsPage {
 		}
 		echo self::secret($label . ' secret', "cf7aiv[secrets][{$secret}]", $secret);
 		echo self::checkbox('Enabled', "cf7aiv[destinations][{$key}][enabled]", ! empty($config['enabled']));
-		echo self::checkbox('Dry run', "cf7aiv[destinations][{$key}][dry_run]", ! empty($config['dry_run']));
+		/*
+		 * GA4 leaves dry-run through the validated lifecycle transition below,
+		 * never through this box, because live delivery is gated on debug
+		 * validation having passed. The box used to accept the change and revert
+		 * it on save with no explanation, which reads as a broken setting rather
+		 * than a deliberate safeguard. It is now shown as governed elsewhere.
+		 */
+		if ($key === 'ga4') {
+			echo self::checkbox(
+				'Dry run',
+				"cf7aiv[destinations][{$key}][dry_run]",
+				! empty($config['dry_run']),
+				'1',
+				true,
+				'Dry run is released by "Enable GA4 live delivery" below, which requires debug validation to have passed. It cannot be changed here.'
+			);
+		} else {
+			echo self::checkbox('Dry run', "cf7aiv[destinations][{$key}][dry_run]", ! empty($config['dry_run']));
+		}
 		if ($insecure) {
 			echo self::checkbox('Allow insecure URL (development only)', "cf7aiv[destinations][{$key}][allow_insecure]", ! empty($config['allow_insecure']));
 		}
@@ -350,8 +368,30 @@ final class IntegrationsPage {
 		return isset($stored[$secretKey]) && trim((string) $stored[$secretKey]) !== '';
 	}
 
-	private static function checkbox(string $label, string $name, bool $checked, string $value = '1'): string {
-		return '<label><input type="checkbox" name="' . self::e($name) . '" value="' . self::e($value) . '" ' . ($checked ? 'checked' : '') . '> ' . self::e($label) . '</label>';
+	/**
+	 * A checkbox whose cleared state actually reaches the server.
+	 *
+	 * An unchecked box is not submitted at all, and the sanitizer only overwrites
+	 * a flag when its key is present - it starts from Settings::defaults() and
+	 * keeps the default otherwise. Any flag defaulting to true was therefore
+	 * impossible to turn off: it silently reverted on save, which is exactly what
+	 * happened to the GA4 dry-run flag. The companion hidden field is the
+	 * standard fix and is already used for advanced_mode; it was simply never
+	 * applied to the destination flags.
+	 *
+	 * A disabled control is not submitted either, so when one is disabled the
+	 * hidden field carries the current value rather than a cleared one. Without
+	 * that, disabling the GA4 dry-run box would submit "off" and take the
+	 * destination out of dry-run - the precise opposite of the intent.
+	 */
+	private static function checkbox(string $label, string $name, bool $checked, string $value = '1', bool $disabled = false, string $note = ''): string {
+		$hidden = $disabled ? ($checked ? $value : '0') : '0';
+		$html = '<label><input type="hidden" name="' . self::e($name) . '" value="' . self::e($hidden) . '">';
+		$html .= '<input type="checkbox" name="' . self::e($name) . '" value="' . self::e($value) . '" ' . ($checked ? 'checked' : '') . ($disabled ? ' disabled' : '') . '> ' . self::e($label) . '</label>';
+		if ($note !== '') {
+			$html .= '<p class="description cf7aiv-checkbox-note">' . self::e($note) . '</p>';
+		}
+		return $html;
 	}
 
 	private static function option(string $value, string $selected): string {

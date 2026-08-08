@@ -2,6 +2,22 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.27 — 2026-08-08
+
+- Fixed destination checkboxes silently reverting when cleared. An unchecked box
+  is not submitted at all, and the sanitizer only overwrites a flag whose key is
+  present, starting from defaults otherwise. Any flag defaulting to true was
+  therefore impossible to turn off, which is what happened to the GA4 dry-run
+  flag: it accepted the change and reverted it on save with no explanation. Every
+  checkbox now carries a hidden companion, the pattern already used for the
+  advanced-mode flag.
+- Changed the GA4 dry-run control to state that it is governed by the validated
+  lifecycle transition rather than presenting itself as editable. Live delivery
+  is gated on debug validation, so that box was never going to release it, and a
+  setting that quietly refuses reads as broken rather than deliberate.
+- Changed the plugin author to Connor Bulmer.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.26 — 2026-08-08
 
 - Added GA4's own validation messages to the failure it reports. The debug
