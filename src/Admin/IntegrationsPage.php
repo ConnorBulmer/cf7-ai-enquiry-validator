@@ -193,6 +193,13 @@ final class IntegrationsPage {
 				? 'The Measurement ID and API secret were accepted by GA4. Live delivery can be enabled.'
 				: 'Live delivery stays in dry-run until this passes. Validation sends one zero-value, consent-denied event to the GA4 debug endpoint, which validates without recording it.')
 			. '</span></p>';
+		// GA4's debug endpoint exists to say what is wrong, so its answer is shown
+		// rather than reduced to "failed". Read once, so a fixed problem stops
+		// being reported as if it were current.
+		$ga4Reason = AdminHooks::takeGa4ValidationReason();
+		if ($ga4Reason !== '') {
+			echo '<p class="cf7aiv-ga4-validation-reason notice notice-error"><strong>GA4 said:</strong> <code>' . self::e($ga4Reason) . '</code></p>';
+		}
 		echo '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_validate_ga4">';
 		wp_nonce_field('cf7aiv_validate_ga4');
 		echo '<input type="hidden" name="return_tab" value="google"><p class="cf7aiv-actions"><button class="button button-secondary" type="submit">Validate GA4 debug endpoint</button></p></form>';

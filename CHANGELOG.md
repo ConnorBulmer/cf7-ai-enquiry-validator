@@ -2,6 +2,17 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.26 — 2026-08-08
+
+- Added GA4's own validation messages to the failure it reports. The debug
+  endpoint exists to say what is wrong - a mismatched API secret, an unknown
+  event name, a malformed client id all come back named - and the response was
+  collapsed into "GA4 debug validation failed", discarding the entire reason for
+  calling it. A destination that refuses to leave dry-run now says why.
+- Added the reason to Integrations, carried in a short-lived per-administrator
+  transient and read once, so a fixed problem stops being reported as current.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.25 — 2026-08-08
 
 - Added the recorded classification failure reason to the Review Queue. It was

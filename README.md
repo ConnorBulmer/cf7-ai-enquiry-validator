@@ -73,6 +73,23 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.26 GA4 validation reasons
+
+Version 0.2.26 reports what GA4 objected to, rather than only that it objected.
+
+The Measurement Protocol debug endpoint exists to explain refusals: a mismatched
+API secret, an unknown event name and a malformed client id all come back named,
+with a field path and a validation code. That response was collapsed into "GA4
+debug validation failed", which discarded the entire reason for calling the debug
+endpoint and left a destination that will not leave dry-run for reasons nobody
+could see.
+
+Google's own text is now reported, bounded and stripped to plain description
+because it is shown to an administrator, and surfaced on Integrations through a
+short-lived per-administrator transient that is read once so a fixed problem
+stops being reported as current. Schema remains version 10, so no migration is
+required.
+
 ### Version 0.2.25 visible operational state
 
 Version 0.2.25 shows three things the plugin already knew and never displayed.

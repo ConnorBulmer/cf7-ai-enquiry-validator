@@ -36,9 +36,43 @@ final class GA4Destination implements DestinationInterface {
 		$result = ResponseClassifier::classify($response);
 		if ($result->successful && $this->debug) {
 			$decoded = json_decode($response->body, true);
-			if (! is_array($decoded) || ! empty($decoded['validationMessages'])) { return new DeliveryResult(false, false, null, 'GA4 debug validation failed.', [], $warnings); }
+			if (! is_array($decoded)) { return new DeliveryResult(false, false, null, 'GA4 debug validation returned an unreadable response.', [], $warnings); }
+			if (! empty($decoded['validationMessages'])) {
+				return new DeliveryResult(false, false, null, self::validationFailure($decoded['validationMessages']), [], $warnings);
+			}
 		}
 		return new DeliveryResult($result->successful, $result->retryable, $result->remoteId, $result->error, [], $warnings);
 	}
+	/**
+	 * Report what GA4 objected to, rather than only that it objected.
+	 *
+	 * The debug endpoint exists precisely to say what is wrong - a mismatched
+	 * API secret, an unknown event name, a malformed client id all come back
+	 * named. Collapsing them into "validation failed" threw away the entire
+	 * value of calling it, and left a destination that refuses to leave dry-run
+	 * for reasons the operator could not see.
+	 *
+	 * Google's own text is used, bounded and stripped of anything that is not
+	 * plain description, because it is displayed to an administrator.
+	 *
+	 * @param mixed $messages
+	 */
+	private static function validationFailure(mixed $messages): string {
+		$parts = [];
+		foreach (is_array($messages) ? array_slice($messages, 0, 3) : [] as $message) {
+			if (! is_array($message)) { continue; }
+			$field = isset($message['fieldPath']) && is_scalar($message['fieldPath']) ? trim((string) $message['fieldPath']) : '';
+			$code = isset($message['validationCode']) && is_scalar($message['validationCode']) ? trim((string) $message['validationCode']) : '';
+			$description = isset($message['description']) && is_scalar($message['description']) ? trim((string) $message['description']) : '';
+			$detail = trim(($field !== '' ? $field . ': ' : '') . $description . ($code !== '' ? ' [' . $code . ']' : ''));
+			$detail = (string) preg_replace('/[^\P{C}\n]+/u', '', $detail);
+			$detail = trim((string) preg_replace('/\s+/', ' ', $detail));
+			if ($detail !== '') { $parts[] = $detail; }
+		}
+		return $parts === []
+			? 'GA4 debug validation failed and returned no explanation.'
+			: substr('GA4 rejected the event. ' . implode(' | ', $parts), 0, 400);
+	}
+
 	private static function consent(mixed $state): string { return $state === 'granted' ? 'GRANTED' : 'DENIED'; }
 }

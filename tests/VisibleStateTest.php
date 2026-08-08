@@ -72,4 +72,44 @@ visible_assert(is_string($css), 'Admin stylesheet must be readable.');
 visible_assert(str_contains($css, '.cf7aiv-busy-status'), 'The busy message must be styled.');
 visible_assert(! str_contains($css, '!important'), 'Admin CSS must avoid unverified important overrides.');
 
+// ─── GA4 validation reason ───────────────────────────────────────────────────
+// The debug endpoint exists to say what is wrong. Collapsing its answer into
+// "validation failed" discarded the entire reason for calling it, and left a
+// destination that would not leave dry-run for reasons nobody could see.
+
+$ga4Source = file_get_contents(__DIR__ . '/../src/Destinations/GA4Destination.php');
+visible_assert(is_string($ga4Source), 'GA4 destination source must be readable.');
+visible_assert(str_contains($ga4Source, 'validationFailure'), 'GA4 validation messages must be reported.');
+visible_assert(! str_contains($ga4Source, "'GA4 debug validation failed.'"), 'The reasonless message must be gone.');
+
+$destination = new ReflectionClass(CF7AIV\Destinations\GA4Destination::class);
+$failure = $destination->getMethod('validationFailure');
+$failure->setAccessible(true);
+$describe = static fn (mixed $messages): string => $failure->invoke(null, $messages);
+
+$typical = $describe([[
+	'fieldPath' => 'measurement_id',
+	'description' => 'Measurement id not found for this api secret.',
+	'validationCode' => 'MEASUREMENT_ID_NOT_FOUND',
+]]);
+visible_assert(str_contains($typical, 'measurement_id'), 'The offending field must be named.');
+visible_assert(str_contains($typical, 'Measurement id not found'), 'The description from GA4 must survive.');
+visible_assert(str_contains($typical, 'MEASUREMENT_ID_NOT_FOUND'), 'The validation code must survive.');
+
+// A refusal with no explanation must say so rather than render blank.
+visible_assert(str_contains($describe([]), 'no explanation'), 'An empty message list must be stated, not blank.');
+visible_assert(str_contains($describe('nonsense'), 'no explanation'), 'A malformed message list must not throw.');
+
+// Bounded, because it reaches the screen.
+$many = array_fill(0, 20, ['fieldPath' => 'events', 'description' => str_repeat('long ', 200), 'validationCode' => 'X']);
+visible_assert(strlen($describe($many)) <= 400, 'The reported reason must be length-capped.');
+
+visible_assert(str_contains($integrations, 'takeGa4ValidationReason'), 'The GA4 reason must be surfaced on Integrations.');
+
+$hooks = file_get_contents(__DIR__ . '/../src/Admin/AdminHooks.php');
+visible_assert(is_string($hooks), 'AdminHooks source must be readable.');
+visible_assert(str_contains($hooks, 'rememberGa4Validation'), 'The GA4 reason must be recorded when validation fails.');
+visible_assert(str_contains($hooks, 'GA4_VALIDATION_PREFIX'), 'The GA4 reason must use its own transient key.');
+visible_assert(! str_contains($hooks, 'ga4_reason='), 'The GA4 reason must never enter the query string.');
+
 echo "PASS VisibleStateTest\n";
