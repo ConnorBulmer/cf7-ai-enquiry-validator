@@ -271,7 +271,7 @@ try {
 	$dsOffInstance->classify($mockRequest);
 } catch (Throwable) {}
 provider_assert(($v1Transport->lastPayload['thinking']['type'] ?? '') === 'disabled', 'DeepSeek off must send thinking.type=disabled.');
-provider_assert(($v1Transport->lastPayload['max_tokens'] ?? 0) === 900, 'DeepSeek off must send max_tokens=900.');
+provider_assert(($v1Transport->lastPayload['max_tokens'] ?? 0) === 1800, 'DeepSeek off must send the classification answer allowance with no reasoning added.');
 
 // DeepSeek standard → thinking.type = enabled
 $v1TransportStd = new class implements CF7AIV\Infrastructure\HttpTransportInterface {
@@ -286,7 +286,7 @@ $v1TransportStd = new class implements CF7AIV\Infrastructure\HttpTransportInterf
 $dsStdInstance = new CF7AIV\Providers\DeepSeekProvider($v1TransportStd, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-v4-flash', 30, 'standard');
 try { $dsStdInstance->classify($mockRequest); } catch (Throwable) {}
 provider_assert(($v1TransportStd->lastPayload['thinking']['type'] ?? '') === 'enabled', 'DeepSeek standard must send thinking.type=enabled.');
-provider_assert(($v1TransportStd->lastPayload['max_tokens'] ?? 0) === 2400, 'DeepSeek standard must send the 900-token answer allowance plus its reasoning allowance.');
+provider_assert(($v1TransportStd->lastPayload['max_tokens'] ?? 0) === 3300, 'DeepSeek standard must send the classification answer allowance plus its reasoning allowance.');
 
 // DeepSeek deep → thinking.type = enabled, answer allowance plus deep reasoning
 $v1TransportDeep = new class implements CF7AIV\Infrastructure\HttpTransportInterface {
@@ -301,7 +301,7 @@ $v1TransportDeep = new class implements CF7AIV\Infrastructure\HttpTransportInter
 $dsDeepInstanceP = new CF7AIV\Providers\DeepSeekProvider($v1TransportDeep, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-v4-flash', 30, 'deep');
 try { $dsDeepInstanceP->classify($mockRequest); } catch (Throwable) {}
 provider_assert(($v1TransportDeep->lastPayload['thinking']['type'] ?? '') === 'enabled', 'DeepSeek deep must send thinking.type=enabled.');
-provider_assert(($v1TransportDeep->lastPayload['max_tokens'] ?? 0) === 3900, 'DeepSeek deep must send the 900-token answer allowance plus its deep reasoning allowance.');
+provider_assert(($v1TransportDeep->lastPayload['max_tokens'] ?? 0) === 4800, 'DeepSeek deep must send the classification answer allowance plus its deep reasoning allowance.');
 
 // ─── OpenAI send() payload assertions ────────────────────────────────────────
 

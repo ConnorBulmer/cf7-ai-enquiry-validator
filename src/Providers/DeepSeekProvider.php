@@ -16,9 +16,22 @@ use CF7AIV\Infrastructure\HttpResponse;
 use CF7AIV\Infrastructure\HttpTransportInterface;
 
 final class DeepSeekProvider extends JsonProvider implements VerificationCapableProviderInterface, PolicySuggestionProviderInterface {
-	/** Answer-only allowances, matching what the OpenAI provider is given for the same two calls. */
+	/**
+	 * Answer-only allowances, before any reasoning allowance is added.
+	 *
+	 * A v2 classification is the larger of the two answers, not the smaller. It
+	 * must emit nine required fields, and every evidence entry carries an excerpt
+	 * quoted from the enquiry, so the reply grows with how much the enquiry
+	 * actually says. At 900 it was being cut off mid-object and reported as
+	 * "malformed or schema-invalid content", which reads as the model
+	 * misbehaving rather than as a budget that was never large enough.
+	 *
+	 * Observed on a live site: the same enquiry timed out with reasoning enabled
+	 * and returned invalid content with reasoning off, because the two settings
+	 * were failing for two different reasons at once.
+	 */
 	private const SUGGESTION_ANSWER_TOKENS = 1500;
-	private const CLASSIFICATION_ANSWER_TOKENS = 900;
+	private const CLASSIFICATION_ANSWER_TOKENS = 1800;
 
 	public function __construct(
 		private readonly HttpTransportInterface $transport,

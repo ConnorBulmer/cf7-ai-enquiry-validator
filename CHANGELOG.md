@@ -2,6 +2,17 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.31 — 2026-08-08
+
+- Fixed v2 classifications being cut off by too small a token budget. A
+  classification must emit nine required fields, and every evidence entry
+  carries an excerpt quoted from the enquiry, so the reply grows with how much
+  the enquiry says. The allowance was 900 - smaller than the one given to policy
+  suggestions - and a truncated reply was reported as "malformed or
+  schema-invalid content", blaming the model for a budget that was never large
+  enough. Raised to 1800.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.30 — 2026-08-08
 
 - Fixed the GA4 validation result being lost. It was written into the main

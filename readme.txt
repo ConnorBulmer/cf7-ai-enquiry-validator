@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.30
+Stable tag: 0.2.31
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,10 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.31 =
+* Fixes v2 classifications being truncated by a token budget smaller than the one used for policy suggestions, then reported as malformed content.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.30 =
 * Fixes the GA4 validation result being overwritten by ordinary page loads, which reported "Not validated" after a successful check.

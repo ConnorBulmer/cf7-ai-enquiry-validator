@@ -73,6 +73,24 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.31 room for the answer
+
+Version 0.2.31 raises the classification token allowance, which was smaller than
+the one given to policy suggestions despite classification producing the larger
+answer.
+
+A v2 classification emits nine required fields, and every evidence entry carries
+an excerpt quoted from the enquiry, so the reply grows with how much the enquiry
+actually says. At 900 tokens it was being cut off mid-object, and a JSON object
+cut in half does not parse - which surfaced as "malformed or schema-invalid
+content" and read as the model misbehaving rather than as a budget that could
+never have been sufficient.
+
+Found on a live site where one enquiry timed out with reasoning enabled and
+returned invalid content with reasoning off: two different failures with the same
+underlying cause, visible only because the failure reason is now displayed.
+Schema remains version 10, so no migration is required.
+
 ### Version 0.2.30 a result that survives a page load
 
 Version 0.2.30 fixes the GA4 validation result being lost between the background

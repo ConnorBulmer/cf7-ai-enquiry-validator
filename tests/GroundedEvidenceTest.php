@@ -291,7 +291,10 @@ grounded_assert(
 		&& str_contains($deepSystemPrompt, 'minimum_supporting_evidence'),
 	'DeepSeek must be explicitly told to include grounded supporting evidence needed by the chosen tier instead of returning only its required evidence groups.',
 );
-grounded_assert(($deepPayload['max_tokens'] ?? null) === 900, 'DeepSeek v2 output must allow 900 tokens for grounded evidence.');
+// Every evidence entry carries an excerpt quoted from the enquiry, so the reply
+// grows with the enquiry. At 900 it was cut off mid-object and reported as
+// schema-invalid content, which blamed the model for a budget that was too small.
+grounded_assert(($deepPayload['max_tokens'] ?? null) >= 1800, 'DeepSeek v2 output must leave room for grounded evidence excerpts.');
 grounded_assert($deepResult->providerUsage === ['input_tokens' => 101, 'output_tokens' => 52, 'reasoning_tokens' => 7, 'calls' => 1], 'DeepSeek usage must be normalized onto the result.');
 
 $multibyteRequest = new CF7AIV\Domain\ClassificationRequest(
