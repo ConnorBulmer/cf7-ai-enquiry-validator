@@ -108,24 +108,32 @@ visible_assert(strlen($describe($many)) <= 400, 'The reported reason must be len
 // transient. A transient was consumed by whichever page load happened first -
 // including one that rendered it inside a hidden tab panel - so refreshing lost
 // it and the operator saw nothing at all.
-visible_assert(str_contains($integrations, 'last_validation_error'), 'The GA4 reason must be read from stored settings.');
+visible_assert(str_contains($integrations, 'Ga4Validation::error()'), 'The GA4 reason must be read from its own option.');
+visible_assert(str_contains($integrations, 'Ga4Validation::isPassed()'), 'The validation badge must read the dedicated result.');
+// The shared settings array is rewritten in full on every page load, so an
+// asynchronously produced result stored there loses the race.
+$hooks = file_get_contents(__DIR__ . '/../src/Admin/AdminHooks.php');
+visible_assert(is_string($hooks), 'AdminHooks source must be readable.');
+$validation = file_get_contents(__DIR__ . '/../src/Admin/Ga4Validation.php');
+visible_assert(is_string($validation), 'Validation store source must be readable.');
+visible_assert(str_contains($validation, "const OPTION = 'cf7aiv_ga4_validation'"), 'The result must have its own option.');
+visible_assert(str_contains($validation, 'could not be stored'), 'A lost write must report itself rather than pass silently.');
+visible_assert(str_contains($hooks, 'Ga4Validation::invalidate()'), 'Changing GA4 credentials must withdraw a previous pass.');
+visible_assert(str_contains($hooks, 'Ga4Validation::isPassed()'), 'The live transition must gate on the dedicated result.');
 visible_assert(str_contains($integrations, 'cf7aiv-ga4-blocked'), 'A blocked GA4 destination must be reported at page level, not only inside its tab.');
 
 $hooks = file_get_contents(__DIR__ . '/../src/Admin/AdminHooks.php');
 visible_assert(is_string($hooks), 'AdminHooks source must be readable.');
-visible_assert(str_contains($hooks, "last_validation_error"), 'The GA4 reason must be recorded when validation fails.');
+visible_assert(str_contains($hooks, 'Ga4Validation::failed('), 'The GA4 reason must be recorded when validation fails.');
 visible_assert(! str_contains($hooks, 'takeGa4ValidationReason'), 'The one-read transient must be gone.');
 visible_assert(! str_contains($hooks, 'ga4_reason='), 'The GA4 reason must never enter the query string.');
 
 $settingsSource = file_get_contents(__DIR__ . '/../src/Infrastructure/Settings.php');
 visible_assert(is_string($settingsSource), 'Settings source must be readable.');
-visible_assert(str_contains($settingsSource, "'last_validation_error' => ''"), 'The reason must have a declared default.');
+
 
 // Success must clear a stale reason, or a fixed problem keeps being reported.
-visible_assert(
-	str_contains($hooks, "['last_validation_error']=\$passed?''"),
-	'A successful validation must clear the previous reason.'
-);
+visible_assert(str_contains($hooks, 'Ga4Validation::passed();'), 'A successful validation must record a pass, clearing any previous reason.');
 
 // ─── Checkboxes that can actually be cleared ─────────────────────────────────
 // An unchecked box is not submitted, and the sanitizer only overwrites a flag
@@ -177,7 +185,7 @@ visible_assert(str_contains($hooks, 'runGa4Validation'), 'The queued job must ha
 visible_assert(str_contains($hooks, "Queue::enqueue('cf7aiv_validate_ga4_job')"), 'The admin action must enqueue rather than call inline.');
 // Refusing to check at all when the queue is unavailable would be worse.
 visible_assert(str_contains($hooks, 'self::runGa4Validation();'), 'There must be an inline fallback when the queue is unavailable.');
-visible_assert(str_contains($hooks, "'validation_state'"), 'The queued state must be recorded so the screen can show it.');
+visible_assert(str_contains($hooks, 'Ga4Validation::queued()'), 'The queued state must be recorded so the screen can show it.');
 visible_assert(str_contains($integrations, "AdminUi::badge('Checking'"), 'A queued check must be shown as in progress.');
 
 // ─── An activity log the operator can actually reach ─────────────────────────

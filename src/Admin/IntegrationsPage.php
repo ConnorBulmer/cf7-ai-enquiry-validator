@@ -53,9 +53,9 @@ final class IntegrationsPage {
 		 * panel, so landing on another tab hid it entirely.
 		 */
 		$ga4Config = (array) ($destinations['ga4'] ?? []);
-		if (! empty($ga4Config['enabled']) && empty($ga4Config['debug_validated']) && (string) ($ga4Config['last_validation_error'] ?? '') !== '') {
+		if (! empty($ga4Config['enabled']) && ! Ga4Validation::isPassed() && Ga4Validation::error() !== '') {
 			echo '<div class="notice notice-error cf7aiv-ga4-blocked" role="alert"><p><strong>GA4 delivery is blocked.</strong> Debug validation has not passed, so this destination stays in dry-run. GA4 said: <code>'
-				. self::e((string) $ga4Config['last_validation_error']) . '</code></p></div>';
+				. self::e(Ga4Validation::error()) . '</code></p></div>';
 		}
 		$testNotices = [
 			'success' => 'Microsoft accepted the controlled zero-value transport event.',
@@ -195,8 +195,8 @@ final class IntegrationsPage {
 		 * and still be in dry-run.
 		 */
 		$ga4 = (array) ($destinations['ga4'] ?? []);
-		$validated = ! empty($ga4['debug_validated']);
-		$pending = ! $validated && (string) ($ga4['validation_state'] ?? '') === 'queued';
+		$validated = Ga4Validation::isPassed();
+		$pending = ! $validated && Ga4Validation::isPending();
 		echo '<p class="cf7aiv-ga4-validation-state">Debug validation: '
 			. ($validated
 				? AdminUi::badge('Passed', 'positive')
@@ -211,7 +211,7 @@ final class IntegrationsPage {
 		// GA4's debug endpoint exists to say what is wrong, so its answer is shown
 		// rather than reduced to "failed". Read once, so a fixed problem stops
 		// being reported as if it were current.
-		$ga4Reason = (string) ($ga4['last_validation_error'] ?? '');
+		$ga4Reason = Ga4Validation::error();
 		if (! $validated && $ga4Reason !== '') {
 			echo '<p class="cf7aiv-ga4-validation-reason notice notice-error"><strong>GA4 said:</strong> <code>' . self::e($ga4Reason) . '</code></p>';
 		}

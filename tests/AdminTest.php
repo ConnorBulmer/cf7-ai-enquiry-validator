@@ -648,8 +648,26 @@ $_POST=['_wpnonce'=>'nonce','cf7aiv'=>['destinations'=>['ga4'=>['measurement_id'
 
 $saved['destinations']['ga4']=['enabled'=>true,'dry_run'=>true,'measurement_id'=>'G-TEST','debug_validated'=>false,'live_enabled'=>false];$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]=$saved;
 $_POST=['_wpnonce'=>'nonce','transition'=>'live'];CF7AIV\Admin\AdminHooks::gaTransition();unset($_POST);$ga=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['ga4'];admin_assert(empty($ga['live_enabled'])&&!empty($ga['dry_run']),'GA4 live enable must remain blocked until debug validation succeeds.');
-$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['ga4']['debug_validated']=true;
+// The validation result lives in its own option, because a background job
+// writing into the shared settings array lost the race against page loads that
+// rewrite that array wholesale. The live gate reads the same source of truth.
+CF7AIV\Admin\Ga4Validation::passed();
 $_POST=['_wpnonce'=>'nonce','transition'=>'live'];CF7AIV\Admin\AdminHooks::gaTransition();unset($_POST);$ga=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['ga4'];admin_assert(!empty($ga['live_enabled'])&&empty($ga['dry_run']),'Separately nonced GA4 transition may enable live only after debug validation.');
+
+// A pass applies to the credentials it was made against, so changing either must
+// withdraw it. Otherwise a validated pass would silently vouch for a new secret.
+CF7AIV\Admin\Ga4Validation::passed();
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['ga4']=['enabled'=>true,'dry_run'=>false,'measurement_id'=>'G-NEW','live_enabled'=>true];
+$_POST=['_wpnonce'=>'nonce','cf7aiv'=>['destinations'=>['ga4'=>['enabled'=>'1','measurement_id'=>'G-CHANGED']]]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
+admin_assert(! CF7AIV\Admin\Ga4Validation::isPassed(),'Changing the measurement ID must withdraw a previous validation pass.');
+
+CF7AIV\Admin\Ga4Validation::passed();
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['destinations']['ga4']=['enabled'=>true,'dry_run'=>false,'measurement_id'=>'G-CHANGED','live_enabled'=>true];
+$_POST=['_wpnonce'=>'nonce','cf7aiv'=>['destinations'=>['ga4'=>['enabled'=>'1','measurement_id'=>'G-CHANGED']],'secrets'=>['ga4_api_secret'=>'another-secret']]];CF7AIV\Admin\AdminHooks::saveSettings();unset($_POST);
+admin_assert(! CF7AIV\Admin\Ga4Validation::isPassed(),'Replacing the API secret must withdraw a previous validation pass.');
+
+// Restore a passing state so any later assertions see the expected baseline.
+CF7AIV\Admin\Ga4Validation::passed();
 
 $_POST=['_wpnonce'=>'nonce','mode'=>'legal_basis_override','reason'=>'Approved documented legitimate-interest assessment.'];CF7AIV\Admin\AdminHooks::saveConsent();unset($_POST);$override=$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['consent']['override']??[];admin_assert(($override['administrator_id']??0)===77&&($override['reason']??'')!==''&&strtotime((string)($override['date']??''))!==false,'Consent override must persist administrator, timestamp, and reason audit fields.');
 $overrideAudit=$GLOBALS['admin_options']['cf7aiv_consent_override_audit']??[];admin_assert(count($overrideAudit)===1&&($overrideAudit[0]['administrator_id']??0)===77,'Legal-basis overrides must append to a dedicated durable audit option.');

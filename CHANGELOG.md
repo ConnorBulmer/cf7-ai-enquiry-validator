@@ -2,6 +2,19 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.30 — 2026-08-08
+
+- Fixed the GA4 validation result being lost. It was written into the main
+  settings array, which `Plugin::ensureSettings()` rewrites in full on every
+  page load, so the background job's "passed" was overwritten by any request
+  that had read the array moments earlier. The activity log recorded a pass
+  while the screen reported "Not validated", which is exactly what happened on a
+  live site. The result now has its own option that nothing else writes, and the
+  write is read back and reported if it does not land.
+- Changed the GA4 live transition and destination readiness to gate on that
+  result, so the safety check and the thing it displays cannot disagree.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.29 — 2026-08-08
 
 - Added a plugin activity log on Tracking Health & Logs. The plugin already

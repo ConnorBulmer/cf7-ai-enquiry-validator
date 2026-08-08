@@ -73,6 +73,25 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.30 a result that survives a page load
+
+Version 0.2.30 fixes the GA4 validation result being lost between the background
+job that produced it and the screen that reports it.
+
+The result was written into the main settings array. `Plugin::ensureSettings()`
+rewrites that array in full on `plugins_loaded`, on every request, so a value
+written asynchronously was overwritten by any request that had read the array
+moments earlier. The symptom was precise and misleading: the activity log
+recorded "Validation passed" while Integrations continued to report "Not
+validated", because both were telling the truth about different copies.
+
+A result produced asynchronously does not belong in a structure that synchronous
+requests rewrite wholesale. It now has its own option, which nothing else
+writes, and the write is read back and reported through the activity log if it
+fails to land. The live transition and destination readiness read the same
+stored result, so the safety gate and the badge cannot disagree. Schema remains
+version 10, so no migration is required.
+
 ### Version 0.2.29 an activity log, and validation off the request
 
 Version 0.2.29 adds a plugin activity log and moves GA4 debug validation into
