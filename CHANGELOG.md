@@ -2,6 +2,40 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.36 — 2026-10-12
+
+- Consent resolvers registered on `cf7aiv_consent_resolvers` now take part in
+  capture. The filter was registered and documented, but capture never read
+  it, so a resolver another plugin added for its consent platform was ignored.
+  Each registered resolver now counts as one more consent source, combined
+  most-restrictively with the posted Consent Mode values, the WordPress Consent
+  API and Complianz. Its denial wins. Its grant counts only where no other
+  source refused. Its "unknown" means no answer for that key, so a resolver
+  that only knows marketing consent does not block analytics. A resolver, or
+  the filter itself, that throws records consent as unknown, which holds
+  conversions back instead of letting a broken integration through.
+- Destinations registered on `cf7aiv_destinations` can now send. Readiness was
+  judged only for the four built-in keys, so any other destination was gated
+  "destination not configured" on every item. A destination that implements
+  the new `CF7AIV\Contracts\DestinationReadinessInterface` now declares
+  whether it is configured (`isConfigured`), whether an enquiry carries the
+  identifiers it needs (`signalsReady`), and which consent keys it requires
+  under the "respect" mode (`requiredConsent`). A destination that does not
+  implement it stays blocked, an answer that throws counts as "no", and an
+  empty or unrecognised consent list falls back to requiring analytics and ad
+  consent. Built-in destinations are judged exactly as before, whatever object
+  is registered under their key. Tracking Health's per-item diagnosis uses the
+  same rules.
+- Uninstall with "Delete on uninstall" now also removes the activity log
+  (`cf7aiv_event_log`), the GA4 validation result (`cf7aiv_ga4_validation`),
+  the cached AI usage totals and the per-administrator scan, connection-test
+  and examples transients.
+- Added a developer guide in `docs/developer/` covering architecture, every
+  subsystem, the data model, the queue, testing and checklists for common
+  changes. Rewrote the README as an overview of the whole plugin; the detailed
+  per-release notes it carried are in `docs/RELEASE-NOTES.md`.
+- Schema version 10 is unchanged; no migration is required.
+
 ## 0.2.35 — 2026-10-12
 
 - Fixed retries never running. `Queue` treated any matching Action Scheduler

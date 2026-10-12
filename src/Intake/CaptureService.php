@@ -8,6 +8,7 @@ use CF7AIV\Domain\ClientSignals;
 use CF7AIV\Hooks;
 use CF7AIV\Infrastructure\Crypto;
 use CF7AIV\Infrastructure\Settings;
+use Throwable;
 
 final class CaptureService {
 	public function __construct(private readonly ItemRepository $items = new ItemRepository()) {}
@@ -38,7 +39,18 @@ final class CaptureService {
 		if (function_exists('cmplz_has_consent')) {
 			$signals['complianz'] = ['ad_storage' => cmplz_has_consent('marketing'), 'ad_user_data' => cmplz_has_consent('marketing'), 'analytics_storage' => cmplz_has_consent('statistics')];
 		}
-		$consent = (new ConsentResolver())->resolve(new ClientSignals($signals));
+		$resolvers = [];
+		if (function_exists('apply_filters')) {
+			try {
+				$resolvers = (array) apply_filters('cf7aiv_consent_resolvers', []);
+			} catch (Throwable $error) {
+				// A filter that throws is a broken consent integration; record its
+				// answer as unknown rather than capture as though it had none.
+				if (function_exists('error_log')) { error_log('[CF7AIV intake] cf7aiv_consent_resolvers failed; consent is recorded as unknown: ' . $error->getMessage()); }
+				$signals['resolver:filter'] = array_fill_keys(ConsentResolver::KEYS, 'unknown');
+			}
+		}
+		$consent = (new ConsentResolver())->resolveWith(new ClientSignals($signals), $resolvers);
 		$diagnostics = AttributionDiagnostics::inspect($attribution, $consent->states, AttributionDiagnostics::gaIdentityNeeded(function_exists('get_option') ? (array) get_option(Settings::OPTION, []) : []));
 		$submissionId = isset($attribution['submission_id']) ? (string) $attribution['submission_id'] : '';
 		if ($submissionId === '' && method_exists($submission, 'get_posted_data_hash')) { $submissionId = (string) $submission->get_posted_data_hash(); }

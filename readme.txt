@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.35
+Stable tag: 0.2.36
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,13 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.36 =
+* Consent resolvers registered by other plugins on `cf7aiv_consent_resolvers` now take part in capture. Each counts as one more consent source, combined most-restrictively with the built-in ones: its denial wins, its grant counts only where nothing else refused, and a resolver that fails records consent as unknown. Previously the filter was never read.
+* Destinations registered by other plugins can now send. A destination that implements the new `DestinationReadinessInterface` declares whether it is configured, whether an enquiry carries the identifiers it needs, and which consent it requires. Previously every such destination was gated as not configured. Built-in destinations are unchanged.
+* Uninstall with "Delete on uninstall" now also removes the activity log, the GA4 validation result and the plugin's cached and per-administrator transients.
+* Adds a developer guide (`docs/developer/`) and a rewritten README; detailed release notes move to `docs/RELEASE-NOTES.md`.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.35 =
 * Fixes retries never running. A classification that hit a timeout or rate limit, or a delivery a destination asked to retry, scheduled its retry from inside the job that failed, and the queue counted that running job as the retry and dropped it.

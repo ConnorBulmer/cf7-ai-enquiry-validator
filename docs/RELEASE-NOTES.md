@@ -3,6 +3,38 @@
 Detailed notes for each release, moved here from the project README. For a
 shorter summary of every version see [CHANGELOG.md](../CHANGELOG.md).
 
+## Version 0.2.36 extension points that work
+
+Version 0.2.36 makes two documented extension points work for other plugins,
+and finishes uninstall cleanup.
+
+A consent resolver added on `cf7aiv_consent_resolvers` was registered but
+never consulted: capture always used the built-in resolver. Capture now asks
+every registered resolver and treats each answer as one more consent source,
+combined most-restrictively with Consent Mode, the WordPress Consent API and
+Complianz. A denial from any source wins. A grant from a resolver counts only
+where no other source refused, and a key the resolver does not decide is left
+to the other sources. A resolver that throws records every key as unknown, so
+under the default "respect" consent mode nothing is sent on its account. The
+browser collector still needs one of the built-in consent sources to store
+attribution; a resolver only affects the consent recorded at submission.
+
+A destination added on `cf7aiv_destinations` could never send, because the
+delivery worker judged readiness only for GA4, server-side GTM, Microsoft UET
+and the webhook. A registered destination can now implement
+`CF7AIV\Contracts\DestinationReadinessInterface` to answer three questions:
+is it configured, does this enquiry carry the identifiers it needs, and which
+consent keys must be granted. Each answer fails closed. A destination that
+does not implement the interface, or throws, is still gated, and a destination
+cannot declare that it needs no consent. Built-in destination keys are judged
+from settings as before, even if another object is registered under them.
+
+Uninstall with **Delete on uninstall** now removes the activity log, the GA4
+validation result and the plugin's transients as well.
+
+This release also adds the developer guide in `docs/developer/` and the
+rewritten README. Schema version 10 is unchanged.
+
 ## Version 0.2.35 measure, test and learn
 
 Version 0.2.35 fixes retries never running: a job that scheduled its own retry

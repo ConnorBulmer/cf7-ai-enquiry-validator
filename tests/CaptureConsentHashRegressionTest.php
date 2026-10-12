@@ -7,6 +7,12 @@ $GLOBALS['hash_consent_type'] = false; $GLOBALS['hash_consent_categories'] = ['s
 function add_action(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['cf7aiv_test_actions'][$hook][] = [$callback, $priority, $acceptedArgs]; }
 function add_filter(string $hook, mixed $callback, int $priority = 10, int $acceptedArgs = 1): void { $GLOBALS['cf7aiv_test_filters'][$hook][] = [$callback, $priority, $acceptedArgs]; }
 function do_action(string $hook, mixed ...$args): void {}
+function apply_filters(string $hook, mixed $value, mixed ...$args): mixed {
+	$callbacks = $GLOBALS['cf7aiv_test_filters'][$hook] ?? [];
+	usort($callbacks, static fn (array $a, array $b): int => $a[1] <=> $b[1]);
+	foreach ($callbacks as [$callback]) { $value = $callback($value, ...$args); }
+	return $value;
+}
 function plugin_dir_url(string $file): string { return 'https://example.test/plugin/'; }
 function as_enqueue_async_action(): int { return 1; }
 function get_option(string $key, mixed $default = false): mixed { return $GLOBALS['hash_options'][$key] ?? $default; }
@@ -51,6 +57,18 @@ foreach (['phoneNumber', 'yourphone', 'mobilephone', 'telefon', 'tel-123'] as $p
 }
 WPCF7_Submission::$posted = ['hotel-booking-ref' => '+44 1234 567890', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
 hash_check($GLOBALS['wpdb']->preparedArgs[9] === null, 'A field that only contains "tel" inside another word is not a phone number.');
+// A resolver registered on cf7aiv_consent_resolvers takes part in capture: its
+// denial withholds the hashes a posted Consent Mode grant would have allowed.
+$GLOBALS['hash_consent_type'] = null;
+add_filter('cf7aiv_consent_resolvers', static function (array $resolvers): array {
+	$resolvers['site_cmp'] = new class implements CF7AIV\Contracts\ConsentResolverInterface {
+		public function key(): string { return 'site_cmp'; }
+		public function resolve(CF7AIV\Domain\ClientSignals $signals): CF7AIV\Domain\ConsentSnapshot { return new CF7AIV\Domain\ConsentSnapshot(['ad_user_data' => 'denied'], 'site_cmp', gmdate('c')); }
+	};
+	return $resolvers;
+}, 20);
+WPCF7_Submission::$posted = $base + ['cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+hash_check($GLOBALS['wpdb']->preparedArgs[8] === null && $GLOBALS['wpdb']->preparedArgs[9] === null, 'A denial from a registered consent resolver must withhold identity hashes at capture.');
 $repositorySource = file_get_contents(dirname(__DIR__) . '/src/Intake/ItemRepository.php');
 hash_check(is_string($repositorySource) && ! str_contains($repositorySource, 'email_hash=COALESCE') && ! str_contains($repositorySource, 'phone_hash=COALESCE'), 'A restrictive duplicate capture must clear previously stored hashes instead of retaining them.');
 echo "PASS CaptureConsentHashRegressionTest\n";

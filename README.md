@@ -22,7 +22,7 @@ afterwards in the background.
 
 | | |
 | --- | --- |
-| Version | 0.2.35 ([changelog](CHANGELOG.md)) |
+| Version | 0.2.36 ([changelog](CHANGELOG.md)) |
 | Requires | WordPress 6.5+, PHP 8.1+, Contact Form 7, Flamingo or CFDB7 |
 | AI providers | DeepSeek (default `deepseek-flash`) or OpenAI (default `gpt-5.4-mini`) |
 | Destinations | Direct GA4, existing server-side GTM, Microsoft UET CAPI, signed webhook |
@@ -446,7 +446,7 @@ It does **not**:
 for f in tests/*Test.php; do php "$f" || break; done     # PHP tests (no Composer/PHPUnit needed)
 node tests/AttributionJsTest.js                          # attribution script tests
 find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l   # lint
-php tools/build-release.php --tag=v0.2.35 --output-dir=dist                       # build the release ZIP
+php tools/build-release.php --tag=v0.2.36 --output-dir=dist                       # build the release ZIP
 ```
 
 The tests are framework-free PHP scripts with fake WordPress functions, so

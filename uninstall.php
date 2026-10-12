@@ -22,3 +22,12 @@ delete_option('cf7aiv_paused_destinations');
 delete_option('cf7aiv_resumed_destinations');
 delete_option('cf7aiv_accuracy_test');
 delete_option('cf7aiv_consent_override_audit');
+delete_option('cf7aiv_event_log');
+delete_option('cf7aiv_ga4_validation');
+
+// Transients: the cached usage totals, and the per-administrator scan,
+// connection-test and examples notices (cf7aiv_*_{user id}), which would
+// otherwise stay in the options table until something read them after expiry.
+delete_transient('cf7aiv_ai_usage_totals');
+$options = isset($wpdb->options) ? (string) $wpdb->options : $wpdb->prefix . 'options';
+$wpdb->query("DELETE FROM `" . esc_sql($options) . "` WHERE option_name LIKE '\\_transient\\_cf7aiv\\_%' OR option_name LIKE '\\_transient\\_timeout\\_cf7aiv\\_%'");

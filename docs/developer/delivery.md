@@ -69,7 +69,8 @@ Gate reasons go through `DiagnosticsService::recordGate()`. That fires
 `DestinationReadiness` is the single place that says whether a destination
 can send.
 
-`configured($key, $settings, $secret)`: the destination is `enabled`, and:
+`configured($key, $settings, $secret, $destination)`: for a built-in key,
+the destination is `enabled` in settings, and:
 
 | Destination | Also requires |
 | --- | --- |
@@ -93,6 +94,21 @@ can send.
 | `microsoft_uet` | `msclkid`; or enhanced matching on, `ad_user_data` granted and a valid email or phone hash |
 | `webhook` | nothing |
 
+Any other key (a destination registered by another plugin) is judged by the
+destination object itself, if it implements
+`Contracts\DestinationReadinessInterface`:
+
+- `configured()` asks `isConfigured()`;
+- `signalsReady()` asks `signalsReady($attribution, $consent)`;
+- `requiredConsent()` asks `requiredConsent()`, keeps only the four known
+  consent keys, and falls back to `analytics_storage` + `ad_storage` when
+  nothing valid is left.
+
+A throw, or a destination that does not implement the interface, counts as
+"not ready". Built-in keys are always judged from settings, whatever object
+is registered under them. `DiagnosticsService::diagnose()` looks up the
+registered object for non-built-in keys and applies the same rules.
+
 `DeliveryHooks::destinations()` registers the built-in destinations from
 settings. A destination that is not enabled is not registered at all. GA4 is
 registered in dry-run mode, or in live mode only when `ga4Live()` is true.
@@ -102,11 +118,15 @@ registered in dry-run mode, or in live mode only when `ga4Live()` is true.
 Consent is checked against the snapshot stored at capture time, not the
 visitor's current state.
 
+`DestinationReadiness::requiredConsent($key, $destination)` lists the keys:
+
 | Destination | Required keys |
 | --- | --- |
 | `ga4` | `analytics_storage` |
 | `microsoft_uet` | `ad_storage` |
-| `server_gtm`, `webhook`, and anything else | `analytics_storage` and `ad_storage` |
+| `server_gtm`, `webhook` | `analytics_storage` and `ad_storage` |
+| A registered destination implementing `DestinationReadinessInterface` | What its `requiredConsent()` declares (known keys only; empty means both) |
+| Any other destination | `analytics_storage` and `ad_storage` |
 
 `ConsentPolicy::evaluate($mode, $actual, $override, $required)` takes one of
 three modes (`settings.consent.mode`):
@@ -259,4 +279,6 @@ on the event ID.
 
 ## Adding a destination
 
-See [Recipes](recipes.md#add-a-destination).
+See [Recipes](recipes.md#add-a-destination), and
+[Extending](../EXTENDING.md#making-a-registered-destination-sendable) for one
+registered by another plugin.

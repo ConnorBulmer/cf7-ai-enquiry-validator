@@ -111,10 +111,10 @@ own option: `Ga4Validation` and `AccuracyTest` show the pattern.
 | --- | --- | --- |
 | `cf7aiv_submission_sources` | `IntakeHooks::registerSources` (`flamingo`, `cfdb7`) | Classification worker, review screen, calibration, health, CLI |
 | `cf7aiv_ai_providers` | `ClassificationHooks::registerProviders` (`deepseek`, `openai`) | Classification worker, setup scan, CLI |
-| `cf7aiv_destinations` | `DeliveryHooks::destinations` (`ga4`, `server_gtm`, `microsoft_uet`, `webhook`) | Delivery worker |
+| `cf7aiv_destinations` | `DeliveryHooks::destinations` (`ga4`, `server_gtm`, `microsoft_uet`, `webhook`) | Delivery worker; `DiagnosticsService::diagnose` (for non-built-in keys) |
 | `cf7aiv_policy_packs` | none (extension point) | `PolicyPackRegistry::all()` |
 | `cf7aiv_site_profile_*` | none (extension points) | `SiteProfileScanner` |
-| `cf7aiv_consent_resolvers` | `IntakeHooks::registerConsentResolvers` | **Nothing reads it yet.** Capture always uses `Intake\ConsentResolver` directly. |
+| `cf7aiv_consent_resolvers` | `IntakeHooks::registerConsentResolvers` (`most_restrictive`) | `CaptureService::capture` → `ConsentResolver::resolveWith` (each extension resolver is one more consent source) |
 
 ### Lifecycle actions the plugin fires
 

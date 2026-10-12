@@ -157,9 +157,16 @@ URL is captured even if the visitor submits before the script has run.
    - the WordPress Consent API (`resolveWordPressConsent`, opt-in type only);
    - Complianz (`cmplz_has_consent`).
 
-   `Intake\ConsentResolver` merges them, *most restrictive wins*: any
-   `denied` gives denied; otherwise any `unknown` gives unknown; otherwise
-   granted.
+   `Intake\ConsentResolver::resolveWith()` merges them, *most restrictive
+   wins*: any `denied` gives denied; otherwise any `unknown` gives unknown;
+   otherwise granted.
+
+   Resolvers registered on `cf7aiv_consent_resolvers` take part as extra
+   sources named `resolver:<key>`. Each receives the same signals and
+   contributes only the keys it decided (`granted` or `denied`); its
+   `unknown` is ignored. A resolver that throws, or a filter that throws,
+   contributes `unknown` for every key, so a broken integration fails closed.
+   The built-in resolver in the filter is skipped, because it always runs.
 4. **Diagnostics:** `AttributionDiagnostics::inspect()` sets
    `attribution_ready`. It lists issues such as `missing_valid_click_identifier`,
    `missing_ga_identity` (only when a GA destination is enabled, see

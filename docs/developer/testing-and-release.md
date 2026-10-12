@@ -111,7 +111,7 @@ release, and a `readme.txt` changelog line.
 ## Building a release
 
 ```bash
-php tools/build-release.php --tag=v0.2.35 --output-dir=dist
+php tools/build-release.php --tag=v0.2.36 --output-dir=dist
 ```
 
 `tools/release-lib.php`:
@@ -140,8 +140,8 @@ You can rerun it for an existing tag from the Actions tab
 (`workflow_dispatch`).
 
 ```bash
-git tag v0.2.35
-git push origin v0.2.35
+git tag v0.2.36
+git push origin v0.2.36
 ```
 
 Never commit credentials, `.env` files or built ZIPs.

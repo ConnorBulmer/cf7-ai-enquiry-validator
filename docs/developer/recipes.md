@@ -118,19 +118,13 @@ the `cf7aiv_ai_providers` filter. See [Extending](../EXTENDING.md#ai-providers).
 
 ## Add a destination
 
-**From another plugin:** implement `DestinationInterface` and register it with
-`cf7aiv_destinations`. It must have a published mapping to receive anything.
-See [Extending](../EXTENDING.md#destinations).
-
-Be aware that three built-in checks do not know about third-party destinations:
-
-- `DestinationReadiness::configured()` returns `false` for unknown keys;
-- `signalsReady()` returns `false`;
-- consent requires both `analytics_storage` and `ad_storage`.
-
-A third-party destination will therefore be gated as
-`destination_not_configured` until `DestinationReadiness` learns about it.
-Making that pluggable is open work.
+**From another plugin:** implement `DestinationReadinessInterface` (which
+extends `DestinationInterface`) and register it with `cf7aiv_destinations`.
+The interface's `isConfigured()`, `signalsReady()` and `requiredConsent()`
+take the place of the settings-based checks below. A destination that
+implements only `DestinationInterface` is always gated
+`destination_not_configured`. It also needs a published, enabled mapping. See
+[Extending](../EXTENDING.md#making-a-registered-destination-sendable).
 
 **Inside this plugin:**
 
@@ -142,9 +136,8 @@ Making that pluggable is open work.
      or your own).
 2. Register it in `DeliveryHooks::destinations()` (only when enabled).
 3. Update `DestinationReadiness`: `KEYS`, `configured()` and `signalsReady()`.
-4. Set its required consent keys in the `match` in `DeliveryWorker::process()`
-   and in the matching list in `DiagnosticsService` (both say which consent
-   each destination needs).
+4. Set its required consent keys in `DestinationReadiness::requiredConsent()`.
+   The delivery worker and `DiagnosticsService` both read them from there.
 5. Settings:
    - default `destinations.<key> = ['enabled' => false, 'dry_run' => true]`;
    - add the key to the destination loops in `SettingsSanitizer::sanitize()`,

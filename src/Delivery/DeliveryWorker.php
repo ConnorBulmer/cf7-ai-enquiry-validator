@@ -59,11 +59,11 @@ final class DeliveryWorker {
 			if (! $mapping instanceof DeliveryMapping || ! $mapping->isPublished()) { $this->gate($itemId, $destinationKey, 'mapping_not_published'); continue; }
 			if ($this->store->isPaused($destinationKey)) { $this->gate($itemId, $destinationKey, 'destination_paused'); continue; }
 			$destination = $destinations[$destinationKey] ?? null;
-			if (! $destination instanceof DestinationInterface || ! DestinationReadiness::configured($destinationKey, $settings, $this->credentialResolver)) { $this->gate($itemId, $destinationKey, 'destination_not_configured'); continue; }
-			$required = match ($destinationKey) { 'ga4' => ['analytics_storage'], 'microsoft_uet' => ['ad_storage'], default => ['analytics_storage', 'ad_storage'] };
+			if (! $destination instanceof DestinationInterface || ! DestinationReadiness::configured($destinationKey, $settings, $this->credentialResolver, $destination)) { $this->gate($itemId, $destinationKey, 'destination_not_configured'); continue; }
+			$required = DestinationReadiness::requiredConsent($destinationKey, $destination);
 			try { $decision = ConsentPolicy::evaluate((string) ($settings['consent']['mode'] ?? 'respect'), is_array($consent) ? $consent : [], (array) ($settings['consent']['override'] ?? []), $required); } catch (Throwable) { $this->gate($itemId, $destinationKey, 'consent_evaluation_failed'); continue; }
 			if (! $decision->permitted) { $this->gate($itemId, $destinationKey, 'consent_not_permitted'); continue; }
-			if (! DestinationReadiness::signalsReady($destinationKey, is_array($attribution) ? $attribution : [], $item, $settings, $decision->actual)) { $this->gate($itemId, $destinationKey, 'signals_not_ready'); continue; }
+			if (! DestinationReadiness::signalsReady($destinationKey, is_array($attribution) ? $attribution : [], $item, $settings, $decision->actual, $destination)) { $this->gate($itemId, $destinationKey, 'signals_not_ready'); continue; }
 			$enhanced = ! empty($settings['privacy']['enhanced_matching']) && ($decision->actual['ad_user_data'] ?? 'unknown') === 'granted';
 			$event = EnvelopeBuilder::build($item, $mapping, is_array($attribution) ? $attribution : [], $decision->actual, $enhanced, $decision->audit);
 			$delivery = $this->store->claim($itemId, $mapping, $event);

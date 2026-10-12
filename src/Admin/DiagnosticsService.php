@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CF7AIV\Admin;
 
 use CF7AIV\Classification\Redactor;
+use CF7AIV\Contracts\DestinationInterface;
 use CF7AIV\Delivery\ConsentPolicy;
 use CF7AIV\Delivery\DestinationReadiness;
 use CF7AIV\Delivery\WpMappingRepository;
@@ -104,12 +105,9 @@ final class DiagnosticsService {
 		if ($tier !== '') {
 			foreach ((new WpMappingRepository())->publishedForTier($tier) as $mapping) {
 				$destinationKey = $mapping->destinationKey;
-				$ready = $this->destinationReady($destinationKey, $settings);
-				$required = match ($destinationKey) {
-					'ga4' => ['analytics_storage'],
-					'microsoft_uet' => ['ad_storage'],
-					default => ['analytics_storage', 'ad_storage'],
-				};
+				$destination = in_array($destinationKey, DestinationReadiness::KEYS, true) ? null : $this->registeredDestination($destinationKey);
+				$ready = $this->destinationReady($destinationKey, $settings, $destination);
+				$required = DestinationReadiness::requiredConsent($destinationKey, $destination);
 				$consentDecision = null;
 				try {
 					$consentDecision = ConsentPolicy::evaluate((string) ($settings['consent']['mode'] ?? 'respect'), $consent, (array) ($settings['consent']['override'] ?? []), $required);
@@ -117,7 +115,7 @@ final class DiagnosticsService {
 					$consentDecision = null;
 				}
 				$permitted = $consentDecision !== null && $consentDecision->permitted;
-				$signalsReady = $this->signalsReady($destinationKey, $attribution, $row, $settings, $consent);
+				$signalsReady = $this->signalsReady($destinationKey, $attribution, $row, $settings, $consent, $destination);
 				$mappings[] = [
 					'key' => $mapping->key,
 					'version' => $mapping->version,
@@ -208,7 +206,9 @@ final class DiagnosticsService {
 	/** @return list<array<string,mixed>> */
 	private function mappingReadiness(object $wpdb): array { $table = $wpdb->prefix . 'cf7aiv_mappings'; $rows = $wpdb->get_results("SELECT tier_id,destination_key,COUNT(*) AS total FROM {$table} WHERE status='published' AND enabled=1 GROUP BY tier_id,destination_key", $this->arrayConstant()); $result = []; foreach (is_array($rows) ? $rows : [] as $row) { $result[] = ['tier_id' => (string) ($row['tier_id'] ?? ''), 'destination' => (string) ($row['destination_key'] ?? ''), 'published_enabled' => (int) ($row['total'] ?? 0)]; } return $result; }
 	/** @param array<string,mixed> $settings */
-	private function destinationReady(string $key, array $settings): bool { return DestinationReadiness::configured($key, $settings, fn (string $name): string => $this->secret($name)); }
+	private function destinationReady(string $key, array $settings, ?DestinationInterface $destination = null): bool { return DestinationReadiness::configured($key, $settings, fn (string $name): string => $this->secret($name), $destination); }
+	/** A destination another plugin registered under this key, looked up only for keys that are not built in. */
+	private function registeredDestination(string $key): ?DestinationInterface { try { $destinations = function_exists('apply_filters') ? (array) apply_filters('cf7aiv_destinations', []) : []; } catch (Throwable) { return null; } $destination = $destinations[$key] ?? null; return $destination instanceof DestinationInterface ? $destination : null; }
 	private function secret(string $name): string { try { return trim(Crypto::secret($name)); } catch (Throwable) { return ''; } }
 	private function isPaused(string $key): bool { $paused = function_exists('get_option') ? (array) get_option('cf7aiv_paused_destinations', []) : []; return isset($paused[$key]); }
 	/** @return array{0:array<string,mixed>,1:array<string,scalar>,2:list<string>} */
@@ -224,5 +224,5 @@ final class DiagnosticsService {
 	/** @param array<string,mixed> $consent @return array<string,string> */
 	private function safeStates(array $consent): array { $result = []; foreach ($consent as $key => $value) { if (is_scalar($value) && preg_match('/^[a-z_]{1,40}$/', (string) $key) === 1) { $result[(string) $key] = substr((string) $value, 0, 40); } } return $result; }
 	/** @param array<string,mixed> $attribution @param array<string,mixed> $item @param array<string,mixed> $settings @param array<string,scalar> $consent */
-	private function signalsReady(string $key, array $attribution, array $item, array $settings, array $consent): bool { return DestinationReadiness::signalsReady($key, $attribution, $item, $settings, $consent); }
+	private function signalsReady(string $key, array $attribution, array $item, array $settings, array $consent, ?DestinationInterface $destination = null): bool { return DestinationReadiness::signalsReady($key, $attribution, $item, $settings, $consent, $destination); }
 }

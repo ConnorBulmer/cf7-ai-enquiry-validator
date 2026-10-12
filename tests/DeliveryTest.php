@@ -611,4 +611,65 @@ cf7aiv_delivery_assert(str_contains((string) $uetOauth->error, 'invalid_token'),
 $uetText = CF7AIV\Destinations\MicrosoftUetResponseClassifier::classify(new CF7AIV\Infrastructure\HttpResponse(401, '{"error":"Bearer hidden-secret raw@example.test"}'), 'local-stable-event');
 cf7aiv_delivery_assert(! str_contains((string) $uetText->error, 'hidden-secret') && ! str_contains((string) $uetText->error, 'example'), 'Free-text Microsoft errors must not be retained.');
 
+// A destination registered by another plugin can send once it declares, through
+// DestinationReadinessInterface, that it is configured and the item is ready.
+$crmMapping = CF7AIV\Delivery\DeliveryMapping::fromArray([
+	'key' => 'high-crm', 'version' => '1', 'tier_id' => 'high_value_care',
+	'destination_key' => 'crm', 'event_name' => 'qualified_lead', 'value' => 100,
+	'currency' => 'GBP', 'status' => 'published', 'enabled' => true,
+]);
+$crmDestination = static fn (bool|Throwable $configured = true, bool $ready = true, mixed $consentKeys = ['analytics_storage']): CF7AIV\Contracts\DestinationReadinessInterface => new class ($configured, $ready, $consentKeys) implements CF7AIV\Contracts\DestinationReadinessInterface {
+	public int $calls = 0;
+	public array $signalsSeen = [];
+	public function __construct(private bool|Throwable $configured, private bool $ready, private mixed $consentKeys) {}
+	public function key(): string { return 'crm'; }
+	public function send(CF7AIV\Domain\ConversionEvent $event): CF7AIV\Domain\DeliveryResult { $this->calls++; return new CF7AIV\Domain\DeliveryResult(true, false, 'crm-1'); }
+	public function isConfigured(): bool { if ($this->configured instanceof Throwable) { throw $this->configured; } return $this->configured; }
+	public function signalsReady(array $attribution, array $consent): bool { $this->signalsSeen = [$attribution, $consent]; return $this->ready; }
+	public function requiredConsent(): array { return $this->consentKeys; }
+};
+$plainCrm = new class implements CF7AIV\Contracts\DestinationInterface {
+	public int $calls = 0;
+	public function key(): string { return 'crm'; }
+	public function send(CF7AIV\Domain\ConversionEvent $event): CF7AIV\Domain\DeliveryResult { $this->calls++; return new CF7AIV\Domain\DeliveryResult(true); }
+};
+$crmRun = static function (CF7AIV\Contracts\DestinationInterface $destination, array $settings = []) use ($item, $crmMapping, $attribution, $consent, $testCredentials): array {
+	$store = new CF7AIVDeliveryMemoryStore();
+	$GLOBALS['cf7aiv_fired_actions'] = [];
+	(new CF7AIV\Delivery\DeliveryWorker(
+		$store,
+		static fn (): array => $item,
+		static fn (): array => [$crmMapping],
+		static fn (): array => ['crm' => $destination],
+		static fn (): array => array_replace_recursive(['consent' => ['mode' => 'respect'], 'privacy' => ['enhanced_matching' => false]], $settings),
+		static fn (): array => [$attribution, $consent],
+		static function (): void {},
+		$testCredentials,
+	))->process(42);
+	$gates = [];
+	foreach ($GLOBALS['cf7aiv_fired_actions'] as [$hook, $arguments]) { if ($hook === 'cf7aiv_delivery_gate') { $gates[] = $arguments[2]; } }
+	return [$store, $gates];
+};
+[, $gates] = $crmRun($plainCrm);
+cf7aiv_delivery_assert($plainCrm->calls === 0 && $gates === ['destination_not_configured'], 'A registered destination that declares no readiness must stay blocked as not configured.');
+$ready = $crmDestination();
+[$crmStore, $gates] = $crmRun($ready);
+cf7aiv_delivery_assert($ready->calls === 1 && count($crmStore->records) === 1 && $gates === [], 'A registered destination that declares itself configured and ready must receive the conversion.');
+cf7aiv_delivery_assert($ready->signalsSeen[0] === $attribution && $ready->signalsSeen[1] === $consent, 'A registered destination must be asked about readiness with the captured attribution and actual consent.');
+foreach ([[false, 'destination_not_configured'], [new RuntimeException('misconfigured'), 'destination_not_configured']] as [$configured, $expected]) {
+	$destination = $crmDestination($configured);
+	[, $gates] = $crmRun($destination);
+	cf7aiv_delivery_assert($destination->calls === 0 && $gates === [$expected], 'A registered destination that is not configured, or throws when asked, must not send.');
+}
+$notReady = $crmDestination(true, false);
+[, $gates] = $crmRun($notReady);
+cf7aiv_delivery_assert($notReady->calls === 0 && $gates === ['signals_not_ready'], 'A registered destination whose signals are not ready must be gated.');
+foreach ([['ad_storage'], [], 'not a list', ['made_up_consent']] as $declared) {
+	$destination = $crmDestination(true, true, $declared);
+	[, $gates] = $crmRun($destination);
+	cf7aiv_delivery_assert($destination->calls === 0 && $gates === ['consent_not_permitted'], 'Denied ad consent must block a destination that requires it, and an empty or unrecognised consent list must fall back to requiring analytics and ad consent.');
+}
+cf7aiv_delivery_assert(CF7AIV\Delivery\DestinationReadiness::requiredConsent('ga4', $crmDestination(true, true, ['ad_storage'])) === ['analytics_storage'], 'A registered object cannot change the consent a built-in destination key requires.');
+cf7aiv_delivery_assert(! CF7AIV\Delivery\DestinationReadiness::configured('ga4', ['destinations' => ['ga4' => ['enabled' => false]]], $testCredentials, $crmDestination()), 'A built-in key is judged from its settings, whatever object is registered under it.');
+
 echo "PASS DeliveryTest\n";

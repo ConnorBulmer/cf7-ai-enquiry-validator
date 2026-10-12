@@ -75,6 +75,39 @@ cf7aiv_intake_assert($consent->states['ad_storage'] === 'denied', 'Consent confl
 cf7aiv_intake_assert($consent->states['analytics_storage'] === 'granted', 'Unopposed grants must remain granted.');
 cf7aiv_intake_assert(! $consent->permitsAdvertising(), 'A denied advertising state must block advertising permission.');
 
+// Resolvers registered on cf7aiv_consent_resolvers count as more consent sources.
+$fixedResolver = static fn (array $states, string $key = 'fixed'): CF7AIV\Contracts\ConsentResolverInterface => new class ($states, $key) implements CF7AIV\Contracts\ConsentResolverInterface {
+	public array $seen = [];
+	public function __construct(private array $states, private string $name) {}
+	public function key(): string { return $this->name; }
+	public function resolve(ClientSignals $signals): CF7AIV\Domain\ConsentSnapshot { $this->seen = $signals->signals; return new CF7AIV\Domain\ConsentSnapshot($this->states, $this->name, gmdate('c')); }
+};
+$throwingResolver = new class implements CF7AIV\Contracts\ConsentResolverInterface {
+	public function key(): string { return 'broken'; }
+	public function resolve(ClientSignals $signals): CF7AIV\Domain\ConsentSnapshot { throw new RuntimeException('consent platform unreachable'); }
+};
+$noSignals = new ClientSignals([]);
+$googleGranted = new ClientSignals(['google' => ['ad_storage' => 'granted', 'analytics_storage' => 'granted', 'ad_user_data' => 'granted', 'ad_personalization' => 'granted']]);
+$cmp = $fixedResolver(['ad_storage' => 'granted', 'analytics_storage' => 'granted', 'ad_user_data' => 'granted', 'ad_personalization' => 'unknown'], 'cookie-platform');
+$withCmp = (new ConsentResolver())->resolveWith($noSignals, ['cookie_platform' => $cmp]);
+cf7aiv_intake_assert($withCmp->states['ad_storage'] === 'granted' && $withCmp->states['analytics_storage'] === 'granted', 'A grant from a registered resolver must count where no built-in source had an answer.');
+cf7aiv_intake_assert($withCmp->states['ad_personalization'] === 'unknown', 'A key the resolver did not decide must stay unknown.');
+cf7aiv_intake_assert($withCmp->source === 'resolver:cookie_platform', 'The resolver must be named in the consent source for diagnostics.');
+$marketingDenied = (new ConsentResolver())->resolveWith($googleGranted, ['cmp' => $fixedResolver(['ad_storage' => 'denied', 'analytics_storage' => 'unknown', 'ad_user_data' => 'unknown', 'ad_personalization' => 'unknown'])]);
+cf7aiv_intake_assert($marketingDenied->states['ad_storage'] === 'denied', 'A denial from a registered resolver must override a built-in grant.');
+cf7aiv_intake_assert($marketingDenied->states['analytics_storage'] === 'granted', 'A resolver that only knows marketing must not block analytics.');
+$cannotOverride = (new ConsentResolver())->resolveWith(new ClientSignals(['wordpress' => ['ad_storage' => 'denied']]), ['cmp' => $fixedResolver(['ad_storage' => 'granted'])]);
+cf7aiv_intake_assert($cannotOverride->states['ad_storage'] === 'denied', 'A resolver grant must never override a denial from another source.');
+$broken = (new ConsentResolver())->resolveWith($googleGranted, ['broken' => $throwingResolver]);
+cf7aiv_intake_assert($broken->states['ad_storage'] === 'unknown' && $broken->states['analytics_storage'] === 'unknown', 'A resolver that throws must hold consent at unknown, not let built-in grants through.');
+$ignored = (new ConsentResolver())->resolveWith($googleGranted, ['most_restrictive' => new ConsentResolver(), 'junk' => 'not a resolver', 7 => null]);
+cf7aiv_intake_assert($ignored->states === (new ConsentResolver())->resolve($googleGranted)->states && $ignored->source === 'google', 'The built-in resolver and non-resolvers in the filter must not change the result.');
+$seenBy = $fixedResolver(['ad_storage' => 'granted']);
+(new ConsentResolver())->resolveWith($googleGranted, ['seen' => $seenBy]);
+cf7aiv_intake_assert($seenBy->seen === $googleGranted->signals, 'Registered resolvers must receive the captured consent signals.');
+$twins = (new ConsentResolver())->resolveWith($noSignals, ['Same' => $fixedResolver(['ad_storage' => 'granted']), 'same' => $fixedResolver(['ad_storage' => 'denied'])]);
+cf7aiv_intake_assert($twins->states['ad_storage'] === 'denied', 'Two resolvers whose names sanitise alike must both be counted.');
+
 $names = FieldNames::all();
 cf7aiv_intake_assert(in_array('cf7aiv_gclid', $names, true), 'Canonical hidden fields must include gclid.');
 cf7aiv_intake_assert(in_array('cf7aiv_ad_user_data', $names, true), 'Canonical hidden fields must include Google Consent Mode v2 values.');

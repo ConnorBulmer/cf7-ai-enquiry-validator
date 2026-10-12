@@ -163,6 +163,10 @@ When it is, it drops all seven tables and deletes these options:
 - `cf7aiv_resumed_destinations`
 - `cf7aiv_accuracy_test`
 - `cf7aiv_consent_override_audit`
+- `cf7aiv_event_log`
+- `cf7aiv_ga4_validation`
 
-It does not yet delete `cf7aiv_event_log` or `cf7aiv_ga4_validation`.
-`tests/UninstallTest.php` covers it. Add any new option or table to both.
+It also deletes the `cf7aiv_ai_usage_totals` transient. A `LIKE` query on the
+options table removes the per-administrator transients
+(`_transient_cf7aiv_*` and their timeouts). `tests/UninstallTest.php` covers
+it. Add any new option, transient or table to both.
