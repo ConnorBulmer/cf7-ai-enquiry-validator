@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.34
+Stable tag: 0.2.35
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,17 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.35 =
+* Fixes retries never running. A classification that hit a timeout or rate limit, or a delivery a destination asked to retry, scheduled its retry from inside the job that failed, and the queue counted that running job as the retry and dropped it.
+* Adds an accuracy test on Policy Lab: re-run up to 100 reviewed enquiries against a draft or published policy and any provider, model and reasoning level, and see the result beside production's predictions for the same enquiries. Only fields the AI was already given are sent again.
+* Adds "learn from corrections": the descriptions reviewers write when correcting a classification can be added, as examples, to a new draft policy. Nothing changes until the draft is published.
+* Records the provider, model and reasoning level with each classification, and shows accuracy split by them on Overview, with a new missed-leads figure.
+* The review page shows what the AI was given (approved fields, personal details redacted) and the AI's own classification beside any correction. Corrections are chosen from the policy's tiers and outcomes instead of typed, and the review list uses readable labels with fewer columns.
+* Adds a "Test connection" button for the AI provider.
+* A second enquiry from the same person within 30 days, while the first was sent as a conversion, goes to review instead of being sent again automatically. This uses only email or phone hashes already stored.
+* Overview labels failed deliveries correctly and shows AI usage in calls and tokens.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.34 =
 * Fixes live GA4 never sending for a property validated since 0.2.30. Delivery still read the validation flag 0.2.30 stopped writing, while Tracking Health showed the destination ready.

@@ -20,6 +20,9 @@ final class AdminPages {
 			? number_format((float) $quality['ads_precision'] * 100, 1) . "% ({$adsTrue} of {$adsPredicted} predicted Ads-eligible positives)"
 			: 'Unavailable (0 predicted Ads-eligible positives)';
 		$falsePositives = (int) ($quality['false_positives'] ?? 0);
+		$missedText = isset($quality['ads_recall'])
+			? (int) ($quality['missed_leads'] ?? 0) . ' (' . number_format((float) $quality['ads_recall'] * 100, 1) . '% of reviewed Ads-eligible leads were found)'
+			: 'Unavailable (0 reviewed Ads-eligible leads)';
 		$automationMode = (string) ($metrics['automation_mode'] ?? 'shadow');
 		$queueAge = is_numeric($metrics['queue_age_seconds'] ?? null) ? (int) $metrics['queue_age_seconds'] : null;
 		$distributionPanels = '';
@@ -39,6 +42,7 @@ final class AdminPages {
 			['label' => 'Exact agreement', 'value' => $exactText],
 			['label' => 'Ads precision', 'value' => $adsText],
 			['label' => 'False positives', 'value' => (string) $falsePositives],
+			['label' => 'Missed leads', 'value' => $missedText],
 		];
 		$perTierRows = [];
 		foreach ((array) ($quality['per_tier'] ?? []) as $tier => $counts) {
@@ -52,6 +56,7 @@ final class AdminPages {
 		$qualityBody = $reviewed === 0
 			? AdminUi::emptyState('No human-reviewed enquiries yet.') . AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
 			: AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
+				. self::profileTable((array) ($metrics['quality_by_profile'] ?? []))
 				. self::confusionMatrix((array) ($quality['confusion_matrix'] ?? []))
 				. ($perTierRows === [] ? AdminUi::emptyState('No reviewed tiers yet.') : AdminUi::labelCountTable('Reviewed per-tier counts', $perTierRows));
 		$pausedRows = [];
@@ -80,11 +85,36 @@ final class AdminPages {
 					? ['href' => 'admin.php?page=cf7aiv-review&review_state=', 'text' => 'See which enquiries are not ready']
 					: null
 			)
-			. AdminUi::metric('API errors', (string) (int) ($metrics['api_errors'] ?? 0), 'Failed delivery attempts.')
+			// This counts deliveries a destination rejected, not AI provider errors;
+			// it was labelled "API errors", which sent people to the wrong place.
+			. AdminUi::metric('Failed deliveries', (string) (int) ($metrics['failed_deliveries'] ?? 0), 'Conversions a destination rejected permanently.')
+			. AdminUi::metric('AI usage', self::usage((array) ($metrics['ai_usage'] ?? [])), 'Provider calls and tokens across all classifications. No currency estimate is inferred.')
 			. AdminUi::metric('Reviewed count', (string) $reviewed, 'Human-reviewed enquiries.')
 			. '</div>';
 		echo '<div class="cf7aiv-panel-grid">' . $distributionPanels . AdminUi::panel('Human-reviewed quality', $qualityBody, 'cf7aiv-quality-panel') . AdminUi::panel('Paused destinations', $pausedBody, 'cf7aiv-paused-destinations-panel') . '</div>';
 		echo self::nav() . '</div>';
+	}
+
+	/**
+	 * Accuracy for each provider, model and reasoning level that has reviewed
+	 * predictions, so a change of setup can be judged on the same terms.
+	 *
+	 * @param array<string,array<string,mixed>> $byProfile
+	 */
+	private static function profileTable(array $byProfile): string {
+		if (count($byProfile) < 1) { return ''; }
+		$percent = static fn (mixed $value): string => is_numeric($value) ? number_format((float) $value * 100, 1) . '%' : '—';
+		$html = '<h3>By AI setup</h3><table class="widefat striped cf7aiv-profile-table">' . AdminUi::caption('Human-reviewed quality by AI setup') . '<thead><tr><th scope="col">AI setup</th><th scope="col">Reviewed</th><th scope="col">Exact agreement</th><th scope="col">Ads precision</th><th scope="col">Missed leads</th></tr></thead><tbody>';
+		foreach ($byProfile as $label => $quality) {
+			$html .= '<tr><th scope="row">' . self::e((string) $label) . '</th><td>' . (int) ($quality['reviewed'] ?? 0) . '</td><td>' . self::e($percent($quality['exact_agreement'] ?? null)) . '</td><td>' . self::e($percent($quality['ads_precision'] ?? null)) . '</td><td>' . (int) ($quality['missed_leads'] ?? 0) . '</td></tr>';
+		}
+		return $html . '</tbody></table><p class="description">"Not recorded" covers classifications made before the setup was recorded with each one.</p>';
+	}
+
+	/** @param array<string,int> $usage */
+	private static function usage(array $usage): string {
+		$tokens = (int) ($usage['input_tokens'] ?? 0) + (int) ($usage['output_tokens'] ?? 0);
+		return number_format((int) ($usage['calls'] ?? 0)) . ' calls, ' . number_format($tokens) . ' tokens';
 	}
 
 	public static function reviewQueue(): void {

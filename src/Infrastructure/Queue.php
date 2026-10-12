@@ -25,12 +25,19 @@ final class Queue {
 	 * enquiries submitted ten seconds apart, one classified, three left in
 	 * 'captured' for ever with classification_attempts = 0 and no error recorded.
 	 *
-	 * as_has_scheduled_action() does compare arguments, so it gives the
-	 * per-item deduplication that was intended.
+	 * Only a waiting job counts. as_has_scheduled_action() also matches the job
+	 * that is running right now, so a job that schedules its own retry - a
+	 * classification that hit a timeout or a rate limit, a delivery the
+	 * destination asked to retry - was told it was already queued, and the retry
+	 * was dropped without trace. The item sat in "error" for good.
 	 *
 	 * @param array<int|string, mixed> $arguments
 	 */
 	private static function alreadyQueued(string $hook, array $arguments, string $group): bool {
+		if (function_exists('as_get_scheduled_actions')) {
+			$waiting = as_get_scheduled_actions(['hook' => $hook, 'args' => $arguments, 'group' => $group, 'status' => 'pending', 'per_page' => 1], 'ids');
+			return is_array($waiting) && $waiting !== [];
+		}
 		return function_exists('as_has_scheduled_action')
 			&& as_has_scheduled_action($hook, $arguments, $group) === true;
 	}

@@ -65,7 +65,7 @@ final class WpClassificationItemStore implements ClassificationItemStoreInterfac
 			], $result->evidence), JSON_THROW_ON_ERROR),
 			'missing_evidence_json' => json_encode($result->missingEvidence, JSON_THROW_ON_ERROR),
 			'exclusion_json' => json_encode($result->exclusionCodes, JSON_THROW_ON_ERROR),
-			'provider_usage_json' => json_encode($result->providerUsage, JSON_THROW_ON_ERROR),
+			'provider_usage_json' => json_encode($result->providerProfile === [] ? $result->providerUsage : $result->providerUsage + ['profile' => $result->providerProfile], JSON_THROW_ON_ERROR),
 			'summary' => $result->summary, 'last_error' => null,
 			'updated_at' => function_exists('current_time') ? current_time('mysql', true) : gmdate('Y-m-d H:i:s'),
 		];

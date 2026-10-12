@@ -89,7 +89,7 @@ abstract class JsonProvider implements AIProviderInterface {
 				}
 				$text = trim($this->extractText($body));
 				if ($text === '') { throw new InvalidArgumentException('Provider returned empty content.'); }
-				return ResultValidator::fromJson($text, $request)->withProviderUsage($usage);
+				return ResultValidator::fromJson($text, $request)->withProviderUsage($usage)->withProviderProfile($this->profile($reasoning));
 			} catch (JsonException|InvalidArgumentException $error) {
 				$lastError = $error;
 			}
@@ -113,6 +113,15 @@ abstract class JsonProvider implements AIProviderInterface {
 	 */
 	protected function assertComplete(array $body): void {}
 
+	/**
+	 * The provider, model and reasoning level a call used.
+	 *
+	 * @return array<string,string>
+	 */
+	protected function profile(bool $reasoning): array {
+		return [];
+	}
+
 	/** Answer allowance plus the thinking allowance for this effort. */
 	protected function tokenBudget(string $reasoningEffort, int $answerTokens): int {
 		return $answerTokens + (self::REASONING_ALLOWANCE[$reasoningEffort] ?? 0);
@@ -122,6 +131,34 @@ abstract class JsonProvider implements AIProviderInterface {
 	protected function requestTimeout(int $configured, ?string $reasoningEffort): int {
 		$floor = self::REASONING_TIMEOUT_FLOOR[$reasoningEffort ?? ''] ?? 0;
 		return max(5, min(Settings::MAX_PROVIDER_TIMEOUT, max($configured, $floor)));
+	}
+
+	/**
+	 * Make the smallest possible call, to prove the credential, URL and model work.
+	 *
+	 * The site scan was the only way to find out, and it is slow, queued and
+	 * reports through the activity log. This answers in a second or two, and its
+	 * failure names the HTTP status and the provider's own reason.
+	 */
+	public function testConnection(): void {
+		$response = $this->transportForTest();
+		if ($response->status >= 200 && $response->status < 300) { return; }
+		$reason = '';
+		$body = json_decode($response->body, true);
+		if (is_array($body)) {
+			$message = $body['error']['message'] ?? $body['error'] ?? $body['message'] ?? '';
+			$reason = is_string($message) ? trim($message) : '';
+		}
+		$text = 'HTTP ' . $response->status . ($reason !== '' ? ': ' . substr($reason, 0, 200) : '');
+		if ($response->status === 0 || $response->status === 408 || $response->status === 429 || $response->status >= 500) {
+			throw new TransientProviderException('The provider did not answer the connection test (' . $text . ').');
+		}
+		throw new PermanentProviderException('The provider rejected the connection test (' . $text . ').');
+	}
+
+	/** The connection test request: one short instruction, no reasoning, a tiny answer. */
+	protected function transportForTest(): HttpResponse {
+		throw new PermanentProviderException('This provider does not support a connection test.');
 	}
 
 	private function validateStatus(HttpResponse $response): void {

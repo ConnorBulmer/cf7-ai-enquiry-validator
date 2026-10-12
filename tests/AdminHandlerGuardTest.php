@@ -142,7 +142,7 @@ namespace {
 		'cf7aiv_policy_import', 'cf7aiv_policy_publish', 'cf7aiv_save_mapping', 'cf7aiv_mapping_publish',
 		'cf7aiv_mapping_enable', 'cf7aiv_mapping_disable', 'cf7aiv_validate_ga4', 'cf7aiv_test_microsoft',
 		'cf7aiv_setup', 'cf7aiv_setup_scan', 'cf7aiv_setup_suggestion', 'cf7aiv_backfill',
-		'cf7aiv_resume_destination',
+		'cf7aiv_resume_destination', 'cf7aiv_test_provider', 'cf7aiv_accuracy_test', 'cf7aiv_accuracy_cancel', 'cf7aiv_corrections_to_examples',
 	];
 	sort($expected);
 	$registered = array_keys($posted);

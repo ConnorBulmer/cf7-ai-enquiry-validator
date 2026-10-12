@@ -458,6 +458,41 @@ foreach (['deepseek', 'openai'] as $key) {
 }
 unset($GLOBALS['provider_test_options']);
 
+// ─── Each result records the setup that produced it ──────────────────────────
+
+$profileTransport = new ProviderTimeoutCaptureTransport('deepseek');
+$profiled = (new CF7AIV\Providers\DeepSeekProvider($profileTransport, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-flash', 30, 'standard'))->classify($mockRequest);
+provider_assert($profiled->providerProfile === ['provider' => 'deepseek', 'model' => 'deepseek-flash', 'reasoning' => 'standard'], 'A DeepSeek result must record its provider, model and reasoning level.');
+$verified = (new CF7AIV\Providers\DeepSeekProvider(new ProviderTimeoutCaptureTransport('deepseek'), 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-flash', 30, 'off'))->classifyWithReasoning($mockRequest);
+provider_assert(($verified->providerProfile['reasoning'] ?? '') === 'deep', 'A verification result must record the deep reasoning it used.');
+$openProfiled = (new CF7AIV\Providers\OpenAIProvider(new ProviderTimeoutCaptureTransport('openai'), 'key', 'https://api.openai.com/v1/responses', 'gpt-5.4-mini', 30, 'deep'))->classify($mockRequest);
+provider_assert($openProfiled->providerProfile === ['provider' => 'openai', 'model' => 'gpt-5.4-mini', 'reasoning' => 'deep'], 'An OpenAI result must record its provider, model and reasoning level.');
+provider_assert($profiled->withProviderUsage(['calls' => 3])->providerProfile === $profiled->providerProfile, 'Merging verification usage must keep the profile.');
+
+// ─── Connection test ─────────────────────────────────────────────────────────
+
+final class ProviderConnectionTransport implements CF7AIV\Infrastructure\HttpTransportInterface {
+	/** @var list<array<string,mixed>> */ public array $requests = [];
+	public function __construct(private readonly int $status, private readonly string $body = '{}') {}
+	public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse {
+		$this->requests[] = ['url' => $url, 'timeout' => $arguments['timeout'] ?? null, 'payload' => json_decode((string) $arguments['body'], true)];
+		return new CF7AIV\Infrastructure\HttpResponse($this->status, $this->body);
+	}
+}
+$okTransport = new ProviderConnectionTransport(200);
+(new CF7AIV\Providers\DeepSeekProvider($okTransport, 'key', 'https://api.deepseek.com/chat/completions', 'deepseek-flash', 300, 'deep'))->testConnection();
+$testPayload = $okTransport->requests[0]['payload'] ?? [];
+provider_assert($okTransport->requests[0]['timeout'] === 20 && ($testPayload['thinking']['type'] ?? '') === 'disabled' && ($testPayload['max_tokens'] ?? 0) <= 8 && ($testPayload['model'] ?? '') === 'deepseek-flash', 'The connection test must be one tiny, non-reasoning call with a short limit, whatever the configured effort and timeout.');
+$rejected = null;
+try { (new CF7AIV\Providers\DeepSeekProvider(new ProviderConnectionTransport(401, '{"error":{"message":"Authentication Fails, Your api key is invalid","type":"authentication_error"}}'), 'key'))->testConnection(); } catch (Throwable $error) { $rejected = $error; }
+provider_assert($rejected instanceof CF7AIV\Providers\PermanentProviderException && str_contains($rejected->getMessage(), 'HTTP 401') && str_contains($rejected->getMessage(), 'api key is invalid'), 'A rejected connection test must name the status and the provider\'s reason.');
+$busy = null;
+try { (new CF7AIV\Providers\OpenAIProvider(new ProviderConnectionTransport(503), 'key'))->testConnection(); } catch (Throwable $error) { $busy = $error; }
+provider_assert($busy instanceof CF7AIV\Providers\TransientProviderException && str_contains($busy->getMessage(), 'HTTP 503'), 'A provider outage must read as temporary.');
+$openTest = new ProviderConnectionTransport(200);
+(new CF7AIV\Providers\OpenAIProvider($openTest, 'key', 'https://api.openai.com/v1/responses', 'gpt-5.4-mini', 300, 'deep'))->testConnection();
+provider_assert(($openTest->requests[0]['payload']['reasoning']['effort'] ?? '') === 'none' && ($openTest->requests[0]['payload']['store'] ?? true) === false, 'The OpenAI connection test must switch reasoning off where the model allows and keep store=false.');
+
 // ─── An unfinished reply is not malformed output ─────────────────────────────
 
 foreach ([

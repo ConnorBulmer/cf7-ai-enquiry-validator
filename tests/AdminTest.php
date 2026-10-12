@@ -60,6 +60,14 @@ $metrics = CF7AIV\Admin\CalibrationMetrics::fromRows($reviewedRows);
 admin_assert($metrics['reviewed'] === 4, 'Every human-labelled row must count once.');
 admin_assert($metrics['false_positives'] === 1, 'A predicted Ads opportunity corrected away is a false positive.');
 admin_assert(abs($metrics['ads_precision'] - 0.5) < 0.0001, 'Ads precision must be true Ads positives divided by predicted Ads positives.');
+// Row 3 is a real lead the AI rated secondary: a missed lead.
+admin_assert($metrics['missed_leads'] === 1 && abs($metrics['ads_recall'] - 0.5) < 0.0001, 'A reviewed Ads-eligible lead the AI did not mark Ads-eligible is a missed lead.');
+$profiled = $reviewedRows;
+$profiled[0]['provider_usage_json'] = json_encode(['calls' => 1, 'profile' => ['provider' => 'deepseek', 'model' => 'deepseek-flash', 'reasoning' => 'deep']]);
+$profiled[1]['provider_usage_json'] = json_encode(['calls' => 1, 'profile' => ['provider' => 'deepseek', 'model' => 'deepseek-flash', 'reasoning' => 'deep']]);
+$profiled[2]['provider_usage_json'] = json_encode(['calls' => 1, 'profile' => ['provider' => 'openai', 'model' => 'gpt-5.4-mini', 'reasoning' => 'standard']]);
+$byProfile = CF7AIV\Admin\CalibrationMetrics::byProfile($profiled);
+admin_assert(($byProfile['DeepSeek · deepseek-flash · deep reasoning']['reviewed'] ?? 0) === 2 && ($byProfile['OpenAI · gpt-5.4-mini · standard reasoning']['missed_leads'] ?? 0) === 1 && ($byProfile['Not recorded']['reviewed'] ?? 0) === 1, 'Accuracy must split by the provider, model and reasoning level recorded with each prediction.');
 admin_assert(($metrics['confusion_matrix']['primary_opportunity']['excluded'] ?? 0) === 1, 'Confusion matrix must retain prediction and reviewer truth.');
 admin_assert(abs($metrics['exact_agreement'] - 0.5) < 0.0001 && ($metrics['per_tier']['ads_primary']['reviewed'] ?? 0) === 2, 'Agreement and per-tier counts must use only human-reviewed rows.');
 $adminCalibrationSource=new class implements CF7AIV\Contracts\SubmissionSourceInterface{public function key():string{return 'test';}public function get(string $reference):?array{return null;}public function iterate(array $arguments=[]):iterable{return []; }public function available():bool{return true;}};
@@ -720,6 +728,36 @@ $overrideAudit=$GLOBALS['admin_options']['cf7aiv_consent_override_audit']??[];ad
 
 $_POST=['_wpnonce'=>'nonce','mapping'=>['key'=>'admin-map','version'=>'v1','tier_id'=>'high_value_care','destination_key'=>'ga4','event_name'=>'qualify_lead','value'=>'10','currency'=>'GBP','status'=>'published','enabled'=>'1']];CF7AIV\Admin\AdminHooks::saveMapping();unset($_POST);
 $_POST=['_wpnonce'=>'nonce','mapping_key'=>'admin-map','version'=>'v1'];CF7AIV\Admin\AdminHooks::mappingPublish();CF7AIV\Admin\AdminHooks::mappingEnable();CF7AIV\Admin\AdminHooks::mappingDisable();unset($_POST);$mappingSql=json_encode($GLOBALS['wpdb']->queries);admin_assert(str_contains($mappingSql,'admin-map')&&str_contains($mappingSql,"SET status='published'")&&str_contains($mappingSql,'SET enabled=CASE')&&str_contains($mappingSql,'SET enabled=0')&&substr_count($mappingSql,'START TRANSACTION')===3&&substr_count($mappingSql,'COMMIT')===3,'Mappings must save as drafts and require explicit atomic publish, enable, and disable transitions.');
+
+// The AI connection test reports through the Integrations page, once.
+final class AdminTestProvider { public bool $fail = false; public function testConnection(): void { if ($this->fail) { throw new CF7AIV\Providers\PermanentProviderException('The provider rejected the connection test (HTTP 401: invalid key token=abc123).'); } } }
+$adminTestProvider = new AdminTestProvider();
+add_filter('cf7aiv_ai_providers', static fn (array $providers): array => array_merge($providers, ['deepseek' => $adminTestProvider]));
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['selected'] = 'deepseek';
+$_POST=['_wpnonce'=>'nonce'];CF7AIV\Admin\AdminHooks::testProvider();unset($_POST);
+admin_assert(($GLOBALS['admin_redirect']??'')==='https://example.test/wp-admin/admin.php?page=cf7aiv-integrations&tab=provider','The connection test must return to the provider tab.');
+ob_start();CF7AIV\Admin\IntegrationsPage::render();$providerTestPage=ob_get_clean();
+admin_assert(str_contains($providerTestPage,'cf7aiv-provider-test-passed')&&str_contains($providerTestPage,'Connected to DeepSeek'),'A passed connection test must say so.');
+admin_assert(str_contains($providerTestPage,'form="cf7aiv-provider-test-form"')&&str_contains($providerTestPage,'<form id="cf7aiv-provider-test-form"')&&str_contains($providerTestPage,'value="cf7aiv_test_provider"'),'Integrations must offer a connection test outside the settings form.');
+ob_start();CF7AIV\Admin\IntegrationsPage::render();$providerTestAgain=ob_get_clean();
+admin_assert(!str_contains($providerTestAgain,'cf7aiv-provider-test-passed'),'A connection test result must be shown once.');
+$adminTestProvider->fail = true;
+$_POST=['_wpnonce'=>'nonce'];CF7AIV\Admin\AdminHooks::testProvider();unset($_POST);
+ob_start();CF7AIV\Admin\IntegrationsPage::render();$providerTestFailed=ob_get_clean();
+admin_assert(str_contains($providerTestFailed,'cf7aiv-provider-test-failed')&&str_contains($providerTestFailed,'HTTP 401')&&!str_contains($providerTestFailed,'abc123'),'A failed connection test must name the status, with credentials redacted.');
+ob_start();CF7AIV\Admin\AdminPages::overview();$usageOverview=ob_get_clean();
+admin_assert(str_contains($usageOverview,'Failed deliveries')&&!str_contains($usageOverview,'API errors')&&str_contains($usageOverview,'AI usage')&&str_contains($usageOverview,' calls, '),'Overview must label failed deliveries correctly and show AI usage.');
+
+// Policy Lab shows the latest accuracy test next to production's figures.
+$GLOBALS['admin_options'][CF7AIV\Admin\AccuracyTest::OPTION]=['id'=>'run1','state'=>'complete','started_at'=>'2026-10-12T09:00:00+00:00','completed_at'=>'2026-10-12T09:05:00+00:00','policy'=>['id'=>2,'key'=>'global','version'=>'draft-2','status'=>'draft'],'profile'=>['provider'=>'deepseek','model'=>'deepseek-flash','reasoning'=>'deep'],'items'=>[
+	['id'=>11,'policy_id'=>1,'predicted_tier_id'=>'care_information','predicted_outcome_id'=>'secondary_opportunity','reviewed_tier_id'=>'residential_care','reviewed_outcome_id'=>'primary_opportunity'],
+	['id'=>12,'policy_id'=>1,'predicted_tier_id'=>'spam','predicted_outcome_id'=>'spam','reviewed_tier_id'=>'spam','reviewed_outcome_id'=>'spam'],
+],'next'=>2,'results'=>['11'=>['tier'=>'residential_care','outcome'=>'primary_opportunity','tokens'=>120],'12'=>['error'=>'PermanentProviderException: token=abc123 rejected']],'error'=>''];
+ob_start();CF7AIV\Admin\AdminPages::policyLab();$accuracyPage=ob_get_clean();
+admin_assert(str_contains($accuracyPage,'Test against reviewed enquiries')&&str_contains($accuracyPage,'Last test: complete')&&str_contains($accuracyPage,'DeepSeek · deepseek-flash · deep reasoning'),'Policy Lab must show the latest accuracy test and the setup it used.');
+admin_assert(str_contains($accuracyPage,'Exact agreement with reviewers')&&str_contains($accuracyPage,'<td>0.0%</td><td>100.0%</td>'),'The test must be shown beside production on the same enquiries.');
+admin_assert(str_contains($accuracyPage,'1 could not be classified')&&!str_contains($accuracyPage,'abc123'),'Test errors must be counted and redacted.');
+unset($GLOBALS['admin_options'][CF7AIV\Admin\AccuracyTest::OPTION]);
 
 // Settings saved by an older version are upgraded once, on the real load path.
 $savedUpgradeOptions=$GLOBALS['admin_options'];

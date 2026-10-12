@@ -712,3 +712,36 @@
 	gap: var(--cf7aiv-space-2);
 	margin: var(--cf7aiv-space-3) 0;
 }
+
+/* Review detail: the classification facts and the enquiry as the AI saw it. */
+.cf7aiv-admin .cf7aiv-review-facts,
+.cf7aiv-admin .cf7aiv-ai-input {
+	display: grid;
+	grid-template-columns: minmax(8rem, max-content) 1fr;
+	gap: 0.35rem 1rem;
+	margin: 0 0 1rem;
+}
+
+.cf7aiv-admin .cf7aiv-review-facts dt,
+.cf7aiv-admin .cf7aiv-ai-input dt {
+	font-weight: 600;
+}
+
+.cf7aiv-admin .cf7aiv-review-facts dd,
+.cf7aiv-admin .cf7aiv-ai-input dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.cf7aiv-admin .cf7aiv-ai-input {
+	padding: 0.75rem;
+	border: 1px solid #dcdcde;
+	background: #f6f7f7;
+}
+
+@media (max-width: 600px) {
+	.cf7aiv-admin .cf7aiv-review-facts,
+	.cf7aiv-admin .cf7aiv-ai-input {
+		grid-template-columns: 1fr;
+	}
+}

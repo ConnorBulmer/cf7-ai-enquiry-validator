@@ -40,22 +40,38 @@ final class ClassificationHooks {
 	 */
 	public static function registerProviders(array $providers): array {
 		$settings = Settings::withDefaults(function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : []);
-		$transport = new WordPressHttpTransport();
-		$timeout = (int) ($settings['providers']['timeout'] ?? Settings::DEFAULT_PROVIDER_TIMEOUT);
-		$providers['deepseek'] = new DeepSeekProvider(
-			$transport, Crypto::secret('deepseek_api_key'),
-			(string) ($settings['providers']['deepseek_base_url'] ?? 'https://api.deepseek.com/chat/completions'),
-			(string) ($settings['providers']['deepseek_model'] ?? DeepSeekProvider::DEFAULT_MODEL),
-			$timeout,
-			(string) ($settings['providers']['deepseek_reasoning_effort'] ?? 'off'),
-		);
-		$providers['openai'] = new OpenAIProvider(
-			$transport, Crypto::secret('openai_api_key'),
-			(string) ($settings['providers']['openai_base_url'] ?? 'https://api.openai.com/v1/responses'),
-			(string) ($settings['providers']['openai_model'] ?? 'gpt-5.4-mini'),
-			$timeout,
-			(string) ($settings['providers']['openai_reasoning_effort'] ?? 'unsupported'),
-		);
+		foreach (['deepseek', 'openai'] as $key) {
+			$providers[$key] = self::buildProvider($key, (array) $settings['providers']);
+		}
 		return $providers;
+	}
+
+	/**
+	 * Build one built-in provider from provider settings.
+	 *
+	 * The accuracy test passes settings with a different model or reasoning level
+	 * here, so what it measures is built exactly as production builds it.
+	 *
+	 * @param array<string,mixed> $providerSettings The providers section of the settings.
+	 */
+	public static function buildProvider(string $key, array $providerSettings): DeepSeekProvider|OpenAIProvider {
+		$transport = new WordPressHttpTransport();
+		$timeout = (int) ($providerSettings['timeout'] ?? Settings::DEFAULT_PROVIDER_TIMEOUT);
+		if ($key === 'openai') {
+			return new OpenAIProvider(
+				$transport, Crypto::secret('openai_api_key'),
+				(string) ($providerSettings['openai_base_url'] ?? 'https://api.openai.com/v1/responses'),
+				(string) ($providerSettings['openai_model'] ?? 'gpt-5.4-mini'),
+				$timeout,
+				(string) ($providerSettings['openai_reasoning_effort'] ?? 'unsupported'),
+			);
+		}
+		return new DeepSeekProvider(
+			$transport, Crypto::secret('deepseek_api_key'),
+			(string) ($providerSettings['deepseek_base_url'] ?? 'https://api.deepseek.com/chat/completions'),
+			(string) ($providerSettings['deepseek_model'] ?? DeepSeekProvider::DEFAULT_MODEL),
+			$timeout,
+			(string) ($providerSettings['deepseek_reasoning_effort'] ?? 'off'),
+		);
 	}
 }

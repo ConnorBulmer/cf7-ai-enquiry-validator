@@ -20,4 +20,5 @@ delete_option('cf7aiv_secrets');
 delete_option('cf7aiv_schema_version');
 delete_option('cf7aiv_paused_destinations');
 delete_option('cf7aiv_resumed_destinations');
+delete_option('cf7aiv_accuracy_test');
 delete_option('cf7aiv_consent_override_audit');

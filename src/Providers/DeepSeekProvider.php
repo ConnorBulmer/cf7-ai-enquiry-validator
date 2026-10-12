@@ -72,6 +72,10 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 
 	public function key(): string { return 'deepseek'; }
 
+	protected function profile(bool $reasoning): array {
+		return ['provider' => 'deepseek', 'model' => $this->model, 'reasoning' => $reasoning ? 'deep' : $this->reasoningEffort];
+	}
+
 	public function suggestPolicy(PolicySuggestionRequest $request): PolicySuggestionResult {
 		$schema = json_encode(PolicySuggestionResult::jsonSchema($request->allowedSourceRefs()), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		$reasoningEffort = $this->reasoningEffort;
@@ -94,6 +98,20 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		if (! is_array($body)) { throw new PermanentProviderException('DeepSeek returned a malformed suggestion response.'); }
 		$this->assertComplete($body);
 		return PolicySuggestionResult::fromJson(trim($this->extractText($body)));
+	}
+
+	protected function transportForTest(): HttpResponse {
+		return $this->transport->post($this->baseUrl, [
+			'headers' => $this->headers($this->apiKey),
+			'timeout' => 20,
+			'body' => json_encode([
+				'model' => $this->model,
+				'messages' => [['role' => 'user', 'content' => 'Reply with the single word ok.']],
+				'max_tokens' => 8,
+				'thinking' => ['type' => 'disabled'],
+				'temperature' => 0,
+			], JSON_THROW_ON_ERROR),
+		]);
 	}
 
 	public function classifyWithReasoning(ClassificationRequest $request): ClassificationResult {

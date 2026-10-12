@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace CF7AIV\Admin;
 
+use CF7AIV\Classification\ClassificationHooks;
 use CF7AIV\Classification\PolicyRepository;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Delivery\DeliveryMapping;
@@ -15,11 +16,11 @@ use CF7AIV\Infrastructure\Queue;
 use CF7AIV\Infrastructure\WordPressHttpTransport;
 use CF7AIV\Integration\MicrosoftUetTestService;
 use CF7AIV\Providers\DeepSeekProvider;
-use CF7AIV\Providers\OpenAIProvider;
 use InvalidArgumentException;
 
 final class AdminHooks {
 	private const SCAN_OUTCOME_PREFIX = 'cf7aiv_scan_outcome_';
+	private const PROVIDER_TEST_PREFIX = 'cf7aiv_provider_test_';
 	/**
 	 * Every admin_post action this plugin answers, and the method that answers it.
 	 *
@@ -52,6 +53,10 @@ final class AdminHooks {
 		'cf7aiv_setup_suggestion' => 'setupSuggestion',
 		'cf7aiv_backfill' => 'backfill',
 		'cf7aiv_resume_destination' => 'resumeDestination',
+		'cf7aiv_test_provider' => 'testProvider',
+		'cf7aiv_accuracy_test' => 'accuracyTest',
+		'cf7aiv_accuracy_cancel' => 'accuracyCancel',
+		'cf7aiv_corrections_to_examples' => 'correctionsToExamples',
 	];
 
 	private static bool $settingsSave = false;
@@ -65,7 +70,7 @@ final class AdminHooks {
 	public static function register():void{
 		EventLog::register();add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
 		foreach(self::HANDLERS as $action=>$method){add_action('admin_post_'.$action,self::guarded([self::class,$method]));}
-		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_setup_scan_job',[self::class,'runSetupScan'],10,2);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
+		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_setup_scan_job',[self::class,'runSetupScan'],10,2);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);add_action(AccuracyTest::JOB,[AccuracyTest::class,'runJob']);
 	}
 	public static function schedule():void{if(function_exists('wp_next_scheduled')&&function_exists('wp_schedule_event')&&!wp_next_scheduled('cf7aiv_daily_maintenance')){wp_schedule_event(time()+3600,'daily','cf7aiv_daily_maintenance');}}
 	public static function menu():void{
@@ -234,6 +239,59 @@ final class AdminHooks {
 		if($value['state']!=='queued'&&function_exists('delete_transient')){delete_transient($key);}
 		return $value;
 	}
+	public static function accuracyTest():void{
+		$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_accuracy_test');
+		try{$run=(new AccuracyTest())->start((array)($post['accuracy']??[]),function_exists('get_current_user_id')?get_current_user_id():0);}
+		catch(\InvalidArgumentException $error){self::refuse($error->getMessage());return;}
+		EventLog::record('accuracy_test','info','Accuracy test started.',['enquiries'=>(string)count((array)$run['items'])]);
+		self::redirect('admin.php?page=cf7aiv-policy');
+	}
+	public static function correctionsToExamples():void{
+		$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_corrections_to_examples');
+		$ids=array_map('intval',(array)($post['correction_ids']??[]));
+		$version=self::identifier((string)($post['version']??''),gmdate('Ymd-His').'-examples');
+		$administratorId=function_exists('get_current_user_id')?get_current_user_id():0;
+		try{$result=CorrectionExamples::createDraft((int)($post['base_policy_id']??0),$ids,$version,$administratorId);}
+		catch(\InvalidArgumentException|\RuntimeException $error){self::refuse($error->getMessage());return;}
+		EventLog::record('policy','info','Draft created from reviewer corrections.',['version'=>$result['version'],'examples'=>(string)count($result['added'])]);
+		// The reasons for any corrections left out travel with the result, so
+		// the administrator learns why rather than seeing them reappear.
+		if($administratorId>0&&function_exists('set_transient')){set_transient('cf7aiv_examples_notice_'.$administratorId,['added'=>count($result['added']),'version'=>$result['version'],'skipped'=>array_slice($result['skipped'],0,10)],300);}
+		self::redirect('admin.php?page=cf7aiv-policy');
+	}
+	public static function accuracyCancel():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_accuracy_cancel');AccuracyTest::cancel();self::redirect('admin.php?page=cf7aiv-policy');}
+	/**
+	 * Check the saved AI provider settings with one tiny call.
+	 *
+	 * This runs in the request on purpose: it sends a one-word prompt with
+	 * reasoning off and a fixed 20-second limit, so the page cannot hang the way
+	 * a reasoning call could. It tests what is saved, so settings must be saved
+	 * first.
+	 */
+	public static function testProvider():void{
+		$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_provider');
+		$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));
+		$selected=(string)($settings['providers']['selected']??'deepseek');
+		$providers=function_exists('apply_filters')?(array)apply_filters('cf7aiv_ai_providers',[]):[];
+		$provider=$providers[$selected]??null;
+		$outcome=['ok'=>false,'message'=>'The selected provider is not available.'];
+		if(is_object($provider)&&method_exists($provider,'testConnection')){
+			try{$provider->testConnection();$outcome=['ok'=>true,'message'=>'Connected to '.($selected==='openai'?'OpenAI':'DeepSeek').'. The saved key, address and model work.'];}
+			catch(\Throwable $error){$outcome=['ok'=>false,'message'=>DiagnosticsService::describeFailure($error)];}
+		}
+		EventLog::record('provider_test',$outcome['ok']?'info':'error',$outcome['ok']?'Connection test passed.':'Connection test failed. '.$outcome['message'],['provider'=>$selected]);
+		$administratorId=function_exists('get_current_user_id')?get_current_user_id():0;
+		if($administratorId>0&&function_exists('set_transient')){set_transient(self::PROVIDER_TEST_PREFIX.$administratorId,$outcome,300);}
+		self::redirect('admin.php?page=cf7aiv-integrations&tab=provider');
+	}
+	/** Read and clear the current administrator's connection test result. @return array{ok?:bool,message?:string} */
+	public static function takeProviderTest():array{
+		if(!function_exists('get_transient')||!function_exists('get_current_user_id')){return [];}
+		$key=self::PROVIDER_TEST_PREFIX.get_current_user_id();
+		$value=get_transient($key);
+		if(function_exists('delete_transient')){delete_transient($key);}
+		return is_array($value)&&isset($value['ok'],$value['message'])?$value:[];
+	}
 	/**
 	 * Lift an automatic delivery pause.
 	 *
@@ -361,7 +419,7 @@ final class AdminHooks {
 		foreach(self::secretsToClear($input) as $key){if(isset($remaining[$key])){return false;}}
 		return true;
 	}
-	private static function setupService():SetupSuggestionService{$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));$providerSettings=(array)$settings['providers'];$transport=new WordPressHttpTransport();$selected=(string)$providerSettings['selected'];$timeout=(int)$providerSettings['timeout'];$reasoningKey=$selected==='openai'?'openai_reasoning_effort':'deepseek_reasoning_effort';$reasoningEffort=(string)$providerSettings[$reasoningKey];$provider=$selected==='openai'?new OpenAIProvider($transport,Crypto::secret('openai_api_key'),(string)$providerSettings['openai_base_url'],(string)$providerSettings['openai_model'],$timeout,$reasoningEffort):new DeepSeekProvider($transport,Crypto::secret('deepseek_api_key'),(string)$providerSettings['deepseek_base_url'],(string)$providerSettings['deepseek_model'],$timeout,$reasoningEffort);return new SetupSuggestionService(new SiteProfileScanner(),$provider,new SetupSuggestionRepository());}
+	private static function setupService():SetupSuggestionService{$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));$providerSettings=(array)$settings['providers'];$provider=ClassificationHooks::buildProvider((string)$providerSettings['selected'],$providerSettings);return new SetupSuggestionService(new SiteProfileScanner(),$provider,new SetupSuggestionRepository());}
 	/** @return list<array<string,mixed>> */ private static function acceptedSetupSuggestions():array{global $wpdb;if(!isset($wpdb->prefix)||!method_exists($wpdb,'get_results')){return [];}$rows=$wpdb->get_results("SELECT suggestion_type,value_json,provenance_json FROM {$wpdb->prefix}cf7aiv_setup_suggestions WHERE status='accepted' ORDER BY id ASC LIMIT 200",ARRAY_A);return is_array($rows)?$rows:[];}
 	private static function hasPublishedV2Policy():bool{global $wpdb;return isset($wpdb->prefix)&&method_exists($wpdb,'get_var')&&(int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cf7aiv_policies WHERE status='published' AND policy_format='cf7aiv-policy/v2'")>0;}
 	private static function verificationSupported(string $selected):bool{try{$providers=function_exists('apply_filters')?(array)apply_filters('cf7aiv_ai_providers',[]):[];if(isset($providers[$selected])){return $providers[$selected] instanceof VerificationCapableProviderInterface;}return $selected==='deepseek'&&is_a(DeepSeekProvider::class,VerificationCapableProviderInterface::class,true);}catch(\Throwable){return false;}}

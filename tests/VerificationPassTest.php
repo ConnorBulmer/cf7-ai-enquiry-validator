@@ -169,6 +169,7 @@ function verification_run(
 	array $itemOverrides = [],
 	bool $withMapping = true,
 	string $automationMode = 'live',
+	?callable $duplicate = null,
 ): array {
 	static $itemId = 100;
 	$itemId++;
@@ -192,6 +193,7 @@ function verification_run(
 		static fn (string $tierId): array => $withMapping && $tierId === 'website_rebuild'
 			? [new CF7AIV\Delivery\DeliveryMapping('agency-map', 'v1', $tierId, 'ga4', 'qualify_lead', 1.0, 'GBP', 'published', true)]
 			: [],
+		duplicateResolver: $duplicate ?? static fn (): bool => false,
 	);
 	$worker->process($itemId);
 	return [$store, $queue];
@@ -274,5 +276,35 @@ try {
 	$invalidStateRejected = true;
 }
 verify_assert($invalidStateRejected, 'The WordPress item store must reject verification states outside the fixed diagnostic contract.');
+
+// A second enquiry from the same person must not become a second automatic
+// conversion. It goes to a person, marked as a possible duplicate.
+$duplicateProvider = new CF7AIVVerificationProvider($firstResult, $agreeResult);
+$seen = [];
+[$duplicateStore, $duplicateQueue] = verification_run($duplicateProvider, $policies, 'automatic_candidates', ['email_hash' => str_repeat('a', 64)], true, 'live', static function (int $id, array $item) use (&$seen): bool { $seen[] = $item['email_hash'] ?? ''; return true; });
+verify_assert($seen === [str_repeat('a', 64)], 'The duplicate check must be given the item and its stored hash.');
+verify_assert(($duplicateStore->success['evidenceDecision']->state ?? '') === 'needs_review' && ($duplicateStore->success['reviewState'] ?? '') === 'review' && $duplicateQueue === [], 'A likely duplicate must go to review instead of automatic delivery.');
+verify_assert(in_array('possible_duplicate', $duplicateStore->success['result']->ambiguityFlags, true), 'A likely duplicate must be flagged so the reviewer knows why.');
+verify_assert($duplicateProvider->reasoningCalls === 0, 'A likely duplicate must not spend a verification call.');
+$notChecked = 0;
+[, $shadowQueue] = verification_run(new CF7AIVVerificationProvider($firstResult, $agreeResult), $policies, 'off', [], true, 'shadow', static function () use (&$notChecked): bool { $notChecked++; return true; });
+verify_assert($notChecked === 0, 'The duplicate check only applies to enquiries that would be sent automatically.');
+
+// The default check only counts earlier enquiries that were sent or due to be,
+// and "earlier" is strict, so same-second enquiries cannot hold each other back.
+final class CF7AIVDuplicateWpdb {
+	public string $prefix = 'wp_'; public string $sql = '';
+	public function prepare(string $sql, mixed ...$args): string { foreach ($args as $arg) { $sql = preg_replace('/%[ds]/', is_int($arg) ? (string) $arg : "'" . $arg . "'", $sql, 1) ?? $sql; } return $sql; }
+	public function get_var(string $sql): mixed { $this->sql = $sql; return 1; }
+}
+$GLOBALS['wpdb'] = new CF7AIVDuplicateWpdb();
+$recent = new ReflectionMethod(CF7AIV\Classification\ClassificationWorker::class, 'recentEnquiryFromSamePerson');
+verify_assert($recent->invoke(null, 7, ['email_hash' => str_repeat('b', 64), 'phone_hash' => null, 'created_at' => '2026-10-12 09:00:00']) === true, 'A matching earlier enquiry must be reported.');
+$duplicateSql = $GLOBALS['wpdb']->sql;
+verify_assert(str_contains($duplicateSql, "(item.created_at<'2026-10-12 09:00:00' OR (item.created_at='2026-10-12 09:00:00' AND item.id<7))"), 'Only strictly earlier enquiries may count.');
+verify_assert(str_contains($duplicateSql, "review_state IN ('eligible','approved_dispatch')") && str_contains($duplicateSql, "delivery.state IN ('delivered','sending','retrying','pending')"), 'Only enquiries sent, or due to be sent, as conversions may count.');
+$GLOBALS['wpdb']->sql = '';
+verify_assert($recent->invoke(null, 8, ['email_hash' => null, 'phone_hash' => null]) === false && $GLOBALS['wpdb']->sql === '', 'Without a stored hash nothing is looked up.');
+unset($GLOBALS['wpdb']);
 
 echo "PASS VerificationPassTest\n";

@@ -73,6 +73,24 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.35 measure, test and learn
+
+Version 0.2.35 fixes retries never running: a job that scheduled its own retry
+was told the retry already existed, because the queue counted the running job.
+Timed-out classifications and retryable deliveries now retry as intended.
+
+It also adds ways to measure and improve accuracy before anything changes in
+production. Policy Lab can re-run reviewed enquiries against a draft policy or a
+different model and reasoning level, and compare the result with production on
+the same enquiries. Reviewer corrections can become examples in a new draft
+policy. Overview records which setup produced each classification and splits
+accuracy by it, including missed leads.
+
+The review page shows what the AI was given, redacted, and the AI's own answer
+beside any correction. Corrections are chosen from the policy. Integrations
+adds a connection test for the AI provider. Likely duplicates from the same
+person go to review instead of being sent twice. Schema remains version 10.
+
 ### Version 0.2.34 delivery and attribution fixes
 
 Version 0.2.34 fixes two destinations that could not send. Live GA4 never sent

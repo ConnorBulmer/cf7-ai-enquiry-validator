@@ -2,6 +2,58 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.35 — 2026-10-12
+
+- Fixed retries never running. `Queue` treated any matching Action Scheduler
+  action as already queued, including the one currently running. A job that
+  schedules its own retry does exactly that: a classification hitting a
+  timeout, rate limit or provider outage, or a delivery the destination asked
+  to retry. So the retry was dropped, nothing recorded why, and the item stayed
+  in "error" for good. Only waiting actions count as already queued now.
+- Added an accuracy test to Policy Lab. It re-runs up to 25, 50 or 100 of the
+  most recently reviewed live enquiries against a chosen draft or published
+  policy and any provider, model and reasoning level. The table compares
+  exact agreement, Ads precision, false positives and missed leads with
+  production's predictions for the same enquiries. Each enquiry is sent with
+  only the fields the AI was given when it was first classified. Only
+  enquiries classified under the same policy key are used, because production
+  chooses the policy by form. The run is a chain of single-enquiry jobs with
+  one writer, can be cancelled, and reports the tokens it used.
+- Added "learn from corrections" to Policy Lab. Correcting a classification
+  already required a non-identifying description of the enquiry, which was
+  stored and never used. Selected descriptions can now be added to a copy of a
+  policy as examples, saved as a new draft to test and publish. A description
+  naming personal or tracking data, a tier the policy lacks, or a duplicate is
+  left out with a reason. A policy keeps at most 40 examples. The compiled
+  prompt explains examples only when a policy has some, so existing policies
+  compile exactly as before.
+- Each classification now records the provider, model and reasoning level that
+  produced it. Overview splits human-reviewed accuracy by that setup, and adds
+  missed leads: reviewed Ads-eligible leads the AI did not mark Ads-eligible.
+- The review page now shows what the AI was given: only the fields the policy
+  sends to AI, with personal details redacted. It shows the AI's own tier and
+  outcome, plus the current classification once a reviewer has corrected it.
+  The raw source still appears only in advanced mode. Corrections are picked
+  from the policy's tiers and outcomes, and picking a tier selects its outcome.
+  The review list uses the policy's labels and shows the reason in words. The
+  diagnostic columns (evidence, policy, source, consent) are in advanced mode
+  only. The state filter is a list of states instead of a text box.
+- Added a "Test connection" button for the AI provider. It sends one short
+  request with reasoning off and a 20-second limit, and reports the HTTP status
+  and the provider's reason, redacted.
+- A likely duplicate now goes to review instead of being sent automatically:
+  an automatic candidate whose email or phone hash matches an enquiry from the
+  previous 30 days that was sent, or is due to be sent, as a conversion. Only
+  hashes already stored are used, so this applies where enhanced matching is on
+  and consent allowed hashing. The item is flagged `possible_duplicate`.
+- Overview: "API errors" was a count of failed deliveries and is now labelled
+  that way. A new "AI usage" figure shows calls and tokens, cached for ten
+  minutes, and still gives no currency estimate.
+- The site scan, classification and the accuracy test now build providers in
+  one place (`ClassificationHooks::buildProvider`), and live classification and
+  the accuracy test build requests in one place (`RequestFactory`).
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.34 — 2026-10-12
 
 Fixes from a review of intake, delivery and destinations.

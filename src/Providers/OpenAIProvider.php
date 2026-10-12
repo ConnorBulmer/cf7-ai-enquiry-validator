@@ -81,6 +81,10 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 
 	public function key(): string { return 'openai'; }
 
+	protected function profile(bool $reasoning): array {
+		return ['provider' => 'openai', 'model' => $this->model, 'reasoning' => $this->effectiveReasoningEffort() ?? 'unsupported'];
+	}
+
 	public function suggestPolicy(PolicySuggestionRequest $request): PolicySuggestionResult {
 		$effort = $this->effectiveReasoningEffort();
 		$payload = [
@@ -105,6 +109,16 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		if (! is_array($body)) { throw new PermanentProviderException('OpenAI returned a malformed suggestion response.'); }
 		$this->assertComplete($body);
 		return PolicySuggestionResult::fromJson(trim($this->extractText($body)));
+	}
+
+	protected function transportForTest(): HttpResponse {
+		$payload = ['model' => $this->model, 'store' => false, 'input' => 'Reply with the single word ok.', 'max_output_tokens' => 16];
+		if (self::supportsNone($this->model)) { $payload['reasoning'] = ['effort' => 'none']; }
+		return $this->transport->post($this->baseUrl, [
+			'headers' => $this->headers($this->apiKey),
+			'timeout' => 20,
+			'body' => json_encode($payload, JSON_THROW_ON_ERROR),
+		]);
 	}
 
 	protected function send(ClassificationRequest $request, bool $reasoning): HttpResponse {
