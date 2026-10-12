@@ -14,33 +14,49 @@ use CF7AIV\Domain\PolicySuggestionRequest;
 use CF7AIV\Domain\PolicySuggestionResult;
 use CF7AIV\Infrastructure\HttpResponse;
 use CF7AIV\Infrastructure\HttpTransportInterface;
+use CF7AIV\Infrastructure\Settings;
 
 final class DeepSeekProvider extends JsonProvider implements VerificationCapableProviderInterface, PolicySuggestionProviderInterface {
 	/**
-	 * Answer-only allowances, before any reasoning allowance is added.
+	 * DeepSeek-V4.1-Flash, released 10 September 2026.
 	 *
-	 * A v2 classification is the larger of the two answers, not the smaller. It
-	 * must emit nine required fields, and every evidence entry carries an excerpt
-	 * quoted from the enquiry, so the reply grows with how much the enquiry
-	 * actually says. At 900 it was being cut off mid-object and reported as
-	 * "malformed or schema-invalid content", which reads as the model
-	 * misbehaving rather than as a budget that was never large enough.
-	 *
-	 * Observed on a live site: the same enquiry timed out with reasoning enabled
-	 * and returned invalid content with reasoning off, because the two settings
-	 * were failing for two different reasons at once.
+	 * DeepSeek retired V4-Flash on the same day. Its model ID still works, but only
+	 * as a temporary alias that DeepSeek routes to V4.1-Flash, and it can be
+	 * withdrawn without notice.
 	 */
-	private const SUGGESTION_ANSWER_TOKENS = 1500;
-	private const CLASSIFICATION_ANSWER_TOKENS = 1800;
+	public const DEFAULT_MODEL = Settings::DEFAULT_DEEPSEEK_MODEL;
+
+	/**
+	 * Model IDs DeepSeek has retired, which a stored setting is moved off.
+	 *
+	 * deepseek-v4-pro is deliberately absent: it is still a documented model ID,
+	 * and an administrator who chose it should decide when to leave it.
+	 */
+	private const RETIRED_MODELS = ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-chat', 'deepseek-reasoner'];
+
+	/**
+	 * How hard DeepSeek thinks, sent as reasoning_effort.
+	 *
+	 * Enabling thinking without an effort leaves DeepSeek on its default of
+	 * "high", so standard and deep used to differ only in how many tokens they
+	 * were allowed - deep was never asked to think harder. DeepSeek has no medium
+	 * level: it maps medium to high, which makes high the counterpart of OpenAI's
+	 * medium and max the counterpart of OpenAI's high.
+	 */
+	private const REASONING_EFFORT = ['standard' => 'high', 'deep' => 'max'];
 
 	public function __construct(
 		private readonly HttpTransportInterface $transport,
 		private readonly string $apiKey,
 		private readonly string $baseUrl = 'https://api.deepseek.com/chat/completions',
-		private readonly string $model = 'deepseek-v4-flash',
-		private readonly int $timeout = 30,
+		private readonly string $model = self::DEFAULT_MODEL,
+		private readonly int $timeout = Settings::DEFAULT_PROVIDER_TIMEOUT,
 		private readonly string $reasoningEffort = 'off',
 	) {}
+
+	public static function isRetiredModel(string $model): bool {
+		return in_array(strtolower(trim($model)), self::RETIRED_MODELS, true);
+	}
 
 	public static function reasoningOptions(string $model): array {
 		return ['off', 'standard', 'deep'];
@@ -48,8 +64,8 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 
 	public static function reasoningDescription(string $model, string $effort): string {
 		return match ($effort) {
-			'standard' => 'Standard reasoning enables DeepSeek thinking with a bounded JSON output budget.',
-			'deep' => 'Deep reasoning enables a larger bounded DeepSeek thinking budget and may use more tokens.',
+			'standard' => 'Standard reasoning enables DeepSeek thinking at high effort, with its own bounded allowance on top of the JSON answer.',
+			'deep' => 'Deep reasoning enables DeepSeek thinking at maximum effort. It is the most accurate setting and the slowest, and uses the most tokens.',
 			default => 'Reasoning is off; DeepSeek is limited to the bounded structured JSON output budget.',
 		};
 	}
@@ -59,24 +75,18 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	public function suggestPolicy(PolicySuggestionRequest $request): PolicySuggestionResult {
 		$schema = json_encode(PolicySuggestionResult::jsonSchema($request->allowedSourceRefs()), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		$reasoningEffort = $this->reasoningEffort;
-		$thinking = match ($reasoningEffort) {
-			'standard', 'deep' => ['type' => 'enabled'],
-			default => ['type' => 'disabled'],
-		};
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
-				['role' => 'system', 'content' => 'Suggest no more than ' . PolicySuggestionResult::MAX_SUGGESTIONS . ' compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.' . "\nRequired JSON Schema: " . $schema . "\nReturn one valid JSON object matching this schema and no other text."],
+				['role' => 'system', 'content' => 'Suggest no more than ' . PolicySuggestionResult::MAX_SUGGESTIONS . ' compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.' . "\n" . self::UNTRUSTED_PROFILE_RULE . "\nRequired JSON Schema: " . $schema . "\nReturn one valid JSON object matching this schema and no other text."],
 				['role' => 'user', 'content' => $request->providerProfileJson()],
 			],
 			'response_format' => ['type' => 'json_object'],
-			'thinking' => $thinking,
 			'max_tokens' => $this->tokenBudget($reasoningEffort, self::SUGGESTION_ANSWER_TOKENS),
-		];
-		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
+		] + $this->reasoningPayload($reasoningEffort);
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(300, $this->timeout)),
+			'timeout' => $this->requestTimeout($this->timeout, $reasoningEffort),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 		$this->assertSuggestionStatus($response);
@@ -94,24 +104,18 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 		$schema = json_encode(ResultValidator::jsonSchema($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		$guidance = $this->v2JsonGuidance($request);
 		$reasoningEffort = $reasoning ? 'deep' : $this->reasoningEffort;
-		$thinking = match ($reasoningEffort) {
-			'standard', 'deep' => ['type' => 'enabled'],
-			default => ['type' => 'disabled'],
-		};
 		$payload = [
 			'model' => $this->model,
 			'messages' => [
-				['role' => 'system', 'content' => $request->systemPrompt . "\nRequired JSON Schema: " . $schema . $guidance . "\nReturn one valid JSON object matching this schema and no other text."],
+				['role' => 'system', 'content' => $request->systemPrompt . "\n" . self::UNTRUSTED_INPUT_RULE . "\nRequired JSON Schema: " . $schema . $guidance . "\nReturn one valid JSON object matching this schema and no other text."],
 				['role' => 'user', 'content' => json_encode($this->userInput($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)],
 			],
 			'response_format' => ['type' => 'json_object'],
-			'thinking' => $thinking,
 			'max_tokens' => $this->tokenBudget($reasoningEffort, self::CLASSIFICATION_ANSWER_TOKENS),
-		];
-		if ($reasoningEffort === 'off') { $payload['temperature'] = 0; }
+		] + $this->reasoningPayload($reasoningEffort);
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(300, $this->timeout)),
+			'timeout' => $this->requestTimeout($this->timeout, $reasoningEffort),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 	}
@@ -146,27 +150,20 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	}
 
 	/**
-	 * Size max_tokens for the answer and the reasoning separately.
+	 * Thinking, effort and sampling for one request.
 	 *
-	 * DeepSeek counts reasoning tokens against max_tokens, so one flat budget is
-	 * shared between thinking and the JSON answer. At 900 tokens with thinking
-	 * enabled the reasoning could consume the entire allowance and the answer
-	 * came back truncated - or empty - which surfaced as "response is malformed"
-	 * because a JSON object cut in half does not parse. Twenty suggestions carry
-	 * a type, a value and source references each, so the answer alone needs
-	 * roughly what OpenAI is already given for the identical call.
+	 * Thinking is on by default for DeepSeek, so "off" has to be sent rather
+	 * than implied. Temperature is ignored while thinking, so it is only sent
+	 * when it does something.
 	 *
-	 * The answer allowance therefore matches the OpenAI provider for the same
-	 * task, and thinking is granted its own allowance on top rather than
-	 * competing with it.
+	 * @return array<string,mixed>
 	 */
-	private function tokenBudget(string $reasoningEffort, int $answerTokens): int {
-		$reasoningAllowance = match ($reasoningEffort) {
-			'deep' => 8000,
-			'standard' => 3000,
-			default => 0,
-		};
-		return $answerTokens + $reasoningAllowance;
+	private function reasoningPayload(string $reasoningEffort): array {
+		$effort = self::REASONING_EFFORT[$reasoningEffort] ?? null;
+		if ($effort === null) {
+			return ['thinking' => ['type' => 'disabled'], 'temperature' => 0];
+		}
+		return ['thinking' => ['type' => 'enabled'], 'reasoning_effort' => $effort];
 	}
 
 	/**
@@ -174,14 +171,21 @@ final class DeepSeekProvider extends JsonProvider implements VerificationCapable
 	 *
 	 * A truncated answer is not malformed input, it is an exhausted budget, and
 	 * the two need opposite fixes. Without this the JSON decode fails several
-	 * layers away and reports the model as having returned nonsense.
+	 * layers away and reports the model as having returned nonsense, then pays
+	 * for an identical retry that fails the same way.
 	 *
 	 * @param array<string,mixed> $body
 	 */
-	private function assertComplete(array $body): void {
+	protected function assertComplete(array $body): void {
 		$reason = $body['choices'][0]['finish_reason'] ?? '';
 		if ($reason === 'length') {
-			throw new PermanentProviderException('DeepSeek stopped at the token budget before finishing the response (finish_reason: length). Raise the reasoning budget or reduce the request.');
+			throw new PermanentProviderException('DeepSeek stopped at the token budget before finishing the response (finish_reason: length). Choose a lower reasoning setting or send fewer fields.');
+		}
+		if ($reason === 'content_filter') {
+			throw new PermanentProviderException('DeepSeek withheld the response under its content filter (finish_reason: content_filter).');
+		}
+		if ($reason === 'insufficient_system_resource') {
+			throw new TransientProviderException('DeepSeek ended the response early because it was short of capacity (finish_reason: insufficient_system_resource).');
 		}
 	}
 

@@ -73,6 +73,27 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.33 current DeepSeek model, distinct reasoning levels
+
+Version 0.2.33 moves DeepSeek to `deepseek-flash` (DeepSeek-V4.1-Flash).
+DeepSeek retired V4-Flash on 10 September 2026, and its old ID now works only as
+a temporary alias. Saved settings on a retired DeepSeek ID move to the new one
+once.
+
+Standard and deep reasoning now differ in effort, not just in allowance.
+DeepSeek was never sent a `reasoning_effort`, so both used its default. Standard
+now asks for `high` and deep for `max`. Allowances are 8000 and 24000 tokens of
+thinking on top of the answer, for both providers. Providers bill only what is
+used, so this is a ceiling, not a charge.
+
+Classification now uses the configured timeout. It was fixed at 30 seconds
+before, so the 0.2.32 ceiling only reached the site scan. The default is 60
+seconds. Reasoning calls get at least 90 seconds (standard) or 180 seconds
+(deep), within the 300-second ceiling. A reply cut off at its token limit or
+withheld by a content filter is reported as such and is not retried at full cost.
+Both providers are told the enquiry is data to evaluate, never instructions.
+Schema remains version 10, so no migration is required.
+
 ### Version 0.2.32 time and room to think
 
 Version 0.2.32 lets reasoning actually run.
@@ -82,7 +103,8 @@ small, both because a provider call could hang an administrator's request. That
 constraint has been removed rather than worked around: classification, GA4
 validation and now the site scan all run as queued jobs, so no provider call
 happens inside a web request. The ceiling is 300 seconds, and standard and deep
-reasoning receive 3000 and 8000 tokens of thinking on top of the answer.
+reasoning receive 3000 and 8000 tokens of thinking on top of the answer (raised
+again in 0.2.33).
 
 This is a deliberate trade. Reasoning is what lets the model weigh an ambiguous
 enquiry rather than pattern-match it, and these classifications feed advertising

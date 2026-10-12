@@ -51,7 +51,7 @@ final class ReviewService {
 			&& $this->store->approveDispatch($itemId,$administratorId,$reviewedTier,$reviewedOutcome,$expectedRevision)) {
 			$approvalSucceeded=true;
 			$queueResult=($this->dispatch)($itemId);
-			$dispatched=$queueResult===true||(is_int($queueResult)&&$queueResult>0);
+			$dispatched=Queue::accepted($queueResult);
 		}
 		if ($action==='reanalyse') { ($this->reanalyse)($itemId); }
 		$decisionState=$states[$action];$warnings=$this->timingWarningsFor($item);

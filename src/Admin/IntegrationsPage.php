@@ -22,7 +22,7 @@ final class IntegrationsPage {
 		$consent = (array) ($settings['consent'] ?? []);
 		$advanced = ! empty($settings['ui']['advanced_mode']);
 		$selectedProvider = in_array((string) ($providers['selected'] ?? 'deepseek'), ['deepseek', 'openai'], true) ? (string) $providers['selected'] : 'deepseek';
-		$deepSeekModel = (string) ($providers['deepseek_model'] ?? 'deepseek-v4-flash');
+		$deepSeekModel = (string) ($providers['deepseek_model'] ?? DeepSeekProvider::DEFAULT_MODEL);
 		$openAiModel = (string) ($providers['openai_model'] ?? 'gpt-5.4-mini');
 		$selectedModel = $selectedProvider === 'openai' ? $openAiModel : $deepSeekModel;
 		$verificationSupported = self::verificationSupported($selectedProvider);
@@ -79,7 +79,7 @@ final class IntegrationsPage {
 		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2>' . self::inlineError($saveStatus, $activeTab, 'provider') . '<p class="description">Selected provider: ' . self::e($selectedProvider) . '; model: ' . self::e($selectedModel) . '.</p><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]" data-provider-selector>' . self::option('deepseek', $selectedProvider) . self::option('openai', $selectedProvider) . '</select></label></div>';
 		self::providerFields('deepseek', $selectedProvider === 'deepseek', $deepSeekModel, (string) ($providers['deepseek_reasoning_effort'] ?? 'off'), (array) $providers);
 		self::providerFields('openai', $selectedProvider === 'openai', $openAiModel, (string) ($providers['openai_reasoning_effort'] ?? 'unsupported'), (array) $providers);
-		echo '<div class="cf7aiv-form-grid"><label>Timeout <input type="number" min="3" max="300" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? 15) . '"></label></div>';
+		echo '<div class="cf7aiv-form-grid"><label>Timeout (seconds) <input type="number" min="3" max="' . Settings::MAX_PROVIDER_TIMEOUT . '" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? Settings::DEFAULT_PROVIDER_TIMEOUT) . '"></label><p class="description">How long one provider call may run. Standard reasoning is always given at least ' . DeepSeekProvider::REASONING_TIMEOUT_FLOOR['standard'] . ' seconds and deep reasoning at least ' . DeepSeekProvider::REASONING_TIMEOUT_FLOOR['deep'] . ', because a reasoning reply cannot arrive sooner and a call that times out is retried from the start.</p></div>';
 		echo '<p class="description">Higher reasoning effort can increase token use and cost. Optional automatic-candidate verification is a separate second provider call and does not override policy, consent, attribution, mapping, lifecycle, or delivery gates.</p>';
 		echo '<fieldset><legend>Optional verification</legend><div class="cf7aiv-form-grid">';
 		if ($verificationSupported) {

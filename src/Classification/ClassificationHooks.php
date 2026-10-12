@@ -28,22 +28,32 @@ final class ClassificationHooks {
 		if ((int) $itemId > 0) { ClassificationWorker::standard()->process((int) $itemId, $replacePrediction === true, $whitelist); }
 	}
 
-	/** @param array<string, mixed> $providers @return array<string, mixed> */
+	/**
+	 * Build the providers that classification and verification use.
+	 *
+	 * These read the configured timeout like the site scan does. They were
+	 * built with a fixed 30 seconds, so raising the setting changed the scan and
+	 * nothing else, and a deep-reasoning verification pass timed out whatever the
+	 * setting said.
+	 *
+	 * @param array<string, mixed> $providers @return array<string, mixed>
+	 */
 	public static function registerProviders(array $providers): array {
 		$settings = Settings::withDefaults(function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : []);
 		$transport = new WordPressHttpTransport();
+		$timeout = (int) ($settings['providers']['timeout'] ?? Settings::DEFAULT_PROVIDER_TIMEOUT);
 		$providers['deepseek'] = new DeepSeekProvider(
 			$transport, Crypto::secret('deepseek_api_key'),
 			(string) ($settings['providers']['deepseek_base_url'] ?? 'https://api.deepseek.com/chat/completions'),
-			(string) ($settings['providers']['deepseek_model'] ?? 'deepseek-v4-flash'),
-			30,
+			(string) ($settings['providers']['deepseek_model'] ?? DeepSeekProvider::DEFAULT_MODEL),
+			$timeout,
 			(string) ($settings['providers']['deepseek_reasoning_effort'] ?? 'off'),
 		);
 		$providers['openai'] = new OpenAIProvider(
 			$transport, Crypto::secret('openai_api_key'),
 			(string) ($settings['providers']['openai_base_url'] ?? 'https://api.openai.com/v1/responses'),
 			(string) ($settings['providers']['openai_model'] ?? 'gpt-5.4-mini'),
-			30,
+			$timeout,
 			(string) ($settings['providers']['openai_reasoning_effort'] ?? 'unsupported'),
 		);
 		return $providers;

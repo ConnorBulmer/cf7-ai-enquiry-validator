@@ -16,11 +16,11 @@ define('AUTH_KEY', 'foundation-test-auth-key');
 define('SECURE_AUTH_KEY', 'foundation-test-secure-auth-key');
 define('ARRAY_A', 'ARRAY_A');
 
-final class WP_Error {}
+final class WP_Error { public function __construct(private readonly string $code = 'invalid_schedule') {} public function get_error_code(): string { return $this->code; } }
 function plugin_dir_url(string $file): string { return 'https://example.test/wp-content/plugins/cf7-ai-enquiry-validator/'; }
 function plugin_basename(string $file): string { return 'cf7-ai-enquiry-validator/' . basename($file); }
 function load_plugin_textdomain(string $domain, bool $deprecated, string $path): bool { $GLOBALS['foundation_textdomain'] = compact('domain', 'path'); return true; }
-function wp_schedule_single_event(int $timestamp, string $hook, array $arguments, bool $wpError): WP_Error { return new WP_Error(); }
+function wp_schedule_single_event(int $timestamp, string $hook, array $arguments, bool $wpError): WP_Error { return new WP_Error($GLOBALS['foundation_cron_error'] ?? 'invalid_schedule'); }
 
 require_once dirname(__DIR__) . '/cf7-ai-enquiry-validator.php';
 
@@ -32,6 +32,11 @@ cf7aiv_assert(CF7AIV\Hooks::AFTER_CLASSIFICATION === 'cf7aiv_after_classificatio
 cf7aiv_assert(CF7AIV\Hooks::AFTER_REVIEW === 'cf7aiv_after_review', 'Review lifecycle action name must be stable.');
 cf7aiv_assert(CF7AIV\Hooks::AFTER_DELIVERY === 'cf7aiv_after_delivery', 'Delivery lifecycle action name must be stable.');
 cf7aiv_assert(CF7AIV\Infrastructure\Queue::enqueue('cf7aiv_test') === false, 'WP-Cron WP_Error responses must normalize to false.');
+$GLOBALS['foundation_cron_error'] = 'duplicate_event';
+cf7aiv_assert(CF7AIV\Infrastructure\Queue::enqueue('cf7aiv_test') === true, 'WP-Cron refusing an identical pending event means the job is already queued.');
+unset($GLOBALS['foundation_cron_error']);
+cf7aiv_assert(CF7AIV\Infrastructure\Queue::accepted(0) === false && CF7AIV\Infrastructure\Queue::accepted(false) === false, 'An Action Scheduler 0 and a false must both count as a refused enqueue.');
+cf7aiv_assert(CF7AIV\Infrastructure\Queue::accepted(12) === true && CF7AIV\Infrastructure\Queue::accepted(true) === true, 'An action ID or an already-queued true must count as accepted.');
 
 $plaintext = '{"gclid":"test-click-id","landing":"https://example.test/"}';
 $ciphertext = CF7AIV\Infrastructure\Crypto::encrypt($plaintext);

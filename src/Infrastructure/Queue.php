@@ -72,10 +72,21 @@ final class Queue {
 		return false;
 	}
 
+	/** Did an enqueue or schedule call leave the job waiting to run? */
+	public static function accepted(mixed $result): bool {
+		return $result === true || (is_int($result) && $result > 0);
+	}
+
 	private static function normalize(mixed $result): int|bool {
 		if ((function_exists('is_wp_error') && is_wp_error($result)) || (class_exists('WP_Error', false) && $result instanceof \WP_Error)) {
-			return false;
+			// WP-Cron refuses an identical event already due within ten minutes.
+			// The job is waiting to run, which is what the caller asked for, so
+			// this matches Action Scheduler's already-queued answer.
+			return method_exists($result, 'get_error_code') && $result->get_error_code() === 'duplicate_event';
 		}
+		// Action Scheduler reports a failed enqueue as 0, not false. Left as 0, a
+		// caller testing for false treats a job that was never stored as queued.
+		if ($result === 0) { return false; }
 		return is_int($result) || is_bool($result) ? $result : false;
 	}
 }

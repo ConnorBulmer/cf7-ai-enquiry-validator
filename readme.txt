@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.32
+Stable tag: 0.2.33
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,19 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.33 =
+* Moves DeepSeek to its current model, `deepseek-flash` (V4.1-Flash). `deepseek-v4-flash` was retired on 10 September 2026 and survives only as a temporary alias. Saved settings on a retired DeepSeek model ID move to the new one once; `deepseek-v4-pro` and custom models are left alone.
+* Deep reasoning on DeepSeek now asks for maximum effort, and standard asks for high effort explicitly. Before this, both used DeepSeek's default effort and differed only in token allowance.
+* Classification now uses the configured provider timeout. It was fixed at 30 seconds, so the setting only affected the site scan.
+* Raises the default provider timeout from 15 to 60 seconds, and gives reasoning calls a minimum of 90 seconds (standard) or 180 seconds (deep), capped at 300. Saved settings still on the old 15-second default move to 60 once.
+* A site scan the background queue refuses is reported with its reason. It no longer runs a long provider call inside the administrator's request.
+* Reports a reply cut off at the token limit, blocked by a content filter, or ended for lack of provider capacity as exactly that, without paying for an identical retry. Classification previously reported these as malformed content.
+* Tells both providers that enquiry text, and the public site profile used by the site scan, are data and never instructions, so a message cannot steer its own classification.
+* Gives OpenAI the same answer and reasoning allowances as DeepSeek. Its v2 answer allowance was still 900 tokens, and its reasoning budget was shared with the answer.
+* Fixes a failed Action Scheduler enqueue (returned as 0) being treated as queued, which left a site scan or GA4 check that never ran.
+* The Setup page again shows a site scan's result and failure reason, to the administrator who started it. The queued notice no longer reappears after the scan has finished.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.32 =
 * Raises the provider timeout ceiling to 300 seconds now that every provider call runs in a background job.

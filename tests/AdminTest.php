@@ -8,13 +8,17 @@ function add_filter(string $hook, mixed $callback, int $priority = 10, int $acce
 function do_action(string $hook, mixed ...$args): void { $GLOBALS['admin_fired'][] = [$hook,$args]; if ($GLOBALS['admin_throw_action'] === $hook) { throw new RuntimeException('Observer failure.'); } }
 function apply_filters(string $hook, mixed $value, mixed ...$arguments): mixed { foreach($GLOBALS['admin_filters'][$hook]??[] as [$callback]){$value=$callback($value,...$arguments);}return $value; }
 function plugin_dir_url(string $file): string { return 'https://example.test/plugin/'; }
-function as_enqueue_async_action(string $hook='',array $args=[],string $group='',bool $unique=false): int { $GLOBALS['admin_async'][]=compact('hook','args','group','unique'); return 1; }
+function as_enqueue_async_action(string $hook='',array $args=[],string $group='',bool $unique=false): int { if(isset($GLOBALS['admin_async_result'])){return $GLOBALS['admin_async_result'];} $GLOBALS['admin_async'][]=compact('hook','args','group','unique'); return 1; }
 function get_option(string $key, mixed $default = false): mixed { return $GLOBALS['admin_options'][$key] ?? $default; }
 function update_option(string $key, mixed $value, bool $autoload = false): bool { if ($GLOBALS['admin_update_option_failure']) { return false; } if (isset($GLOBALS['admin_option_sanitizers'][$key])) { $value = ($GLOBALS['admin_option_sanitizers'][$key])($value); } $GLOBALS['admin_options'][$key] = $value; return true; }
 function add_option(string $key, mixed $value, string $deprecated = '', bool $autoload = true): bool { $GLOBALS['admin_options'][$key] = $value; return true; }
 function current_user_can(string $capability): bool { return $GLOBALS['admin_allowed']; }
 function wp_verify_nonce(string $nonce, string $action): int|false { return $GLOBALS['admin_nonce_valid'] ? 1 : false; }
 function get_current_user_id(): int { return 77; }
+$GLOBALS['admin_transients'] = [];
+function set_transient(string $key, mixed $value, int $expiration = 0): bool { $GLOBALS['admin_transients'][$key] = $value; return true; }
+function get_transient(string $key): mixed { return $GLOBALS['admin_transients'][$key] ?? false; }
+function delete_transient(string $key): bool { unset($GLOBALS['admin_transients'][$key]); return true; }
 function current_time(string $type, bool $gmt = false): string { return '2026-07-22 12:00:00'; }
 function wp_json_encode(mixed $value, int $flags = 0): string|false { return json_encode($value, $flags); }
 function wp_unslash(mixed $value): mixed { return is_array($value) ? array_map('wp_unslash', $value) : (is_string($value) ? stripslashes($value) : $value); }
@@ -381,10 +385,40 @@ foreach (['pack', 'business_description', 'services', 'audiences', 'primary_defi
 foreach (['exclusion_codes', 'ai_whitelist'] as $optionGroup) {
 	admin_assert(str_contains($setup, 'data-setup-option-group="' . $optionGroup . '"'), "Setup must expose the {$optionGroup} option group for review binding.");
 }
-$_GET=['suggestions'=>'2'];ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanStatus=ob_get_clean();unset($_GET);
-admin_assert(str_contains($setupScanStatus,'<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite">')&&str_contains($setupScanStatus,'Site scan complete.'),'Setup scan results must expose a bounded accessible status without adding a second save workflow.');
-$_GET=['suggestions'=>'2','suggestion_error'=>'1'];ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanFailure=ob_get_clean();unset($_GET);
-admin_assert(str_contains($setupScanFailure,'The site scan could not complete.')&&!str_contains($setupScanFailure,'cf7aiv-setup-status')&&!str_contains($setupScanFailure,'Site scan complete.'),'Setup scan failure must take precedence over a contradictory success status.');
+// The scan runs as a job, so its result reaches Setup through a per-administrator
+// transient rather than the redirect, which leaves before there is a result.
+$GLOBALS['admin_async']=[];$_POST=['_wpnonce'=>'nonce','pack_key'=>'general'];CF7AIV\Admin\AdminHooks::setupScan();unset($_POST);
+admin_assert(($GLOBALS['admin_async'][0]['hook']??'')==='cf7aiv_setup_scan_job'&&($GLOBALS['admin_async'][0]['args']??[])===['general',77],'The site scan must be queued for the administrator who started it.');
+admin_assert(($GLOBALS['admin_redirect']??'')==='https://example.test/wp-admin/admin.php?page=cf7aiv-setup','The scan redirect must not carry a sticky status parameter.');
+admin_assert((($GLOBALS['admin_transients']['cf7aiv_scan_outcome_77']??[])['state']??'')==='queued','A queued scan must be recorded for its administrator.');
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanQueued=ob_get_clean();
+admin_assert(str_contains($setupScanQueued,'Site scan queued.'),'Setup must say the scan is queued while the job has not finished.');
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanStillQueued=ob_get_clean();
+admin_assert(str_contains($setupScanStillQueued,'Site scan queued.'),'A queued scan must stay visible until the job replaces it.');
+$GLOBALS['admin_transients']['cf7aiv_scan_outcome_77']=['state'=>'complete','suggestions'=>2];
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanStatus=ob_get_clean();
+admin_assert(str_contains($setupScanStatus,'<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite">')&&str_contains($setupScanStatus,'Site scan complete. 2 pending suggestions are ready for review.')&&!str_contains($setupScanStatus,'Site scan queued.'),'Setup scan results must expose a bounded accessible status without adding a second save workflow.');
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanAfterShown=ob_get_clean();
+admin_assert(!str_contains($setupScanAfterShown,'Site scan complete.')&&!str_contains($setupScanAfterShown,'Site scan queued.'),'A finished scan result must be shown once, not on every visit.');
+$GLOBALS['admin_transients']['cf7aiv_scan_outcome_77']=['state'=>'failed','diagnostic'=>'PermanentProviderException: DeepSeek suggestion request failed (HTTP 401).'];
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanFailure=ob_get_clean();
+admin_assert(str_contains($setupScanFailure,'The site scan could not complete.')&&str_contains($setupScanFailure,'HTTP 401')&&!str_contains($setupScanFailure,'cf7aiv-setup-status')&&!str_contains($setupScanFailure,'Site scan complete.'),'A failed background scan must reach Setup with its reason.');
+$GLOBALS['admin_transients']['cf7aiv_scan_outcome_77']=['state'=>'queued','queued_at'=>time()-1000];
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanStale=ob_get_clean();
+admin_assert(str_contains($setupScanStale,'has not reported a result')&&!str_contains($setupScanStale,'Site scan queued.'),'A scan whose job never reported back must be called out, not left promising a result.');
+// Action Scheduler reports a refused enqueue as 0. The scan must say so, and
+// must not run a minutes-long provider call inside this request instead.
+$GLOBALS['admin_async_result']=0;
+admin_assert(CF7AIV\Infrastructure\Queue::enqueue('cf7aiv_test')===false,'An Action Scheduler 0 must normalize to false.');
+$_POST=['_wpnonce'=>'nonce','pack_key'=>'general'];CF7AIV\Admin\AdminHooks::setupScan();unset($_POST);unset($GLOBALS['admin_async_result']);
+$refusedScan=$GLOBALS['admin_transients']['cf7aiv_scan_outcome_77']??[];
+admin_assert(($refusedScan['state']??'')==='failed'&&str_contains((string)($refusedScan['diagnostic']??''),'queue refused'),'A refused scan must be reported as failed with the reason.');
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanRefused=ob_get_clean();
+admin_assert(str_contains($setupScanRefused,'The site scan could not complete.')&&str_contains($setupScanRefused,'queue refused'),'Setup must show why a refused scan did not run.');
+$GLOBALS['admin_transients']['cf7aiv_scan_outcome_78']=['state'=>'failed','diagnostic'=>'Another administrator.'];
+ob_start();CF7AIV\Admin\AdminPages::setup();$setupScanOther=ob_get_clean();
+admin_assert(!str_contains($setupScanOther,'Another administrator.'),'A scan result must only be shown to the administrator who started it.');
+$GLOBALS['admin_transients']=[];
 admin_assert(str_contains($policy, 'cf7aiv-page-header') && str_contains($policy, 'cf7aiv-actions'), 'Policy Lab must use shared native structure.');
 admin_assert(str_contains($setup, 'cf7aiv-page-header') && str_contains($setup, 'cf7aiv-actions'), 'Setup must use shared native structure.');
 admin_assert(str_contains($policy, 'class="card'), 'Policy Lab must retain native card panels.');
@@ -674,5 +708,17 @@ $overrideAudit=$GLOBALS['admin_options']['cf7aiv_consent_override_audit']??[];ad
 
 $_POST=['_wpnonce'=>'nonce','mapping'=>['key'=>'admin-map','version'=>'v1','tier_id'=>'high_value_care','destination_key'=>'ga4','event_name'=>'qualify_lead','value'=>'10','currency'=>'GBP','status'=>'published','enabled'=>'1']];CF7AIV\Admin\AdminHooks::saveMapping();unset($_POST);
 $_POST=['_wpnonce'=>'nonce','mapping_key'=>'admin-map','version'=>'v1'];CF7AIV\Admin\AdminHooks::mappingPublish();CF7AIV\Admin\AdminHooks::mappingEnable();CF7AIV\Admin\AdminHooks::mappingDisable();unset($_POST);$mappingSql=json_encode($GLOBALS['wpdb']->queries);admin_assert(str_contains($mappingSql,'admin-map')&&str_contains($mappingSql,"SET status='published'")&&str_contains($mappingSql,'SET enabled=CASE')&&str_contains($mappingSql,'SET enabled=0')&&substr_count($mappingSql,'START TRANSACTION')===3&&substr_count($mappingSql,'COMMIT')===3,'Mappings must save as drafts and require explicit atomic publish, enable, and disable transitions.');
+
+// Settings saved by an older version are upgraded once, on the real load path.
+$savedUpgradeOptions=$GLOBALS['admin_options'];
+$GLOBALS['admin_options']['cf7aiv_schema_version']=CF7AIV\Infrastructure\Migration::VERSION;
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]=['providers'=>['selected'=>'deepseek','deepseek_model'=>'deepseek-v4-flash','timeout'=>15]];
+CF7AIV\Plugin::instance()->upgrade();
+$upgradedSettings=(array)$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION];
+admin_assert(($upgradedSettings['providers']['deepseek_model']??'')==='deepseek-flash'&&($upgradedSettings['providers']['timeout']??0)===60&&($upgradedSettings['settings_revision']??0)===CF7AIV\Infrastructure\Settings::REVISION,'Loading the plugin must move stored settings off the retired DeepSeek model and the old default timeout.');
+$GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['timeout']=15;
+CF7AIV\Plugin::instance()->upgrade();
+admin_assert(($GLOBALS['admin_options'][CF7AIV\Infrastructure\Settings::OPTION]['providers']['timeout']??0)===15,'A timeout chosen after the upgrade must survive later page loads.');
+$GLOBALS['admin_options']=$savedUpgradeOptions;
 
 echo "PASS AdminTest\n";

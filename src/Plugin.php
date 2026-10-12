@@ -54,7 +54,7 @@ final class Plugin {
 			return;
 		}
 
-		$hydrated = Settings::withDefaults((array) $stored);
+		$hydrated = Settings::withDefaults(Settings::upgrade((array) $stored));
 		if ($hydrated !== $stored) {
 			update_option(Settings::OPTION, $hydrated, false);
 		}
