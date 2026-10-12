@@ -34,6 +34,23 @@ WPCF7_Submission::$posted = $base + ['cf7aiv_ad_user_data' => 'denied']; $captur
 hash_check($GLOBALS['wpdb']->preparedArgs[8] === null && $GLOBALS['wpdb']->preparedArgs[9] === null, 'Denied ad_user_data must persist null hashes.');
 WPCF7_Submission::$posted = $base; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
 hash_check($GLOBALS['wpdb']->preparedArgs[8] === null && $GLOBALS['wpdb']->preparedArgs[9] === null, 'Unknown ad_user_data must persist null hashes.');
+// Google and Microsoft match on SHA-256 of E.164. A national number hashes to a
+// value neither can match, and a field merely containing "tel" is not a phone.
+$GLOBALS['hash_consent_type'] = null;
+WPCF7_Submission::$posted = ['your-phone' => '+44 7700 900123', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+hash_check($GLOBALS['wpdb']->preparedArgs[9] === hash('sha256', '+447700900123'), 'An international phone number must be hashed in E.164 form.');
+WPCF7_Submission::$posted = ['your-tel' => '0044 7700 900123', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+hash_check($GLOBALS['wpdb']->preparedArgs[9] === hash('sha256', '+447700900123'), 'A 00 international prefix must normalise to E.164.');
+WPCF7_Submission::$posted = ['your-phone' => '07700 900123', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+hash_check($GLOBALS['wpdb']->preparedArgs[9] === null, 'A national number with no country must not be hashed into a value that can never match.');
+WPCF7_Submission::$posted = ['your-phone' => '+44 (0) 7700 900123', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+hash_check($GLOBALS['wpdb']->preparedArgs[9] === hash('sha256', '+447700900123'), 'The national trunk zero written as (0) must not enter the E.164 number.');
+foreach (['phoneNumber', 'yourphone', 'mobilephone', 'telefon', 'tel-123'] as $phoneField) {
+	WPCF7_Submission::$posted = [$phoneField => '+44 7700 900123', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+	hash_check($GLOBALS['wpdb']->preparedArgs[9] === hash('sha256', '+447700900123'), "A field named {$phoneField} must be recognised as a phone number.");
+}
+WPCF7_Submission::$posted = ['hotel-booking-ref' => '+44 1234 567890', 'cf7aiv_ad_user_data' => 'granted']; $capture->capture(new HashContactForm(), ['status' => 'mail_sent']);
+hash_check($GLOBALS['wpdb']->preparedArgs[9] === null, 'A field that only contains "tel" inside another word is not a phone number.');
 $repositorySource = file_get_contents(dirname(__DIR__) . '/src/Intake/ItemRepository.php');
 hash_check(is_string($repositorySource) && ! str_contains($repositorySource, 'email_hash=COALESCE') && ! str_contains($repositorySource, 'phone_hash=COALESCE'), 'A restrictive duplicate capture must clear previously stored hashes instead of retaining them.');
 echo "PASS CaptureConsentHashRegressionTest\n";

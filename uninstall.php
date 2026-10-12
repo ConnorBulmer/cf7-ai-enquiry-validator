@@ -19,4 +19,5 @@ delete_option('cf7aiv_settings');
 delete_option('cf7aiv_secrets');
 delete_option('cf7aiv_schema_version');
 delete_option('cf7aiv_paused_destinations');
+delete_option('cf7aiv_resumed_destinations');
 delete_option('cf7aiv_consent_override_audit');

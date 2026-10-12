@@ -288,6 +288,18 @@ $GLOBALS['wpdb']->deliveryRows=[
 	['id'=>22,'destination_key'=>'webhook','state'=>'pending','last_error'=>'Temporary connection issue','updated_at'=>'2026-07-22 10:04:00'],
 ];
 ob_start();CF7AIV\Admin\AdminPages::health();$healthPage=ob_get_clean();
+admin_assert(str_contains($healthPage, 'Resume paused-destination'), 'Any paused destination, including one registered through the filter, must be resumable.');
+$GLOBALS['admin_options']['cf7aiv_paused_destinations']=['ga4'=>['reason'=>'GA4 rejected the <b>event</b> token=abc123 for jane@example.com.','paused_at'=>'2026-07-22T10:05:00+00:00']];
+ob_start();CF7AIV\Admin\AdminPages::health();$pausedHealthPage=ob_get_clean();
+admin_assert(str_contains($pausedHealthPage,'value="cf7aiv_resume_destination"')&&str_contains($pausedHealthPage,'Resume ga4')&&str_contains($pausedHealthPage,'GA4 rejected the &lt;b&gt;event&lt;/b&gt;'),'A paused destination must show why it paused, escaped, and offer a way to resume it.');
+admin_assert(!str_contains($pausedHealthPage,'abc123')&&!str_contains($pausedHealthPage,'jane@example.com'),'The pause reason must be redacted like the delivery log beside it.');
+$_POST=['_wpnonce'=>'nonce','destination'=>'ga4'];CF7AIV\Admin\AdminHooks::resumeDestination();unset($_POST);
+admin_assert(!isset($GLOBALS['admin_options']['cf7aiv_paused_destinations']['ga4'])&&isset($GLOBALS['admin_options'][CF7AIV\Delivery\WpDeliveryStore::RESUMED_OPTION]['ga4'])&&($GLOBALS['admin_redirect']??'')==='https://example.test/wp-admin/admin.php?page=cf7aiv-health','Resuming must lift the pause and record when, so older failures stop counting.');
+$GLOBALS['admin_options']['cf7aiv_paused_destinations']=['paused-destination'=>'private implementation value'];
+$_POST=['_wpnonce'=>'nonce','destination'=>'not-paused'];CF7AIV\Admin\AdminHooks::resumeDestination();unset($_POST);
+admin_assert(isset($GLOBALS['admin_options']['cf7aiv_paused_destinations']['paused-destination'])&&!isset($GLOBALS['admin_options'][CF7AIV\Delivery\WpDeliveryStore::RESUMED_OPTION]['not-paused']),'Resume must ignore a destination that is not paused.');
+$_POST=['_wpnonce'=>'nonce','destination'=>'paused-destination'];CF7AIV\Admin\AdminHooks::resumeDestination();unset($_POST);
+admin_assert(!isset($GLOBALS['admin_options']['cf7aiv_paused_destinations']['paused-destination']),'A filter-registered destination must be resumable.');
 admin_assert(! str_contains($healthPage, '<pre>'), 'Tracking Health must not expose raw JSON presentation.');
 admin_assert(str_contains($healthPage, '<caption class="screen-reader-text">Submission source health</caption>'), 'Source health must use a semantic table.');
 // Calibration must not default to a source that cannot supply records: the

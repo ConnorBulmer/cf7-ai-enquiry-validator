@@ -2,6 +2,86 @@
 
 All notable changes to CF7 AI Enquiry Validator are documented here. The project follows semantic versioning.
 
+## 0.2.34 — 2026-10-12
+
+Fixes from a review of intake, delivery and destinations.
+
+- Fixed live GA4 never sending for a property validated since 0.2.30. That
+  release moved the validation result into its own option, and the Integrations
+  page and the live switch followed it. Delivery still required the old
+  `debug_validated` settings flag, which nothing has set since. So a property
+  validated and switched live after 0.2.30 was never registered for delivery,
+  every item was gated "destination not configured", and Tracking Health showed
+  it ready. Properties validated before 0.2.30 keep their old flag until they
+  are validated again. After that only the new result counts, so a failed or
+  running re-validation stops live sending as it would anywhere else.
+- Fixed the existing server-side GTM destination never sending. The delivery
+  worker had no rule for `server_gtm`, so a configured tagging server gated every
+  item as not configured while Tracking Health reported it ready. It now needs
+  the same HTTPS base URL the destination itself enforces, a measurement ID and
+  a secret, plus a GA client id or Google click id to attribute with.
+- Moved destination readiness into one class (`DestinationReadiness`) used by
+  delivery and Tracking Health. Both bugs above were two copies of the same
+  rules that had drifted apart.
+- Fixed the standard Consent Mode setup deleting the stored click id. Sites
+  push `consent default` denied in the head on every page, and the consent
+  manager pushes its `update` after load. The script treated the default as a
+  refusal, so on the second page view it deleted the gclid stored on the landing
+  page, before the granted update arrived. Only an `update` is now a decision.
+  The same applies per category, so a default granting analytics but not
+  advertising no longer deletes click ids. While consent is undecided,
+  localStorage is left alone and the cookie is removed, so the server fallback
+  cannot keep renewing it on an old choice.
+- Fixed a pending Complianz banner counting as a refusal. Complianz answers
+  false for every category until the visitor chooses. Its own cookies now decide
+  whether a choice was made.
+- When the cookie and localStorage disagree, the cookie now wins, and
+  localStorage fills only the gaps. The server fallback writes the cookie on
+  navigations the script never sees, and an older click id in localStorage used
+  to beat the fresh one there. Long URLs are left out of the cookie when it
+  would exceed the browser's size limit, so a refused write cannot leave a
+  stale cookie behind.
+- The GA session id is now read from the GS1 cookie format (`GS1.1.<id>.…`), not
+  only GS2. Sites still on GS1 captured no session id.
+- The referrer is now the first external one. The script and the server
+  fallback both recorded the previous page on the site as the referrer.
+- A resend after a mail failure now keeps the same submission token, so it
+  updates the same enquiry. A failed send is still captured, and rotating the
+  token on `wpcf7mailfailed` turned the visitor's retry into a second enquiry and
+  a second conversion. This reverses a previously tested behaviour on purpose.
+- Attribution fields are now also written into the FormData Contact Form 7
+  passes with `wpcf7beforesubmit`. CF7 builds that FormData before the event, so
+  setting the inputs alone came too late for a submission without a native
+  submit event.
+- Phone numbers are hashed in E.164 form only. A number written with + or 00,
+  including the "+44 (0)" style, is normalised. A national number with no
+  country code is no longer hashed, since Google and Microsoft can never match
+  it. Field detection still accepts phone, mobile, tel, telephone and telefon,
+  but no longer matches "tel" inside other words such as `hotel-booking-ref`.
+- Auto-pause now counts only permanent failures since the destination last
+  delivered or was resumed. It counted every failure ever, so unrelated
+  rejections months apart paused it, and every later one paused it again.
+  Tracking Health now shows the redacted reason for a pause and adds a Resume
+  button, including for destinations registered through the filter. Before
+  this, nothing could lift a pause.
+- An item already delivered under one version of a mapping is no longer sent
+  again when a new version is published. The idempotency key includes the
+  version, so the new version gave the item a fresh key.
+- The GA4 24-hour session check now uses the session id as the session start
+  time. Nothing captures `session_started_at`, so every GA4 and server-side GTM
+  delivery carried a session warning.
+- Server-side GTM keeps its timestamp and session warnings on a sent event, as
+  GA4 already did.
+- A Microsoft OAuth-style error such as `{"error":"invalid_token"}` now reports
+  its code. Free text is still never kept.
+- Microsoft-only sites no longer mark every enquiry as missing GA identity.
+  Capture and Tracking Health decide this the same way.
+- The GA measurement ID passed to the browser prefers enabled destinations, so a
+  disabled destination's leftover ID no longer blanks it.
+- Smaller: CFDB7 availability is checked once per request instead of once per
+  item; the uninstaller removes the new `cf7aiv_resumed_destinations` option.
+- Kept schema version 10 unchanged; no migration is required.
+
 ## 0.2.33 — 2026-10-12
 
 - Moved DeepSeek to its current model, `deepseek-flash` (DeepSeek-V4.1-Flash).

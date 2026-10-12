@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.33
+Stable tag: 0.2.34
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,20 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.34 =
+* Fixes live GA4 never sending for a property validated since 0.2.30. Delivery still read the validation flag 0.2.30 stopped writing, while Tracking Health showed the destination ready.
+* Fixes the existing server-side GTM destination never sending. The delivery worker had no rule for it and gated every item as not configured.
+* Delivery and Tracking Health now share one readiness check, so they cannot disagree again.
+* Fixes the standard Consent Mode setup (default denied in the head, update from the consent manager after load) deleting the stored click id on the second page view, before the granted update arrived. A pending Complianz banner no longer deletes it either.
+* Reads the GA session id from the older GS1 cookie format as well as GS2.
+* Keeps the first external referrer instead of replacing it with the previous page on the site.
+* A resend after a mail failure now updates the same enquiry instead of creating a second one, which was classified and sent as a second conversion.
+* Hashes phone numbers in E.164 form only. A number without a country code can never match at Google or Microsoft, so it is no longer hashed; "tel" inside words such as "hotel" no longer marks a phone field.
+* Auto-pause counts only failures since the last successful delivery or resume, instead of every failure ever. Tracking Health now shows why a destination paused and adds a Resume button; before, a pause could not be lifted.
+* A new mapping version no longer re-sends an item already delivered under the previous version.
+* Microsoft-only sites no longer report every enquiry as missing GA identity.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.33 =
 * Moves DeepSeek to its current model, `deepseek-flash` (V4.1-Flash). `deepseek-v4-flash` was retired on 10 September 2026 and survives only as a temporary alias. Saved settings on a retired DeepSeek model ID move to the new one once; `deepseek-v4-pro` and custom models are left alone.

@@ -59,11 +59,11 @@ final class DeliveryWorker {
 			if (! $mapping instanceof DeliveryMapping || ! $mapping->isPublished()) { $this->gate($itemId, $destinationKey, 'mapping_not_published'); continue; }
 			if ($this->store->isPaused($destinationKey)) { $this->gate($itemId, $destinationKey, 'destination_paused'); continue; }
 			$destination = $destinations[$destinationKey] ?? null;
-			if (! $destination instanceof DestinationInterface || ! $this->configurationReady($destinationKey, $settings)) { $this->gate($itemId, $destinationKey, 'destination_not_configured'); continue; }
+			if (! $destination instanceof DestinationInterface || ! DestinationReadiness::configured($destinationKey, $settings, $this->credentialResolver)) { $this->gate($itemId, $destinationKey, 'destination_not_configured'); continue; }
 			$required = match ($destinationKey) { 'ga4' => ['analytics_storage'], 'microsoft_uet' => ['ad_storage'], default => ['analytics_storage', 'ad_storage'] };
 			try { $decision = ConsentPolicy::evaluate((string) ($settings['consent']['mode'] ?? 'respect'), is_array($consent) ? $consent : [], (array) ($settings['consent']['override'] ?? []), $required); } catch (Throwable) { $this->gate($itemId, $destinationKey, 'consent_evaluation_failed'); continue; }
 			if (! $decision->permitted) { $this->gate($itemId, $destinationKey, 'consent_not_permitted'); continue; }
-			if (! self::signalsReady($destinationKey, is_array($attribution) ? $attribution : [], $item, $settings, $decision->actual)) { $this->gate($itemId, $destinationKey, 'signals_not_ready'); continue; }
+			if (! DestinationReadiness::signalsReady($destinationKey, is_array($attribution) ? $attribution : [], $item, $settings, $decision->actual)) { $this->gate($itemId, $destinationKey, 'signals_not_ready'); continue; }
 			$enhanced = ! empty($settings['privacy']['enhanced_matching']) && ($decision->actual['ad_user_data'] ?? 'unknown') === 'granted';
 			$event = EnvelopeBuilder::build($item, $mapping, is_array($attribution) ? $attribution : [], $decision->actual, $enhanced, $decision->audit);
 			$delivery = $this->store->claim($itemId, $mapping, $event);
@@ -76,51 +76,6 @@ final class DeliveryWorker {
 		}
 	}
 	private function gate(int $itemId, string $destination, string $reason): void { DiagnosticsService::recordGate($itemId, $destination, $reason); }
-	/** @param array<string,mixed> $settings */
-	private function configurationReady(string $destinationKey, array $settings): bool {
-		$config = (array) ($settings['destinations'][$destinationKey] ?? []);
-		if (empty($config['enabled'])) { return false; }
-		if ($destinationKey === 'ga4') {
-			if (trim((string) ($config['measurement_id'] ?? '')) === '') { return false; }
-			if (trim((string) ($this->credentialResolver)('ga4_api_secret')) === '') { return false; }
-			return ! empty($config['dry_run']) || (! empty($config['live_enabled']) && ! empty($config['debug_validated']));
-		}
-		if ($destinationKey === 'microsoft_uet') {
-			return trim((string) ($config['tag_id'] ?? '')) !== '' && trim((string) ($this->credentialResolver)('microsoft_uet_token')) !== '';
-		}
-		if ($destinationKey === 'webhook') {
-			$url = trim((string) ($config['url'] ?? ''));
-			if (filter_var($url, FILTER_VALIDATE_URL) === false) { return false; }
-			return (str_starts_with(strtolower($url), 'https://') || ! empty($config['allow_insecure'])) && trim((string) ($this->credentialResolver)('webhook_secret')) !== '';
-		}
-		return false;
-	}
-
-	/** @param array<string,mixed> $attribution @param array<string,mixed> $item @param array<string,mixed> $settings @param array<string,scalar> $actualConsent */
-	private static function signalsReady(string $destinationKey, array $attribution, array $item, array $settings, array $actualConsent): bool {
-		if ($destinationKey === 'ga4') {
-			return self::firstSignal($attribution, ['client_id', 'ga_client_id']) !== '';
-		}
-		if ($destinationKey === 'microsoft_uet') {
-			if (self::firstSignal($attribution, ['msclkid']) !== '') { return true; }
-			if (empty($settings['privacy']['enhanced_matching']) || ($actualConsent['ad_user_data'] ?? 'unknown') !== 'granted') { return false; }
-			return self::validHash($item['email_hash'] ?? null) || self::validHash($item['phone_hash'] ?? null);
-		}
-		return $destinationKey === 'webhook';
-	}
-
-	/** @param array<string,mixed> $signals @param list<string> $keys */
-	private static function firstSignal(array $signals, array $keys): string {
-		foreach ($keys as $key) {
-			$value = $signals[$key] ?? '';
-			if (is_scalar($value) && trim((string) $value) !== '') { return trim((string) $value); }
-		}
-		return '';
-	}
-
-	private static function validHash(mixed $value): bool {
-		return is_string($value) && preg_match('/^[a-f0-9]{64}$/', strtolower($value)) === 1;
-	}
 	/** @param array<string,mixed> $item */
 	private static function auditedManualApproval(array $item): bool {
 		global $wpdb;

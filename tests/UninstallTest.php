@@ -27,7 +27,7 @@ $sql = implode("\n", $GLOBALS['wpdb']->queries);
 foreach (['cf7aiv_review_suggestions', 'cf7aiv_deliveries', 'cf7aiv_items', 'cf7aiv_calibration_runs', 'cf7aiv_mappings', 'cf7aiv_setup_suggestions', 'cf7aiv_policies'] as $table) {
 	uninstall_assert(str_contains($sql, $table), "Uninstall must remove {$table} when deletion is explicitly enabled.");
 }
-foreach (['cf7aiv_settings', 'cf7aiv_secrets', 'cf7aiv_schema_version', 'cf7aiv_paused_destinations', 'cf7aiv_consent_override_audit'] as $option) {
+foreach (['cf7aiv_settings', 'cf7aiv_secrets', 'cf7aiv_schema_version', 'cf7aiv_paused_destinations', 'cf7aiv_resumed_destinations', 'cf7aiv_consent_override_audit'] as $option) {
 	uninstall_assert(in_array($option, $GLOBALS['uninstall_options'], true), "Uninstall must remove option {$option}.");
 }
 uninstall_assert(strpos($sql, 'cf7aiv_review_suggestions') < strpos($sql, 'cf7aiv_items') && strpos($sql, 'cf7aiv_deliveries') < strpos($sql, 'cf7aiv_items'), 'Uninstall must remove dependent review suggestions and deliveries before items.');

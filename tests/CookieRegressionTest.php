@@ -234,6 +234,13 @@ namespace {
 	$fullPayload = consent_payload();
 	consent_assert(($fullPayload['gclid'] ?? '') === 'fresh_GOOGLE-123' && ($fullPayload['utm_source'] ?? '') === 'fresh-source' && isset($fullPayload['first_landing_page'], $fullPayload['referrer']), 'Full consent must retain advertising, analytics, and navigation attribution.');
 
+	// The referrer is the first external one, not the previous page on this site.
+	$siteServer = ['HTTP_HOST' => 'example.test', 'REQUEST_URI' => '/contact/', 'HTTPS' => 'on'];
+	$kept = CF7AIV\Intake\AttributionCookie::buildServerValues([], [CF7AIV\Intake\AttributionCookie::NAME => json_encode(['referrer' => 'https://search.example/results'])], $siteServer + ['HTTP_REFERER' => 'https://example.test/services/']);
+	consent_assert(($kept['referrer'] ?? '') === 'https://search.example/results', 'Browsing the site must not replace the external referrer that brought the visitor in.');
+	$internalOnly = CF7AIV\Intake\AttributionCookie::buildServerValues([], [], $siteServer + ['HTTP_REFERER' => 'https://example.test/services/']);
+	consent_assert(! isset($internalOnly['referrer']), 'A page on this site is not a referrer.');
+
 	if ($consentFailures !== []) {
 		throw new RuntimeException("Consent-safe server attribution regressions:\n- " . implode("\n- ", $consentFailures));
 	}

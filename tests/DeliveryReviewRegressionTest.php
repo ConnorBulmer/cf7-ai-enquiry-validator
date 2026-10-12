@@ -61,7 +61,7 @@ final class ReviewLeaseWpdb {
 		return $this->rows_affected;
 	}
 	public function get_row(string $sql, mixed $format = null): ?array { return $this->row; }
-	public function get_var(string $sql): mixed { return $this->row['attempts'] ?? 0; }
+	public function get_var(string $sql): mixed { return str_contains($sql, 'COUNT(*)') ? 0 : ($this->row['attempts'] ?? 0); }
 }
 $GLOBALS['wpdb'] = new ReviewLeaseWpdb(); $leaseStore = new CF7AIV\Delivery\WpDeliveryStore();
 $first = $leaseStore->claim(91, $mapping, $canonicalEvent); $second = $leaseStore->claim(91, $mapping, $canonicalEvent);
@@ -72,6 +72,28 @@ review_check(($dryReclaim['acquired'] ?? false) === true, 'Dry-run records must 
 $leaseStore->record(1, new CF7AIV\Domain\DeliveryResult(true), (string) ($dryReclaim['lease_token'] ?? ''));
 $afterDelivered = $leaseStore->claim(91, $mapping, $canonicalEvent);
 review_check(($afterDelivered['acquired'] ?? true) === false, 'Delivered records must never reacquire a lease.');
+
+// A new mapping version must not re-send an item already delivered under the
+// previous one: the idempotency key changes with the version.
+final class ReviewSupersededWpdb {
+	public string $prefix = 'wp_'; public int $rows_affected = 0; public array $queries = [];
+	public function prepare(string $sql, mixed ...$args): string { foreach ($args as $arg) { $sql = preg_replace('/%[ds]/', is_int($arg) ? (string) $arg : "'" . str_replace("'", "''", (string) $arg) . "'", $sql, 1) ?? $sql; } return $sql; }
+	/** @param list<string> $versions */
+	public function __construct(public array $versions = ['1', '2']) {}
+	public function get_col(string $sql): array { $this->queries[] = $sql; return $this->versions; }
+	public function get_var(string $sql): mixed { $this->queries[] = $sql; return str_contains($sql, "state='delivered'") && str_contains($sql, "'ga:2'") ? 1 : 0; }
+	public function query(string $sql): int { $this->queries[] = $sql; return 0; }
+	public function get_row(string $sql, mixed $format = null): ?array { return null; }
+}
+$GLOBALS['wpdb'] = new ReviewSupersededWpdb();
+$supersededClaim = (new CF7AIV\Delivery\WpDeliveryStore())->claim(91, $mapping, $canonicalEvent);
+review_check(($supersededClaim['acquired'] ?? true) === false && ! array_filter($GLOBALS['wpdb']->queries, static fn (string $sql): bool => str_starts_with($sql, 'INSERT')), 'An item already delivered under another version of the same mapping must not be claimed again.');
+review_check(str_contains($GLOBALS['wpdb']->queries[1], "mapping_key IN ('ga:2')"), 'The supersession check must name the other versions of this mapping exactly.');
+// Only versions of this mapping count: a different mapping whose key begins
+// with this one's ("ga:sgtm") must not block it.
+$GLOBALS['wpdb'] = new ReviewSupersededWpdb(['1']);
+$soleVersion = (new CF7AIV\Delivery\WpDeliveryStore())->claim(91, $mapping, $canonicalEvent);
+review_check(! array_filter($GLOBALS['wpdb']->queries, static fn (string $sql): bool => str_contains($sql, 'mapping_key IN')), 'A mapping with no other versions must not be checked against other mappings.');
 
 final class ReviewTransport implements CF7AIV\Infrastructure\HttpTransportInterface { public array $requests = []; public function post(string $url, array $arguments): CF7AIV\Infrastructure\HttpResponse { $this->requests[] = compact('url', 'arguments'); return new CF7AIV\Infrastructure\HttpResponse(204, ''); } }
 $msTransport = new ReviewTransport(); (new CF7AIV\Destinations\MicrosoftUetDestination($msTransport, '123', 'token'))->send($canonicalEvent);

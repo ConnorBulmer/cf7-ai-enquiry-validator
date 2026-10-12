@@ -60,8 +60,8 @@ final class ServerGtmDestination implements DestinationInterface {
 			$params['cf7aiv_source_type'] = (string) $event->context['source_type'];
 		}
 
-		$sessionStarted = strtotime((string) ($event->attribution['session_started_at'] ?? ''));
-		if (($event->attribution['session_id'] ?? '') === '' || $sessionStarted === false || $now - $sessionStarted > 86400) {
+		$sessionStarted = $event->sessionStartedAt();
+		if (($event->attribution['session_id'] ?? '') === '' || $sessionStarted === null || $now - $sessionStarted > 86400) {
 			$warnings[] = 'GA4 session attribution requires session_id and dispatch within 24 hours of session start.';
 		}
 
@@ -115,23 +115,30 @@ final class ServerGtmDestination implements DestinationInterface {
 		}
 
 		try {
-			return ResponseClassifier::classify($this->transport->post($url, $arguments));
+			// Keep the timestamp and session warnings on a sent event too. Only
+			// the GA4 route kept them, so a stale event reached the tagging server
+			// with no trace of why it would not attribute.
+			$result = ResponseClassifier::classify($this->transport->post($url, $arguments));
+			return new DeliveryResult($result->successful, $result->retryable, $result->remoteId, $result->error, [], $warnings);
 		} catch (Throwable $error) {
 			$result = ResponseClassifier::transportFailure($error);
 			return new DeliveryResult(false, $result->retryable, null, $result->error, [], $warnings);
 		}
 	}
 
+	/** An HTTPS base URL with no query or fragment. Delivery readiness applies the same rule. */
+	public static function isValidEndpoint(string $url): bool {
+		return strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https'
+			&& (string) parse_url($url, PHP_URL_HOST) !== ''
+			&& parse_url($url, PHP_URL_QUERY) === null
+			&& parse_url($url, PHP_URL_FRAGMENT) === null;
+	}
+
 	private function validateConfiguration(): void {
 		if ($this->serverUrl === '' || $this->measurementId === '' || $this->apiSecret === '') {
 			throw new InvalidArgumentException('Server-side GTM URL, measurement ID, and API secret are required.');
 		}
-		if (
-			strtolower((string) parse_url($this->serverUrl, PHP_URL_SCHEME)) !== 'https'
-			|| (string) parse_url($this->serverUrl, PHP_URL_HOST) === ''
-			|| parse_url($this->serverUrl, PHP_URL_QUERY) !== null
-			|| parse_url($this->serverUrl, PHP_URL_FRAGMENT) !== null
-		) {
+		if (! self::isValidEndpoint($this->serverUrl)) {
 			throw new InvalidArgumentException('Server-side GTM URL must be an HTTPS base URL without a query or fragment.');
 		}
 	}

@@ -5,6 +5,7 @@ namespace CF7AIV\Admin;
 use CF7AIV\Classification\PolicyRepository;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Delivery\DeliveryMapping;
+use CF7AIV\Delivery\WpDeliveryStore;
 use CF7AIV\Delivery\WpMappingLifecycle;
 use CF7AIV\Destinations\GA4Destination;
 use CF7AIV\Domain\ConversionEvent;
@@ -50,6 +51,7 @@ final class AdminHooks {
 		'cf7aiv_setup_scan' => 'setupScan',
 		'cf7aiv_setup_suggestion' => 'setupSuggestion',
 		'cf7aiv_backfill' => 'backfill',
+		'cf7aiv_resume_destination' => 'resumeDestination',
 	];
 
 	private static bool $settingsSave = false;
@@ -232,6 +234,14 @@ final class AdminHooks {
 		if($value['state']!=='queued'&&function_exists('delete_transient')){delete_transient($key);}
 		return $value;
 	}
+	/**
+	 * Lift an automatic delivery pause.
+	 *
+	 * A destination pauses itself after repeated permanent failures, and nothing
+	 * could lift it: once paused it stayed paused until the option was deleted
+	 * by hand, while conversions quietly stopped.
+	 */
+	public static function resumeDestination():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_resume_destination');$key=(string)($post['destination']??'');if((new WpDeliveryStore())->resume($key)){EventLog::record('delivery','info','Destination resumed.',['destination'=>$key]);}self::redirect('admin.php?page=cf7aiv-health');}
 	public static function setupSuggestion():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_suggestion');$action=(string)($post['suggestion_action']??'');$edited=$post['edited_value']??null;if(is_string($edited)&&str_starts_with(trim($edited),'{')){$decoded=json_decode($edited,true);if(is_array($decoded)){$edited=$decoded;}}self::setupService()->review((int)($post['suggestion_id']??0),$action,$edited);self::redirect('admin.php?page=cf7aiv-setup');}
 	public static function backfill():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_backfill');$source=substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($post['source']??''))??'',0,32);$rawForms=$post['form_ids']??[];if(!is_array($rawForms)){$rawForms=preg_split('/\s*,\s*/',(string)$rawForms,-1,PREG_SPLIT_NO_EMPTY)?:[];}$explicit=in_array($post['explicit_opt_in']??null,[true,1,'1','true','on','yes'],true);$snapshot=CalibrationPolicySnapshot::active();$submitted=(string)($post['whitelist_fingerprint']??'');if($submitted===''||!hash_equals($snapshot['fingerprint'],$submitted)){self::refuse('Published policy fields changed after preview. Review the current whitelist and opt in again.');}try{(new CalibrationService())->schedule($source,['explicit_opt_in'=>$explicit,'form_ids'=>$rawForms,'date_from'=>(string)($post['date_from']??gmdate('Y-m-d',strtotime('-1 year'))),'date_to'=>(string)($post['date_to']??gmdate('Y-m-d')),'maximum'=>(int)($post['maximum']??25),'ai_whitelist_snapshot'=>$snapshot['fields'],'whitelist_fingerprint'=>$snapshot['fingerprint']],function_exists('get_current_user_id')?get_current_user_id():0);}catch(\InvalidArgumentException $error){self::refuse($error->getMessage());}self::redirect('admin.php?page=cf7aiv-health');}
 	/** @param array<string,mixed> $arguments */ public static function backfillBatch(string $sourceKey,array $arguments=[],int $batchSize=25):void{(new CalibrationBatchWorker(new WpCalibrationRunStore()))->process($sourceKey,$arguments,$batchSize);}

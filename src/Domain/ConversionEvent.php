@@ -27,6 +27,20 @@ final class ConversionEvent {
 		public readonly array $audit = [],
 	) {}
 
+	/**
+	 * When the GA4 session began, as a Unix time, if known.
+	 *
+	 * Nothing captures session_started_at, but GA4's session id is the Unix
+	 * time the session started, so it answers the same question. Without this
+	 * every GA4 delivery warned that session attribution was impossible.
+	 */
+	public function sessionStartedAt(): ?int {
+		$started = strtotime((string) ($this->attribution['session_started_at'] ?? ''));
+		if ($started !== false) { return $started; }
+		$sessionId = (string) ($this->attribution['session_id'] ?? '');
+		return preg_match('/^\d{9,11}$/', $sessionId) === 1 ? (int) $sessionId : null;
+	}
+
 	/** @return array<string, mixed> */
 	public function toArray(): array {
 		$payload = [

@@ -39,7 +39,7 @@ final class CaptureService {
 			$signals['complianz'] = ['ad_storage' => cmplz_has_consent('marketing'), 'ad_user_data' => cmplz_has_consent('marketing'), 'analytics_storage' => cmplz_has_consent('statistics')];
 		}
 		$consent = (new ConsentResolver())->resolve(new ClientSignals($signals));
-		$diagnostics = AttributionDiagnostics::inspect($attribution, $consent->states);
+		$diagnostics = AttributionDiagnostics::inspect($attribution, $consent->states, AttributionDiagnostics::gaIdentityNeeded(function_exists('get_option') ? (array) get_option(Settings::OPTION, []) : []));
 		$submissionId = isset($attribution['submission_id']) ? (string) $attribution['submission_id'] : '';
 		if ($submissionId === '' && method_exists($submission, 'get_posted_data_hash')) { $submissionId = (string) $submission->get_posted_data_hash(); }
 		$fingerprint = SubmissionFingerprint::make($formId, $posted, $submissionId);
@@ -66,11 +66,41 @@ final class CaptureService {
 			if ($email === null && str_contains(strtolower((string) $key), 'email') && filter_var(trim((string) $value), FILTER_VALIDATE_EMAIL)) {
 				$email = hash('sha256', strtolower(trim((string) $value)));
 			}
-			if ($phone === null && (str_contains(strtolower((string) $key), 'phone') || str_contains(strtolower((string) $key), 'tel'))) {
-				$normalized = preg_replace('/[^0-9+]/', '', (string) $value) ?? '';
-				if (strlen($normalized) >= 7) { $phone = hash('sha256', $normalized); }
+			if ($phone === null && self::isPhoneField((string) $key)) {
+				$normalized = self::e164((string) $value);
+				if ($normalized !== null) { $phone = hash('sha256', $normalized); }
 			}
 		}
 		return [$email, $phone];
+	}
+
+	/**
+	 * A field named for a phone number.
+	 *
+	 * "phone" and "mobile" count anywhere (phoneNumber, your-mobile,
+	 * cellphone), but "tel" only as its own word or as telephone, telefon or
+	 * telefono: matching it anywhere also matched hotel-booking-ref and
+	 * intel-code.
+	 */
+	private static function isPhoneField(string $key): bool {
+		return preg_match('/phone|mobile|(?:^|[^a-z])tel(?:e(?:phone|fon|fono))?(?:[^a-z]|$)/', strtolower($key)) === 1;
+	}
+
+	/**
+	 * The number in E.164 form, or null when its country cannot be known.
+	 *
+	 * Google and Microsoft both match on the SHA-256 of +<country><number>. The
+	 * digits of a national number such as 07700 900123 hash to a value neither
+	 * will ever match, so sending it only discloses a hash for no gain. A number
+	 * written internationally, with + or 00, can be normalised safely.
+	 */
+	private static function e164(string $value): ?string {
+		// "+44 (0) 7700 900123" writes the national trunk zero beside the country
+		// code; it is not dialled internationally and is not part of E.164.
+		$value = trim((string) preg_replace('/\(\s*0\s*\)/', '', $value));
+		if (str_starts_with($value, '00')) { $value = '+' . substr($value, 2); }
+		if (! str_starts_with($value, '+')) { return null; }
+		$digits = preg_replace('/\D/', '', $value) ?? '';
+		return strlen($digits) >= 8 && strlen($digits) <= 15 && $digits[0] !== '0' ? '+' . $digits : null;
 	}
 }

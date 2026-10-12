@@ -39,7 +39,17 @@ final class MicrosoftUetResponseClassifier {
 			return null;
 		}
 		foreach ($decoded as $key => $candidate) {
-			if (! is_string($key) || strtolower($key) !== 'error' || ! is_array($candidate)) {
+			if (! is_string($key) || strtolower($key) !== 'error') {
+				continue;
+			}
+			// An OAuth-style rejection names the problem as a bare code, such as
+			// {"error":"invalid_token"}, and was otherwise reported as only a
+			// status. Only a code-shaped value is kept: free text could carry a
+			// token or an address.
+			if (is_string($candidate) && preg_match('/^[A-Za-z][A-Za-z_]{0,63}$/', trim($candidate)) === 1) {
+				return ['code' => trim($candidate), 'field' => ''];
+			}
+			if (! is_array($candidate)) {
 				continue;
 			}
 			return [

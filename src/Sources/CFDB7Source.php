@@ -96,11 +96,27 @@ final class CFDB7Source implements SubmissionSourceInterface, SubmissionReferenc
 		}
 	}
 
+	/**
+	 * A source found once is still there for the rest of the request.
+	 *
+	 * Every get(), count() and reference lookup asked again, which cost a
+	 * SHOW TABLES query per item while classifying a backlog - and a new
+	 * instance is built for each item, so the answer is kept per table for the
+	 * request rather than per instance. Only a positive answer is kept, so a
+	 * table created mid-request is still noticed.
+	 *
+	 * @var array<string,true>
+	 */
+	private static array $confirmedTables = [];
+
 	public function available(): bool {
 		global $wpdb;
 		if (! isset($wpdb->prefix) || ! $this->pluginActive()) { return false; }
 		$table = $wpdb->prefix . 'db7_forms';
-		return (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table;
+		if (isset(self::$confirmedTables[$table])) { return true; }
+		if ((string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) { return false; }
+		self::$confirmedTables[$table] = true;
+		return true;
 	}
 
 	public function count(): ?int {

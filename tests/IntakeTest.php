@@ -91,6 +91,11 @@ $diagnostics = AttributionDiagnostics::inspect([
 cf7aiv_intake_assert(! $diagnostics['ready'], 'Incomplete attribution must not be marked ready.');
 cf7aiv_intake_assert(in_array('missing_valid_click_identifier', $diagnostics['issues'], true), 'Diagnostics must explain missing valid click identifiers.');
 cf7aiv_intake_assert(in_array('missing_ga_identity', $diagnostics['issues'], true), 'Diagnostics must explain missing GA identity.');
+$microsoftOnly = AttributionDiagnostics::inspect(['msclkid' => '0123456789abcdef0123456789abcdef'], ['ad_storage' => 'granted', 'ad_user_data' => 'granted'], false);
+cf7aiv_intake_assert($microsoftOnly['ready'] && $microsoftOnly['issues'] === [], 'A site with no GA destination must not need GA identity to be attribution-ready.');
+cf7aiv_intake_assert(! AttributionDiagnostics::gaIdentityNeeded(['destinations' => ['microsoft_uet' => ['enabled' => true]]]), 'A Microsoft-only site does not need GA identity.');
+cf7aiv_intake_assert(AttributionDiagnostics::gaIdentityNeeded(['destinations' => ['microsoft_uet' => ['enabled' => true], 'server_gtm' => ['enabled' => true]]]), 'Any enabled GA route needs GA identity.');
+cf7aiv_intake_assert(AttributionDiagnostics::gaIdentityNeeded([]), 'Before anything is enabled, GA identity is still reported.');
 cf7aiv_intake_assert(in_array('missing_consent', $diagnostics['issues'], true), 'Diagnostics must explain missing consent.');
 $ready = AttributionDiagnostics::inspect([
 	'gclid' => 'valid_CLICK-123',
@@ -150,6 +155,12 @@ $GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations'] = [
 ];
 CF7AIV\Intake\IntakeHooks::enqueue();
 cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":""'), 'Different configured Google route properties must fail closed instead of capturing identity for the wrong destination.');
+$GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations'] = [
+	'ga4' => ['enabled' => false, 'measurement_id' => 'G-OLD123'],
+	'server_gtm' => ['enabled' => true, 'measurement_id' => 'G-SGTM123'],
+];
+CF7AIV\Intake\IntakeHooks::enqueue();
+cf7aiv_intake_assert(str_contains($GLOBALS['cf7aiv_inline_script'], '"measurementId":"G-SGTM123"'), 'A disabled destination\'s leftover Measurement ID must not blank the enabled one.');
 
 $GLOBALS['cf7aiv_test_options']['cf7aiv_settings']['destinations'] = ['ga4' => ['measurement_id' => 'UA-invalid']];
 CF7AIV\Intake\IntakeHooks::enqueue();

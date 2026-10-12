@@ -73,6 +73,24 @@ worker or reviewer needs it.
 
 ## Current release
 
+### Version 0.2.34 delivery and attribution fixes
+
+Version 0.2.34 fixes two destinations that could not send. Live GA4 never sent
+for a property validated since 0.2.30, because delivery still read a flag that
+release stopped setting. The existing server-side GTM destination never sent,
+because the delivery worker had no rule for it. In both cases Tracking Health
+said the destination was ready. Delivery and Health now share one readiness
+check.
+
+It also stops the standard Consent Mode setup deleting the landing click id on
+the second page view, before the consent manager's update arrived, and does the
+same for a pending Complianz banner. The GA session id is read from GS1 cookies,
+the referrer stays the first external one, and a resend after a mail failure no
+longer creates a second enquiry and conversion. Phone numbers are hashed only in
+E.164 form. Auto-pause counts only recent consecutive failures, and Tracking
+Health shows why a destination paused with a Resume button. Schema remains
+version 10.
+
 ### Version 0.2.33 current DeepSeek model, distinct reasoning levels
 
 Version 0.2.33 moves DeepSeek to `deepseek-flash` (DeepSeek-V4.1-Flash).

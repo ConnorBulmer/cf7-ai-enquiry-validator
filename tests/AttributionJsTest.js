@@ -421,9 +421,14 @@ function foreachMalformedGaCookie(cases) {
 	page.emit('wpcf7invalid', { target: page.wrappers[0] });
 	page.emit('wpcf7spam', { target: page.wrappers[0] });
 	check(page.fieldValue(0, 'cf7aiv_submission_id') === first, 'submit, validation, and spam events must preserve one attempt token');
+	// A mail failure is still captured as an enquiry, and the visitor usually
+	// presses Send again. Rotating the token here made that retry a second
+	// enquiry, classified and sent as a second conversion.
 	page.emit('wpcf7mailfailed', { target: page.wrappers[0] });
-	check(page.fieldValue(0, 'cf7aiv_submission_id') !== first, 'mail failure must rotate the failed form token');
+	check(page.fieldValue(0, 'cf7aiv_submission_id') === first, 'a mail failure must keep the token so a resend updates the same enquiry');
 	check(page.fieldValue(1, 'cf7aiv_submission_id') === second, 'mail failure must not rotate another form token');
+	page.emit('wpcf7mailsent', { target: page.wrappers[0] });
+	check(page.fieldValue(0, 'cf7aiv_submission_id') !== first, 'a successful resend must then rotate the token');
 }
 
 {
@@ -513,6 +518,153 @@ function trackingFieldsEmpty(page) {
 	});
 	page.emit('DOMContentLoaded');
 	check(page.storedPayload() !== null, 'The WordPress Consent API must still win where it is present and granted.');
+}
+
+// ─── Consent that has not been decided yet is not a refusal ──────────────────
+
+{
+	// Standard Consent Mode v2: `default` denied in the head on every page, and
+	// the consent manager's `update` after load. The click id stored on the
+	// landing page must survive until that update arrives.
+	const storedClick = JSON.stringify({ gclid: 'LANDINGCLICK123', utm_source: 'paid-search' });
+	const storageMap = new Map([['cf7aiv_attribution', storedClick]]);
+	const page = makeHarness({
+		dataLayer: [['consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' }]],
+		search: '?page=2', href: 'https://example.test/contact/?page=2', storageMap, fields,
+	});
+	page.emit('DOMContentLoaded');
+	check((page.storedPayload() || {}).gclid === 'LANDINGCLICK123', 'a Consent Mode default must not delete attribution before the consent manager updates');
+	global.window.dataLayer.push(['consent', 'update', { analytics_storage: 'granted', ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' }]);
+	check((page.storedPayload() || {}).gclid === 'LANDINGCLICK123' && page.inputs.cf7aiv_gclid.value === 'LANDINGCLICK123', 'the landing click id must reach the form once the granted update arrives');
+}
+
+{
+	// A default granting statistics but not advertising is still undecided for
+	// advertising: the stored click id is not submitted, but it is not deleted.
+	const storageMap = new Map([['cf7aiv_attribution', JSON.stringify({ gclid: 'LANDINGCLICK123' })]]);
+	const page = makeHarness({
+		dataLayer: [['consent', 'default', { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' }]],
+		search: '?page=2', href: 'https://example.test/contact/?page=2', storageMap, fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(page.inputs.cf7aiv_gclid.value === '', 'an undecided advertising category must not submit the click id');
+	check((page.storedPayload() || {}).gclid === 'LANDINGCLICK123', 'an undecided advertising category must not delete the click id');
+	global.window.dataLayer.push(['consent', 'update', { ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' }]);
+	check(page.inputs.cf7aiv_gclid.value === 'LANDINGCLICK123', 'the click id must be submitted once advertising is granted');
+}
+
+{
+	// Undecided: keep the earlier choice's data locally, but remove the cookie,
+	// which the server fallback would otherwise keep renewing.
+	const stored = JSON.stringify({ gclid: 'LANDINGCLICK123', ad_storage: 'granted', analytics_storage: 'granted' });
+	const page = makeHarness({
+		dataLayer: [['consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied' }]],
+		search: '?page=2', href: 'https://example.test/contact/?page=2',
+		storage: { cf7aiv_attribution: stored }, cookies: { cf7aiv_attribution: encodeURIComponent(stored) }, fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(!page.hasCookie() && (page.storedPayload() || {}).gclid === 'LANDINGCLICK123', 'while consent is undecided the cookie must go and localStorage must keep the earlier data');
+}
+
+{
+	// An explicit refusal through `update` is still honoured.
+	const storageMap = new Map([['cf7aiv_attribution', JSON.stringify({ gclid: 'LANDINGCLICK123' })]]);
+	const page = makeHarness({
+		dataLayer: [['consent', 'default', { ad_storage: 'denied', analytics_storage: 'denied' }], ['consent', 'update', { ad_storage: 'denied', analytics_storage: 'denied' }]],
+		search: '?page=2', storageMap, fields,
+	});
+	page.emit('DOMContentLoaded');
+	check(page.storedPayload() === null, 'a Consent Mode update refusing consent must delete stored attribution');
+}
+
+{
+	// A Complianz banner that is still waiting answers false for everything.
+	const storageMap = new Map([['cf7aiv_attribution', JSON.stringify({ gclid: 'LANDINGCLICK123' })]]);
+	const page = makeHarness({ dataLayer: [], cmplzHasConsent: () => false, search: '?page=2', storageMap, fields });
+	page.emit('DOMContentLoaded');
+	check((page.storedPayload() || {}).gclid === 'LANDINGCLICK123', 'a pending Complianz banner must not delete stored attribution');
+}
+
+{
+	const storageMap = new Map([['cf7aiv_attribution', JSON.stringify({ gclid: 'LANDINGCLICK123' })]]);
+	const page = makeHarness({ dataLayer: [], cmplzHasConsent: () => false, search: '?page=2', storageMap, cookies: { cmplz_marketing: 'deny', cmplz_statistics: 'deny' }, fields });
+	page.emit('DOMContentLoaded');
+	check(page.storedPayload() === null, 'a recorded Complianz refusal must delete stored attribution');
+}
+
+// ─── GA identity from the older GS1 cookie ───────────────────────────────────
+
+{
+	const page = makeHarness({
+		dataLayer: consent(true, true),
+		measurementId: 'G-ABC123',
+		cookies: { _ga: 'GA1.1.111111111.1111111111', _ga_ABC123: 'GS1.1.1712345678.5.1.1712345900.0.0.0' },
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.ga_session_id === '1712345678', 'the session id must be read from a real GS1 cookie, which has no s prefix');
+}
+
+// ─── Values only the server cookie holds ─────────────────────────────────────
+
+{
+	// The server fallback wrote a click id into the cookie on a navigation the
+	// script never saw. localStorage, from an earlier visit, lacks it.
+	const page = makeHarness({
+		dataLayer: consent(true, true),
+		search: '?page=2', href: 'https://example.test/contact/?page=2',
+		storage: { cf7aiv_attribution: JSON.stringify({ utm_source: 'earlier-visit' }) },
+		cookies: { cf7aiv_attribution: encodeURIComponent(JSON.stringify({ gclid: 'SERVERCLICK123', utm_source: 'server-copy' })) },
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	const payload = page.payload() || {};
+	check(payload.gclid === 'SERVERCLICK123', 'a click id only the server cookie holds must not be lost');
+	check(payload.utm_source === 'server-copy', 'the cookie, which the server also writes, must win where both hold a value');
+}
+
+{
+	// A returning visitor clicks a new ad; the server stored the new click id.
+	const page = makeHarness({
+		dataLayer: consent(true, true),
+		search: '?page=2', href: 'https://example.test/contact/?page=2',
+		storage: { cf7aiv_attribution: JSON.stringify({ gclid: 'OLDCLICK12345' }) },
+		cookies: { cf7aiv_attribution: encodeURIComponent(JSON.stringify({ gclid: 'NEWCLICK12345' })) },
+		fields,
+	});
+	page.emit('DOMContentLoaded');
+	check((page.payload() || {}).gclid === 'NEWCLICK12345' && page.inputs.cf7aiv_gclid.value === 'NEWCLICK12345', 'a fresher click id in the cookie must beat an older one in localStorage');
+}
+
+{
+	// A cookie over the browser limit is refused silently and the old one kept,
+	// so long URLs are left out of the cookie while localStorage keeps them.
+	const longUrl = 'https://example.test/landing/?' + 'x'.repeat(1900);
+	const cookieMap = new Map();
+	const page = makeHarness({ dataLayer: consent(true, true), href: longUrl + '&gclid=TESTCLICK123', referrer: 'https://search.example/?' + 'q'.repeat(1900), cookieMap, fields });
+	page.emit('DOMContentLoaded');
+	const cookie = cookieMap.get('cf7aiv_attribution') || '';
+	check(cookie !== '' && cookie.length <= 3500 && JSON.parse(decodeURIComponent(cookie)).gclid === 'TESTCLICK123', 'the cookie must stay under the size limit and keep the click id');
+	check(((page.payload() || {}).first_landing_page || '').length > 1900, 'localStorage must keep the full URLs left out of the cookie');
+}
+
+// ─── Referrer ────────────────────────────────────────────────────────────────
+
+{
+	const page = makeHarness({ dataLayer: consent(true, true), search: '?page=2', href: 'https://example.test/contact/?page=2', referrer: 'https://example.test/', fields });
+	page.emit('DOMContentLoaded');
+	check(!('referrer' in (page.payload() || {})), 'a page on this site must not be stored as the referrer');
+}
+
+// ─── FormData that Contact Form 7 has already built ──────────────────────────
+
+{
+	const page = makeHarness({ dataLayer: consent(true, true), fields });
+	page.emit('DOMContentLoaded');
+	const sent = new Map();
+	page.emit('wpcf7beforesubmit', { target: page.wrappers[0], detail: { formData: { set: (name, value) => sent.set(name, value) } } });
+	check(sent.get('cf7aiv_gclid') === 'TESTCLICK123' && sent.get('cf7aiv_submission_id') === page.inputs.cf7aiv_submission_id.value, 'beforesubmit must write attribution into the FormData CF7 will send');
 }
 
 if (failures.length) {

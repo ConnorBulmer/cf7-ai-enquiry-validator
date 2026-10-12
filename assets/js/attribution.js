@@ -31,33 +31,68 @@
 		var matches = cookieEntries().filter(function (entry) { return entry.name === name; });
 		return matches.length === 1 ? matches[0].value : '';
 	}
-	function readStored() {
-		var raw = '';
-		try { raw = localStorage.getItem(storageName) || ''; } catch (e) {}
-		if (!raw) raw = readCookie(storageName);
+	function parseStored(raw) {
 		try {
-			var stored = JSON.parse(raw) || {};
-			delete stored.submission_id;
-			return stored;
+			var value = JSON.parse(raw || '{}');
+			return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 		} catch (e) { return {}; }
+	}
+	/*
+	 * The cookie is the copy the server fallback also writes, on navigations
+	 * the script never sees - a landing request whose query a redirect then
+	 * dropped, for one. Reading only localStorage whenever it existed lost
+	 * those, and an older click id held there beat the fresh one. The cookie
+	 * therefore wins, and localStorage fills in what the cookie does not hold:
+	 * long URLs left out to keep it under the size limit, or everything once
+	 * the cookie has expired or been removed.
+	 */
+	function readStored() {
+		var local = '';
+		try { local = localStorage.getItem(storageName) || ''; } catch (e) {}
+		var stored = Object.assign(parseStored(local), parseStored(readCookie(storageName)));
+		delete stored.submission_id;
+		return stored;
+	}
+	/*
+	 * A browser silently refuses a cookie over about 4KB and keeps the old one,
+	 * which would then win the next read. Long URLs are left out first; the
+	 * full copy stays in localStorage.
+	 */
+	function cookiePayload(persisted) {
+		var payload = Object.assign({}, persisted);
+		var raw = JSON.stringify(payload);
+		['referrer', 'current_page', 'first_landing_page'].forEach(function (key) {
+			if (encodeURIComponent(raw).length > 3500 && key in payload) {
+				delete payload[key];
+				raw = JSON.stringify(payload);
+			}
+		});
+		return raw;
+	}
+	function cookieSuffix() {
+		return ';path=/;SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
+	}
+	function expireCookie() {
+		document.cookie = storageName + '=' + cookieSuffix().replace(';path=/', ';path=/;Max-Age=0');
 	}
 	function writeStored(value) {
 		var persisted = Object.assign({}, value);
 		delete persisted.submission_id;
 		var raw = JSON.stringify(persisted);
+		var cookieRaw = cookiePayload(persisted);
 		/*
 		 * Skip a write that would change nothing. One consent decision can reach
 		 * us twice - a Consent Mode dataLayer push and a WordPress Consent API
 		 * event - and re-storing an identical payload is pure noise.
 		 */
-		var current = null;
-		try { current = localStorage.getItem(storageName); } catch (e) {}
-		if (current === null) { current = readCookie(storageName) || null; }
-		if (current === raw) { return; }
-		try { localStorage.setItem(storageName, raw); } catch (e) {}
+		var currentLocal = null;
+		try { currentLocal = localStorage.getItem(storageName); } catch (e) {}
+		if (currentLocal === raw && readCookie(storageName) === cookieRaw) { return; }
+		if (currentLocal !== raw) { try { localStorage.setItem(storageName, raw); } catch (e) {} }
 		var age = Math.max(1, Number(cfg.retentionDays || 90)) * 86400;
-		document.cookie = storageName + '=' + encodeURIComponent(raw) + ';path=/;max-age=' + age + ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
+		document.cookie = storageName + '=' + encodeURIComponent(cookieRaw) + ';path=/;max-age=' + age + ';SameSite=Lax' + (location.protocol === 'https:' ? ';Secure' : '');
 	}
+
 	function clearFields(root) {
 		Object.keys(cfg.fields || {}).forEach(function (field) {
 			if (cfg.fields[field] === 'submission_id') return;
@@ -80,14 +115,31 @@
 	}
 	function googleConsentMode() {
 		var mode = {};
+		var decided = {};
 		(window.dataLayer || []).forEach(function (entry) {
 			var row = Array.prototype.slice.call(entry || []);
 			if (row[0] !== 'consent' || (row[1] !== 'default' && row[1] !== 'update') || !row[2]) return;
 			consentKeys.forEach(function (key) {
-				if (row[2][key] === 'granted' || row[2][key] === 'denied') mode[key] = row[2][key];
+				if (row[2][key] === 'granted' || row[2][key] === 'denied') {
+					mode[key] = row[2][key];
+					if (row[1] === 'update') decided[key] = true;
+				}
 			});
 		});
-		return mode;
+		return { values: mode, decided: decided };
+	}
+	/*
+	 * Complianz answers false for every category while its banner is still
+	 * waiting, which is "not asked yet", not a refusal. Its own cookies record
+	 * that a choice was made.
+	 */
+	function complianzDecided() {
+		var prefix = (window.complianz && typeof window.complianz.prefix === 'string') ? window.complianz.prefix : 'cmplz_';
+		if (readCookie(prefix + 'banner-status') === 'dismissed') return true;
+		return ['marketing', 'statistics'].some(function (category) {
+			var value = readCookie(prefix + category);
+			return value === 'allow' || value === 'deny';
+		});
 	}
 	/**
 	 * Complianz publishes consent through its own function and its own events.
@@ -125,12 +177,13 @@
 		}
 		var complianz = complianzConsent();
 		if (complianz) return complianz;
-		var mode = googleConsentMode();
+		var google = googleConsentMode();
 		return {
-			statistics: mode.analytics_storage === 'granted',
-			marketing: mode.ad_storage === 'granted',
+			statistics: google.values.analytics_storage === 'granted',
+			marketing: google.values.ad_storage === 'granted',
 			source: 'google',
-			mode: mode,
+			mode: google.values,
+			decided: google.decided,
 		};
 	}
 	function decodeUrlPart(value) {
@@ -142,8 +195,9 @@
 		var hadClick = false;
 		var identifiers = clickKeys.concat(['zc_gad']);
 		if (!value) return { value: '', hadClick: false };
-		for (var index = 0; index < value.split('&').length; index++) {
-			var part = value.split('&')[index];
+		var parts = value.split('&');
+		for (var index = 0; index < parts.length; index++) {
+			var part = parts[index];
 			var separator = part.indexOf('=');
 			var rawName = separator === -1 ? part : part.slice(0, separator);
 			var rawValue = separator === -1 ? '' : part.slice(separator + 1);
@@ -219,7 +273,10 @@
 			var clients = entries.filter(function (candidate) { return candidate.name === prefix + '_ga'; });
 			if (clients.length !== 1) return;
 			var clientMatch = clients[0].value.match(/^GA\d+\.\d+\.(\d+\.\d+)$/);
-			var sessionMatch = entry.value.match(/(?:^|[.$])s(\d{6,20})(?:[.$]|$)/);
+			// GS2 marks the session id with an s (GS2.1.s1712345678$o5$g1...);
+			// GS1, still common, puts it bare in the third field
+			// (GS1.1.1712345678.5.1...).
+			var sessionMatch = entry.value.match(/(?:^|[.$])s(\d{6,20})(?:[.$]|$)/) || entry.value.match(/^GS1\.\d+\.(\d{6,20})(?:\.|$)/);
 			if (clientMatch && sessionMatch) {
 				pairs.push({ ga_client_id: clientMatch[1], ga_session_id: sessionMatch[1] });
 			}
@@ -241,22 +298,23 @@
 		});
 	}
 	/**
-	 * Has a consent decision actually been made, as opposed to not arriving yet?
+	 * Has the visitor refused this category, as opposed to not having decided?
 	 *
 	 * The WordPress Consent API is synchronous and authoritative, so if it
 	 * answered, the decision is real. Consent Mode is published asynchronously
-	 * through dataLayer: before the consent manager runs there are no consent
-	 * entries at all, which is not the same as a refusal.
+	 * through dataLayer, and only an `update` is a decision. The standard setup
+	 * pushes `default` denied in the page head on every page, before the
+	 * consent manager has read the visitor's stored choice; treating that as a
+	 * refusal deleted the click id captured on the landing page as soon as the
+	 * visitor opened a second page, before the granted update arrived. That held
+	 * per category too: a default granting statistics but not advertising
+	 * deleted the click ids while the advertising answer was still pending.
 	 */
-	function consentDecided(consent) {
-		// Complianz answers synchronously from a stored decision, exactly like the
-		// WordPress Consent API: if cmplz_has_consent replied, a choice was made.
-		if (consent.source === 'wordpress' || consent.source === 'complianz') { return true; }
-		var mode = consent.mode || {};
-		for (var index = 0; index < consentKeys.length; index++) {
-			if (mode[consentKeys[index]] === 'granted' || mode[consentKeys[index]] === 'denied') { return true; }
-		}
-		return false;
+	function refused(consent, category) {
+		if (consent[category]) { return false; }
+		if (consent.source === 'wordpress') { return true; }
+		if (consent.source === 'complianz') { return complianzDecided(); }
+		return (consent.decided || {})[category === 'statistics' ? 'analytics_storage' : 'ad_storage'] === true;
 	}
 	function collect() {
 		var consent = consentState();
@@ -269,11 +327,19 @@
 			 * landing page before the visitor ever reached the form. Measured on a
 			 * staging site: gclid stored correctly on the ad landing page, then
 			 * wiped on the next page view, leaving first_landing_page as /contact/.
+			 *
+			 * Undecided, localStorage is left untouched and nothing is submitted.
+			 * The cookie goes, because the server fallback reads consent from it
+			 * and would otherwise keep renewing it on the strength of a choice the
+			 * visitor has not repeated.
 			 */
-			if (consentDecided(consent)) { deleteStored(); }
+			if (refused(consent, 'statistics') || refused(consent, 'marketing')) { deleteStored(); }
+			else { expireCookie(); clearAllFields(); }
 			return {};
 		}
-		var stored = filterStored(readStored(), consent);
+		// What is submitted follows current consent; what is kept follows refusals.
+		var retained = filterStored(readStored(), { statistics: !refused(consent, 'statistics'), marketing: !refused(consent, 'marketing') });
+		var stored = filterStored(Object.assign({}, retained), consent);
 		var params = new URLSearchParams(location.search);
 		if (consent.marketing) {
 			clickKeys.forEach(function (key) {
@@ -293,15 +359,20 @@
 				if (!stored.first_landing_page) stored.first_landing_page = current;
 				stored.current_page = current;
 			}
-			if (!stored.referrer && document.referrer) {
+			// Only an external referrer says where the visitor came from. On a
+			// direct landing the second page's referrer is the first page.
+			if (!stored.referrer && document.referrer && !sameSite(document.referrer)) {
 				var referrer = sanitizeUrl(document.referrer);
 				if (referrer) stored.referrer = referrer.value.slice(0, 2048);
 			}
 			Object.assign(stored, gaIdentity());
 		}
 		captureConsent(stored, consent);
-		writeStored(stored);
+		writeStored(Object.assign(retained, stored));
 		return stored;
+	}
+	function sameSite(value) {
+		try { return new URL(value).hostname === new URL(location.href).hostname; } catch (e) { return false; }
 	}
 	function formElement(target) {
 		if (!target) return null;
@@ -390,9 +461,29 @@
 	document.addEventListener('submit', function (event) {
 		if (event.target && event.target.closest('.wpcf7')) populateForm(formElement(event.target));
 	}, true);
-	document.addEventListener('wpcf7beforesubmit', function (event) { populateForm(formElement(event.target)); });
+	/*
+	 * Contact Form 7 builds the FormData it sends before it announces
+	 * beforesubmit, and passes it along. Filling the inputs alone is then too
+	 * late for a submission that skipped the native submit event, so the values
+	 * are written into that FormData as well.
+	 */
+	document.addEventListener('wpcf7beforesubmit', function (event) {
+		var form = formElement(event.target);
+		populateForm(form);
+		var formData = event.detail && event.detail.formData;
+		if (!form || !formData || typeof formData.set !== 'function') return;
+		Object.keys(cfg.fields || {}).forEach(function (field) {
+			var input = form.querySelector('[name="' + field + '"]');
+			if (input) formData.set(field, input.value);
+		});
+	});
+	/*
+	 * Only a sent message starts a new submission. A mail failure is still
+	 * captured, and the visitor usually presses Send again: keeping its token
+	 * makes that retry update the same enquiry instead of adding a second one,
+	 * which would be classified and sent as a second conversion.
+	 */
 	document.addEventListener('wpcf7mailsent', rotateSubmission);
-	document.addEventListener('wpcf7mailfailed', rotateSubmission);
 	document.addEventListener('wp_listen_for_consent_change', populateAll);
 	/*
 	 * Complianz announces each category as its own event once the visitor
