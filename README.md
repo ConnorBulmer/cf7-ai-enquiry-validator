@@ -1,696 +1,326 @@
 # CF7 AI Enquiry Validator
 
-CF7 AI Enquiry Validator is a WordPress 6.5+/PHP 8.1+ plugin that asynchronously classifies stored Contact Form 7 enquiries and evaluates privacy-safe conversion delivery. Contact Form 7 validation, mail, Flamingo/CFDB7 storage, and the visitor response never wait for DeepSeek, OpenAI, GA4, Microsoft, or a webhook.
+**Send Google Ads and Microsoft Ads the enquiries that matter, not every form
+submission.**
 
-It is designed to optimise advertising around genuinely valuable enquiries
-instead of treating every form submission as an equally useful conversion.
-Classification and advertising delivery remain separate: AI proposes a
-structured outcome, while deterministic policy, evidence, consent, attribution,
-mapping, lifecycle and idempotency rules decide whether anything can be sent.
+CF7 AI Enquiry Validator is a WordPress plugin for Contact Form 7. After a
+visitor submits a form, it uses AI (DeepSeek or OpenAI, with your own API key)
+to classify the enquiry against rules you define:
 
-## Highlights
+- a genuine sales lead;
+- a lower-value enquiry;
+- a job application, a supplier pitch or spam.
 
-- DeepSeek Chat Completions and OpenAI Responses providers.
-- Flamingo and CFDB7 live capture plus calibration-only historical sampling.
-- Guided industry starter packs and editable Custom business policies.
-- Grounded evidence outcomes: **Strong match**, **Needs review**, and
-  **Not eligible**.
-- Google click IDs, Microsoft click IDs, GA client/session data, UTMs, landing
-  page, referrer and consent capture, stored only under the applicable explicit
-  statistics or marketing consent category.
-- Direct GA4 Measurement Protocol, existing server-side GTM, Microsoft UET CAPI
-  and signed webhook destinations.
-- Shadow mode, destination dry-runs, review queues, policy versioning,
-  calibration, retention and WordPress privacy tools.
-- No hosted SaaS, central telemetry or vendor-controlled data store.
+It then sends a conversion to GA4, an existing server-side GTM container,
+Microsoft UET or a signed webhook, but only when deterministic rules say it
+should. Ad platforms can then optimise toward real opportunities instead of
+form fills.
+
+The visitor never waits. Contact Form 7 mail, Flamingo or CFDB7 storage and
+the "thank you" message happen as normal. Classification and delivery run
+afterwards in the background.
+
+| | |
+| --- | --- |
+| Version | 0.2.35 ([changelog](CHANGELOG.md)) |
+| Requires | WordPress 6.5+, PHP 8.1+, Contact Form 7, Flamingo or CFDB7 |
+| AI providers | DeepSeek (default `deepseek-flash`) or OpenAI (default `gpt-5.4-mini`) |
+| Destinations | Direct GA4, existing server-side GTM, Microsoft UET CAPI, signed webhook |
+| Licence | GPL-3.0-or-later |
+
+## Contents
+
+- [Why it exists](#why-it-exists)
+- [How it works](#how-it-works)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation and rollout](#installation-and-rollout)
+- [Policies: telling the AI what a good enquiry is](#policies-telling-the-ai-what-a-good-enquiry-is)
+- [Review, accuracy and learning from corrections](#review-accuracy-and-learning-from-corrections)
+- [Destinations](#destinations)
+- [Safety model](#safety-model)
+- [Privacy, consent and data retention](#privacy-consent-and-data-retention)
+- [Administration screens](#administration-screens)
+- [Configuration and secret constants](#configuration-and-secret-constants)
+- [WP-CLI](#wp-cli)
+- [Troubleshooting](#troubleshooting)
+- [Scope and v1 boundaries](#scope-and-v1-boundaries)
+- [Documentation](#documentation)
+- [Development](#development)
+
+## Why it exists
+
+Smart bidding (Maximise Conversions, Target CPA) learns from whatever you
+count as a conversion. When every form submission counts, the platform also
+learns from spam, job seekers, sales pitches and existing customers, and finds
+you more of them.
+
+This plugin puts a qualification step between the form and the ad platform.
+Only enquiries that match your definition of a valuable lead are reported, at
+the value you choose.
+
+## How it works
+
+```text
+Visitor submits a Contact Form 7 form
+ │   mail, Flamingo/CFDB7 storage and the visitor response carry on as normal
+ ▼
+1. Capture        Store a fingerprint, a reference to the stored enquiry,
+                  encrypted attribution (click IDs, GA IDs, UTMs) and consent.
+ ▼  (background job)
+2. Classify       Load the enquiry, keep only whitelisted fields, redact
+                  personal details, ask the AI for a structured answer, and
+                  check every piece of evidence it cites against the enquiry.
+ ▼
+3. Decide         Strong match → may be sent automatically
+                  Needs review → waits for a person
+                  Not eligible → never sent
+ ▼  (background job)
+4. Deliver        For each mapped destination: consent, identifiers,
+                  configuration and approval checks; then send exactly once,
+                  retry on temporary errors, pause on repeated failures.
+```
+
+The AI only *proposes* a classification. Whether anything is sent is decided
+by plain PHP rules: grounded evidence, a published policy, live mode, consent,
+a published mapping and idempotency. Model confidence is shown for
+diagnostics and never triggers a send.
+
+## Features
+
+- **Asynchronous by design.** Nothing slow runs in the form request. Work is
+  queued with the bundled Action Scheduler (WP-Cron fallback).
+- **Industry starter packs.** Care and supported living; marketing, web and
+  design agencies; training and education; business consultancy; home and
+  professional services; B2B products and services; and Custom business.
+- **Guided setup.** It can scan your public pages and form structure (never
+  submissions) and suggest services, audiences and exclusions. Each
+  suggestion is accepted, edited or rejected by you.
+- **Grounded evidence.** Every reason the AI gives must quote text that is
+  actually in the enquiry, or the answer is rejected.
+- **Reasoning levels.** Off, Standard or Deep, with matching token budgets
+  and timeouts. An optional second "verification" pass (DeepSeek) is
+  available for automatic candidates.
+- **Review queue.** Shows the enquiry exactly as the AI saw it. You can
+  confirm, correct, approve, approve and send, reject or reanalyse.
+- **Measure and improve.** Accuracy, Ads precision and missed leads are
+  reported per model and reasoning level. An accuracy test replays reviewed
+  enquiries against a draft policy or a different model. Reviewer corrections
+  can become policy examples.
+- **Duplicate protection.** A second enquiry from the same person within 30
+  days is held for review instead of counted twice (with enhanced matching).
+- **Four destinations.** Each is idempotent, retries with backoff and pauses
+  itself after repeated permanent failures.
+- **Consent-aware.** Supports the WordPress Consent API, Complianz and Google
+  Consent Mode. Consent is enforced per destination at send time.
+- **Privacy by default.** Identity fields never reach the AI. Attribution is
+  encrypted at rest. Retention and WordPress export and erasure tools are
+  included. There is no SaaS, no telemetry and no vendor data store.
+- **Safe rollout.** Shadow mode, dry runs, draft-then-publish policies and
+  mappings, and separately confirmed live switches.
+- **Operator tooling.** Activity log, Tracking Health screen, per-item
+  delivery diagnostics, optional daily digest email and WP-CLI commands.
 
 ## Requirements
 
 | Component | Requirement |
 | --- | --- |
-| WordPress | 6.5 or newer |
-| PHP | 8.1 or newer |
-| Forms | Current Contact Form 7 |
-| Storage | Flamingo or Contact Form 7 Database Addon (CFDB7) |
-| Scheduling | Bundled Action Scheduler, loaded defensively |
-| AI | Your own DeepSeek or OpenAI API credential |
-| Google route | GA4 Measurement ID and Measurement Protocol API secret |
-| Microsoft route | UET tag ID and Microsoft Advertising CAPI token |
-
-## Contents
-
-- [How it works](#how-it-works)
-- [Current release](#current-release)
-- [Policy model](#policy-model)
-- [Safe defaults](#safe-defaults)
-- [Data flow and privacy](#data-flow-and-privacy)
-- [Installation and rollout](#installation-and-rollout)
-- [Destinations](#destinations)
-- [Administration](#administration)
-- [WP-CLI](#wp-cli)
-- [Secret constants](#secret-constants)
-- [Consent, retention and uninstall](#consent-retention-and-uninstall)
-- [Extension interfaces](#extension-interfaces)
-- [Troubleshooting](#troubleshooting)
-- [Development and testing](#development-and-testing)
-- [Creating a GitHub release](#creating-a-github-release)
-
-## How it works
-
-```text
-CF7 submission
-  ├─ mail and source storage continue independently
-  └─ local capture → queued source lookup → redaction/whitelist
-       → AI structured classification → grounded policy evaluation
-       → review/shadow/consent/attribution/mapping gates
-       → idempotent qualified conversion delivery
-```
-
-The plugin does not use AI inside Contact Form 7 validation or the visitor
-request. It stores a source reference rather than duplicating the raw enquiry,
-then loads the original content from Flamingo or CFDB7 only when an authorised
-worker or reviewer needs it.
-
-## Current release
-
-### Version 0.2.35 measure, test and learn
-
-Version 0.2.35 fixes retries never running: a job that scheduled its own retry
-was told the retry already existed, because the queue counted the running job.
-Timed-out classifications and retryable deliveries now retry as intended.
-
-It also adds ways to measure and improve accuracy before anything changes in
-production. Policy Lab can re-run reviewed enquiries against a draft policy or a
-different model and reasoning level, and compare the result with production on
-the same enquiries. Reviewer corrections can become examples in a new draft
-policy. Overview records which setup produced each classification and splits
-accuracy by it, including missed leads.
-
-The review page shows what the AI was given, redacted, and the AI's own answer
-beside any correction. Corrections are chosen from the policy. Integrations
-adds a connection test for the AI provider. Likely duplicates from the same
-person go to review instead of being sent twice. Schema remains version 10.
-
-### Version 0.2.34 delivery and attribution fixes
-
-Version 0.2.34 fixes two destinations that could not send. Live GA4 never sent
-for a property validated since 0.2.30, because delivery still read a flag that
-release stopped setting. The existing server-side GTM destination never sent,
-because the delivery worker had no rule for it. In both cases Tracking Health
-said the destination was ready. Delivery and Health now share one readiness
-check.
-
-It also stops the standard Consent Mode setup deleting the landing click id on
-the second page view, before the consent manager's update arrived, and does the
-same for a pending Complianz banner. The GA session id is read from GS1 cookies,
-the referrer stays the first external one, and a resend after a mail failure no
-longer creates a second enquiry and conversion. Phone numbers are hashed only in
-E.164 form. Auto-pause counts only recent consecutive failures, and Tracking
-Health shows why a destination paused with a Resume button. Schema remains
-version 10.
-
-### Version 0.2.33 current DeepSeek model, distinct reasoning levels
-
-Version 0.2.33 moves DeepSeek to `deepseek-flash` (DeepSeek-V4.1-Flash).
-DeepSeek retired V4-Flash on 10 September 2026, and its old ID now works only as
-a temporary alias. Saved settings on a retired DeepSeek ID move to the new one
-once.
-
-Standard and deep reasoning now differ in effort, not just in allowance.
-DeepSeek was never sent a `reasoning_effort`, so both used its default. Standard
-now asks for `high` and deep for `max`. Allowances are 8000 and 24000 tokens of
-thinking on top of the answer, for both providers. Providers bill only what is
-used, so this is a ceiling, not a charge.
-
-Classification now uses the configured timeout. It was fixed at 30 seconds
-before, so the 0.2.32 ceiling only reached the site scan. The default is 60
-seconds. Reasoning calls get at least 90 seconds (standard) or 180 seconds
-(deep), within the 300-second ceiling. A reply cut off at its token limit or
-withheld by a content filter is reported as such and is not retried at full cost.
-Both providers are told the enquiry is data to evaluate, never instructions.
-Schema remains version 10, so no migration is required.
-
-### Version 0.2.32 time and room to think
-
-Version 0.2.32 lets reasoning actually run.
-
-The provider timeout was capped at 60 seconds and the reasoning allowances were
-small, both because a provider call could hang an administrator's request. That
-constraint has been removed rather than worked around: classification, GA4
-validation and now the site scan all run as queued jobs, so no provider call
-happens inside a web request. The ceiling is 300 seconds, and standard and deep
-reasoning receive 3000 and 8000 tokens of thinking on top of the answer (raised
-again in 0.2.33).
-
-This is a deliberate trade. Reasoning is what lets the model weigh an ambiguous
-enquiry rather than pattern-match it, and these classifications feed advertising
-bidding, where a confident wrong answer is more expensive than a slow right one.
-Higher reasoning uses more tokens and costs more per enquiry. Schema remains
-version 10, so no migration is required.
-
-### Version 0.2.31 room for the answer
-
-Version 0.2.31 raises the classification token allowance, which was smaller than
-the one given to policy suggestions despite classification producing the larger
-answer.
-
-A v2 classification emits nine required fields, and every evidence entry carries
-an excerpt quoted from the enquiry, so the reply grows with how much the enquiry
-actually says. At 900 tokens it was being cut off mid-object, and a JSON object
-cut in half does not parse - which surfaced as "malformed or schema-invalid
-content" and read as the model misbehaving rather than as a budget that could
-never have been sufficient.
-
-Found on a live site where one enquiry timed out with reasoning enabled and
-returned invalid content with reasoning off: two different failures with the same
-underlying cause, visible only because the failure reason is now displayed.
-Schema remains version 10, so no migration is required.
-
-### Version 0.2.30 a result that survives a page load
-
-Version 0.2.30 fixes the GA4 validation result being lost between the background
-job that produced it and the screen that reports it.
-
-The result was written into the main settings array. `Plugin::ensureSettings()`
-rewrites that array in full on `plugins_loaded`, on every request, so a value
-written asynchronously was overwritten by any request that had read the array
-moments earlier. The symptom was precise and misleading: the activity log
-recorded "Validation passed" while Integrations continued to report "Not
-validated", because both were telling the truth about different copies.
-
-A result produced asynchronously does not belong in a structure that synchronous
-requests rewrite wholesale. It now has its own option, which nothing else
-writes, and the write is read back and reported through the activity log if it
-fails to land. The live transition and destination readiness read the same
-stored result, so the safety gate and the badge cannot disagree. Schema remains
-version 10, so no migration is required.
-
-### Version 0.2.29 an activity log, and validation off the request
-
-Version 0.2.29 adds a plugin activity log and moves GA4 debug validation into
-the background.
-
-The plugin already broadcast why it refused an action, why a delivery was gated
-and why something failed. Those facts reached the PHP error log under
-`CF7AIV_DEBUG` and nowhere else, and managed hosting frequently does not expose
-that log - so the plugin could diagnose its own failure and had no way to hand
-the answer over. Tracking Health & Logs now carries an activity log fed by the
-same lifecycle actions, scrubbed of credentials and personal data before storage
-rather than on display, and capped at 200 entries so it needs no migration and
-cannot grow without bound.
-
-GA4 debug validation now runs as a queued job. Contacting Google can outlive
-PHP's execution limit on a slow or filtered network, and run inline that took the
-whole request with it: nothing was written, and the page reloaded with no result
-and no reason - indistinguishable from a button that does nothing. The job
-records its outcome whenever it completes, the screen reports a "Checking" state
-while it runs, and an unavailable queue falls back to running inline rather than
-declining to check at all. Schema remains version 10, so no migration is
-required.
-
-### Version 0.2.28 a reason that stays put
-
-Version 0.2.28 fixes the GA4 validation reason never reaching the screen. It was
-held in a short-lived, read-once transient, which meant whichever page load
-happened first consumed it - frequently one that rendered it inside a tab panel
-the operator was not looking at - and a refresh a few seconds later found
-nothing. The result was a destination that reported itself blocked while
-offering no explanation, which is the problem the reason was added to solve.
-
-The reason is now stored beside the flag it explains. It persists for as long as
-validation has not passed, and is cleared when it does, so a problem that has
-been fixed stops presenting itself as current. A page-level notice also appears
-whenever GA4 is enabled but unvalidated, because a destination that cannot go
-live is not a detail belonging to one tab. Schema remains version 10, so no
-migration is required.
-
-### Version 0.2.27 settings that save what you set
-
-Version 0.2.27 fixes destination checkboxes silently reverting when cleared.
-
-An unchecked checkbox is not submitted at all. The sanitizer starts from
-`Settings::defaults()` and only overwrites a flag whose key is present, so a
-cleared box left the default in place. Any flag defaulting to true could not be
-turned off: it accepted the change, saved, and came back set, with nothing to
-say why. The GA4 dry-run flag defaults to true, so it was affected. Every
-checkbox now carries a hidden companion field, which is the pattern the
-advanced-mode flag already used.
-
-GA4 dry-run is a separate matter. Live delivery is gated on debug validation
-having passed, so that flag is released by the lifecycle transition and never by
-the settings form. It is now shown as governed by that transition, rather than
-presented as an editable control that quietly refuses. Schema remains version 10,
-so no migration is required.
-
-### Version 0.2.26 GA4 validation reasons
-
-Version 0.2.26 reports what GA4 objected to, rather than only that it objected.
-
-The Measurement Protocol debug endpoint exists to explain refusals: a mismatched
-API secret, an unknown event name and a malformed client id all come back named,
-with a field path and a validation code. That response was collapsed into "GA4
-debug validation failed", which discarded the entire reason for calling the debug
-endpoint and left a destination that will not leave dry-run for reasons nobody
-could see.
-
-Google's own text is now reported, bounded and stripped to plain description
-because it is shown to an administrator, and surfaced on Integrations through a
-short-lived per-administrator transient that is read once so a fixed problem
-stops being reported as current. Schema remains version 10, so no migration is
-required.
-
-### Version 0.2.25 visible operational state
-
-Version 0.2.25 shows three things the plugin already knew and never displayed.
-Each had the same shape: a state that decided what happened next was recorded
-internally and left off the screen, so the only remaining move was to guess or
-read the code.
-
-The reason a classification failed is written to `last_error` on every failure
-and was displayed nowhere. A queue of failed items showed only that they had
-failed, which leaves re-running them as the sole option - and something that
-fails deterministically fails again. It now appears in the Review Queue for
-failed and retrying items, sanitized through the same path as delivery errors.
-
-GA4 debug validation recorded its result silently. Live delivery refuses to
-leave dry-run until validation passes, so enabling it could do nothing with no
-explanation. Integrations now shows whether validation has passed and what
-follows from it.
-
-Administration actions that call an AI provider or Google synchronously can take
-tens of seconds behind an ordinary form submission, with no cursor change, no
-disabled button and no message. They now report progress while they run, without
-ever claiming success. Schema remains version 10, so no migration is required.
-
-### Version 0.2.24 Complianz consent capture
-
-Version 0.2.24 fixes attribution never being captured on sites using Complianz,
-which silently prevented any conversion from ever being delivered.
-
-The script read consent from two places: the WordPress Consent API, and Consent
-Mode entries in `dataLayer`. Complianz publishes through its own
-`cmplz_has_consent()` function and its own `cmplz_event_*` events, and its
-Consent API bridge is optional. On a site configured that way both known routes
-stayed silent while consent was in fact fully granted, so consent read as never
-decided, the click identifier on the landing URL was never stored, and
-`attribution_ready` never became true. Nothing was logged, because as far as the
-script could tell the visitor had simply not chosen yet.
-
-Complianz is now a recognised consent source. Its statistics and marketing
-categories map exactly as the WordPress Consent API categories do, its
-synchronous answer counts as a real decision, and its post-load consent events
-are observed so a decision made after page load still captures the landing click
-identifier. The WordPress Consent API remains authoritative wherever it is
-present, so existing sites are unaffected. Schema remains version 10, so no
-migration is required.
-
-### Version 0.2.23 credential field state
-
-Version 0.2.23 makes a stored credential visible as stored. Secret inputs are
-write-only by design and the value is never rendered - that has not changed -
-but the field also rendered with an empty value whether a credential was saved
-or not. A fully configured site was indistinguishable from an untouched one, so
-a successful save looked like a failure, and re-entering the key looked safer
-than trusting it.
-
-Each credential field now carries a stored/not-set badge, a masked placeholder
-so a configured field looks configured, and a sentence stating that leaving it
-blank keeps the stored value. The mask is a placeholder attribute rather than a
-value: as a value it would be submitted on the next save and stored as the
-credential itself.
-
-Removal is now possible. Because a blank field means "keep", a stored credential
-could not previously be taken out without editing the database. A typed
-replacement takes precedence over a removal request. A credential supplied
-through a constant reports as stored, because `Crypto::secret()` prefers a
-constant over the database. Schema remains version 10, so no migration is
-required.
-
-### Version 0.2.22 reasoning token budgets
-
-Version 0.2.22 fixes reasoning starving the answer it was meant to improve.
-DeepSeek counts reasoning tokens against `max_tokens`, and both the suggestion
-and classification calls sent a single flat budget covering both. With reasoning
-enabled the thinking could consume the allowance, and the JSON answer arrived cut
-mid-object - which surfaced as "response is malformed" several layers from the
-cause, because half a JSON object does not parse.
-
-The answer and the reasoning are now sized separately. The answer allowance
-matches what the OpenAI provider already receives for the identical call, and
-reasoning is granted its own allowance on top instead of competing with it.
-Budgets remain bounded and predictable rather than unlimited.
-
-A reply the model did not finish writing is also detected directly through
-`finish_reason: length` and reported as an exhausted budget, not as malformed
-input, because those need opposite fixes. Schema remains version 10, so no
-migration is required.
-
-### Version 0.2.21 diagnosable setup failures
-
-Version 0.2.21 makes a failed site scan say why it failed. The service caught
-every failure with an unbound `catch (Throwable)` and replaced it with a single
-reassuring sentence, so an API key that was never stored, an API key the
-provider rejected, and a host that refuses outbound HTTP all produced the same
-notice. Those need opposite fixes, and the screen gave no way to tell them
-apart.
-
-DeepSeek suggestion failures now carry the HTTP status, which is the whole
-diagnosis: 401 means the credential was rejected, 403 that the account cannot
-use it, 404 a wrong base URL, 5xx a provider outage. The reason is scrubbed
-before display — `Redactor` handles enquiry content but not API keys or bearer
-tokens, so credential-shaped runs are removed first — then length-capped.
-
-The reason reaches the notice through a short-lived per-administrator transient
-rather than the query string, because a URL is logged by the server, kept in
-history and read over a shoulder. It is cleared after one read. Schema remains
-version 10, so no migration is required.
-
-### Version 0.2.20 administration failure handling
-
-Version 0.2.20 changes what an administrator sees when an action cannot be
-carried out. Every `admin_post` handler validates its input and passes it to a
-service that rejects bad values; those rejections were uncaught, so WordPress
-rendered its critical-error page, mailed the site administrator and logged a
-fatal for what was a typed-in value the plugin was right to refuse.
-
-Handlers are now registered through a single guard. A rejected value returns
-HTTP 400 carrying the reason it was rejected. An unexpected fault returns a
-generic HTTP 500, with the real detail written to the error log and broadcast on
-`cf7aiv_admin_action_failed` rather than shown in the browser. Refusals are
-broadcast on `cf7aiv_admin_action_refused` and logged under `CF7AIV_DEBUG`,
-because a refusal is otherwise visible only to the administrator who caused it.
-Denials keep their own 403 where `wp_die` is filtered to throw.
-
-This release also corrects misleading defaults and presentation found by working
-through the screens as an operator: a neutral starter pack is preselected,
-calibration no longer offers actions that cannot succeed, policy identifiers are
-shown as readable labels, and Overview tables no longer duplicate their heading
-or overflow. Schema remains version 10, so no migration is required.
-
-### Version 0.2.19 guided administration and provider reasoning
-
-Version 0.2.19 adds a five-step guided Setup workflow and a tabbed
-Integrations dashboard. Starter-pack previews and evidence requirements remain
-bounded and escaped, provider/destination safety is visible, and ordinary Save
-changes stays separate from lifecycle, mapping, consent, validation, and
-transport actions.
-
-Provider reasoning controls now follow the selected model's documented
-capabilities. DeepSeek and OpenAI suggestions/classification retain bounded
-structured-output budgets, and OpenAI's GPT-5.4-family `none` effort is sent only
-where documented. Unknown or unsupported models fail closed. Schema remains
-version 10, so no migration is required.
-
-### Version 0.2.18 diagnostics and delivery observability
-
-Version 0.2.18 adds a read-only operational doctor and per-item diagnosis path
-for live troubleshooting. `wp cf7aiv doctor` reports queue state, captured but
-unclassified items, attribution readiness and safe issue-code counts, consent
-integration detection, destination readiness, and published mapping readiness.
-`wp cf7aiv diagnose --item=ID` walks one stored item through classification,
-lifecycle, attribution, consent, and mapping/destination gates without sending
-or claiming a delivery.
-
-Delivery gate decisions also emit the `cf7aiv_delivery_gate` lifecycle action and
-optional `CF7AIV_DEBUG` error-log records. Invalid administrator nonces now
-return a controlled HTTP 403 instead of an uncaught critical error. Schema
-remains version 10, so no migration is required.
-
-### Version 0.2.17 queue and Consent Mode attribution fixes
-
-Version 0.2.17 corrects three defects that each stopped qualified conversions
-being delivered, and none of which could be worked around through settings.
-
-Queued work is now deduplicated by hook, arguments and group. Action Scheduler's
-own `$unique` flag compares only hook and group, so the previous behaviour
-allowed a single pending action per hook for an entire site: every per-item job
-enqueued while another was waiting was discarded without an error, including
-classification and delivery retries.
-
-Attribution now follows Consent Mode. Sites that publish consent through
-`dataLayer` rather than the WordPress Consent API never emitted the event the
-script listened for, so a click identifier present on the landing URL was never
-stored and no conversion became eligible. Consent defaults and updates pushed to
-`dataLayer` are now observed directly.
-
-Stored attribution is only discarded once consent has actually been decided.
-Consent Mode publishes asynchronously, and treating "not yet known" as a refusal
-deleted the click identifier captured on the landing page before the visitor
-reached the form. Storage writes are also skipped when the payload is unchanged,
-so one consent decision arriving by two routes still stores exactly once.
-
-Schema remains version 10, so no migration is required.
-
-### Version 0.2.16 WordPress-native administration refresh
-
-Version 0.2.16 replaces raw Overview and Tracking Health output with semantic
-summaries, status badges, descriptions, and accessible local table regions.
-Wide administration tables scroll within their own labelled regions while all
-six plugin screens remain responsive across desktop, tablet, and narrow
-viewports. Native WordPress controls and actions are grouped consistently,
-forced-colour and keyboard-focus coverage protects the refreshed interfaces,
-and the Microsoft transport-test disclosure now accurately describes its
-one-off synthetic anonymous ID. Release packaging excludes local top-level
-`.superpowers` plans and evidence. Schema remains version 10, so no migration
-is required.
-
-### Version 0.2.15 Microsoft UET Conversion API validation hardening
-
-Version 0.2.15 sends Microsoft events inside the documented `data` batch,
-uses one stable event/transaction identity across retries, safely classifies
-provider batch and nested validation failures, and adds an exact-confirmation,
-zero-value Microsoft transport test. The diagnostic event is consent-denied,
-contains no click ID or enhanced identity, and uses only a one-off synthetic
-anonymous ID required by CAPI. Identifier-free events fail locally without a
-network request. Account IDs, UET tag details,
-credentials, and conversion-goal configuration remain outside reusable source.
-Schema remains version 10, so no migration is required.
-
-### Version 0.2.13 cross-site portability hardening
-
-Version 0.2.13 scopes operational source-link tokens to each form and page,
-binds GA identity to one configured direct-GA4 or server-GTM property,
-generalizes persistent source locators, and qualifies bounded CFDB7 matching by
-form, time and exact token.
-It also extends the bounded public-site scanner through explicit filters and
-adds real WordPress 6.9/7.0.2 browser coverage across PHP 8.1/8.3 and
-Flamingo/CFDB7.
-Schema remains version 10, so no migration is required.
-
-### Version 0.2.12 deterministic evidence dimensions
-
-Version 0.2.12 assigns the published policy dimension locally from each allowed
-evidence code. Provider-supplied dimension is redundant metadata, so a mismatch
-no longer discards otherwise allowed and grounded evidence. Unknown codes,
-non-whitelisted fields, and ungrounded excerpts remain strictly rejected.
-
-### Version 0.2.11 consent-independent source linking
-
-Version 0.2.11 keeps the CF7-to-CFDB7 source-link token in page memory even
-when analytics and marketing consent are denied or unavailable. The token is
-operational rather than tracking data: it is submitted only with CF7, is not
-stored in the plugin attribution cookie or localStorage, and rotates after a
-completed submission. All tracking fields remain empty without consent.
-
-### Version 0.2.10 DeepSeek supporting-evidence guidance
-
-Version 0.2.10 tells DeepSeek not to stop after the chosen tier's required
-evidence groups. When the supplied context contains grounded supporting
-signals, it must include enough to satisfy `minimum_supporting_evidence`;
-otherwise it must choose a tier whose rules are satisfied or return
-insufficient information. Deterministic evidence evaluation remains unchanged.
-
-### Version 0.2.9 DeepSeek evidence-schema guidance
-
-Version 0.2.9 gives DeepSeek the exact published evidence code-to-dimension
-mapping plus concrete JSON examples of every allowed pair. This prevents
-intermittent fail-closed classifications in JSON mode without inventing tier,
-outcome, evidence-excerpt, or enquiry semantics, while preserving strict local
-schema, catalog, privacy, and grounding validation.
-
-### Version 0.2.8 assisted setup provenance correction
-
-Version 0.2.8 constrains assisted-setup provenance to the exact finalized
-`pack:key`, `page:ID`, and `form:ID` identifiers supplied to the provider. Both
-DeepSeek and OpenAI receive the same dynamic enum, preventing otherwise safe
-suggestions from being discarded because the model cited a URL or invented
-reference.
-
-### Version 0.2.7 assisted setup response correction
-
-Version 0.2.7 bounds assisted setup to 20 compact suggestions and gives
-DeepSeek enough output headroom to complete its JSON response for larger public
-site profiles. Partial or truncated provider output remains rejected.
-
-### Version 0.2.6 WordPress admin input correction
-
-Version 0.2.6 normalizes WordPress admin form input before any plugin handler
-uses it. This fixes advanced policy JSON imports on normal WordPress requests,
-where core recursively adds request slashes before dispatching the admin action.
-The regression exercises a fully slashed Training and Education policy through
-the real guarded import handler.
-
-### Version 0.2.5 release archive safety correction
-
-Version 0.2.5 supersedes 0.2.4. It uses a platform-safe test log sink and
-rejects Windows-reserved or otherwise unsafe archive path components before a
-release can be published. The release workflow independently reopens the built
-ZIP and confirms one canonical plugin root with no unsafe entries.
-
-### Version 0.2.4 consent-safe attribution
-
-Public attribution is now fail-closed. A configured WordPress Consent API is
-authoritative; only its explicit grant permits the relevant attribution category.
-When that authority is unavailable or unqualified, the collector may use a known
-Google Consent Mode grant as a fallback. Denied, withdrawn, and partial consent
-remove disallowed local attribution, the plugin cookie, and injected Contact Form
-7 fields. Stored landing and current-page URLs are accepted only for safe HTTP(S)
-origins, preventing unsafe values from being carried forward after consent
-filtering.
-
-### Version 0.2.3 controlled Google testing
-
-Controlled testing includes strict GA4 debug validation, a confirmed dedicated
-transport test, and an isolated classification-to-delivery self-test. The
-transport event is zero-value, PII-free, click-ID-free, and consent-denied; it
-does not enable GA4, publish mappings, or change automation from shadow. The
-pipeline self-test can use the configured AI provider while keeping its item,
-mapping, delivery record, and destination entirely in memory.
-
-The same dedicated event may optionally be registered as a GA4 key event and
-imported into Google Ads as a Secondary observation-only conversion for
-end-to-end acceptance testing. The plugin never performs that account-level
-registration or import itself. Synthetic traffic cannot prove attribution to a
-real paid click; that final check requires a genuine, consented paid session.
-
-Missing evidence is now interpreted against the published tier rules. Optional
-facts do not override otherwise satisfied required and minimum-supporting
-evidence, while missing required evidence, contradictions, ambiguity, and
-exclusions continue to fail closed.
-
-### Version 0.2.1 Google conversion routes
-
-Google delivery now offers two deliberately separate routes:
-
-- **Direct GA4 — recommended for most users:** Measurement ID plus GA4 Measurement Protocol API secret → GA4 key event → Google Ads import.
-- **Existing server-side GTM — Advanced:** tagging-server URL plus Measurement ID/API secret → the server container's GA4 client → a native Google Ads Conversion Tracking tag.
-
-The sGTM route assumes that the operator already has a server container and tagging server. The plugin does not provision Google Cloud, require a Google Cloud Console account, call the Google Ads API, use OAuth, or require a developer token. A tagging server may be hosted on Google Cloud, another managed provider, or operator-controlled infrastructure.
-
-Transport alone is not bidding authorization. For Maximize Conversions, the mapped qualified-lead conversion action must be Primary and its goal must be selected by the campaign. Only the valuable qualified tier should normally be Primary; lower-value or diagnostic actions should remain Secondary. Existing signed webhooks remain available for custom receivers.
-
-## Policy model
-
-Version 0.2.0 includes six domain starter packs plus **Custom business**:
-
-- Care and supported living
-- Marketing, web, and design agencies
-- Training and education
-- Business consultancy
-- Home and professional services
-- B2B products and services
-- Custom business
-
-The guided Setup supports **Setup**, **Testing**, and **Live** lifecycle stages. It can analyse public page copy and safe Contact Form 7 structure, but never submission values. Every generated suggestion remains pending with its page, form, or starter-pack provenance until an administrator accepts, edits, or rejects it. Setup may also be completed without a scan. Entering Testing or publishing a policy does not enable automatic delivery, and entering Live still leaves automation in shadow until the separate Integrations transition.
-
-Simple mode focuses on the guided policy editor and the review outcomes **Strong match**, **Needs review**, and **Not eligible**. Advanced mode adds policy JSON/version controls, grounded evidence diagnostics, missing evidence, ambiguity, provider usage, and model confidence. Confidence is diagnostic only: it is not a dispatch threshold and cannot override grounded evidence, exclusions, consent, lifecycle, mapping, attribution, or delivery controls.
-
-Version 2 policies use the universal outcomes `primary_opportunity`, `secondary_opportunity`, `legitimate_non_conversion`, `excluded`, `spam`, and `insufficient_information`. Strong matches require policy-defined, source-grounded evidence. Administrator corrections create review truth and draft suggestions; the plugin does not learn, rewrite, or publish policies automatically.
-
-## Safe defaults
-
-- Automation starts in `shadow` mode.
-- GA4, existing server-side GTM, Microsoft UET, and webhook destinations start disabled with `dry_run: true`.
-- Policies and delivery mappings are drafts until separately reviewed and published.
-- Historical imports are calibration-only, belong to a durable immutable run, and cannot dispatch. A run becomes active only after every stratum is queued. Its row lock serializes cancellation with item/result/failure writes, so cancelled or superseded actions fail closed even when they are already running or retried.
-- Historical calibration is a separate explicit opt-in workflow, suggests 25 records by default, and previews the actual safe-field union from currently published policies alongside the configured date/form/source scope. The preview is fingerprint-bound to the queued run; classification intersects it with the current policy, so later policy widening cannot disclose a newly added field. It never reanalyses existing records merely because the plugin or policy is upgraded.
-- The care-home pilot helper suggests matches for titles containing **Care Enquiry**, **Brochure Request**, **Jobs**, and **General Enquiry**; it never publishes them.
-- Existing v1 policies remain readable for shadow/review compatibility. Their results are always **Needs review** because v1 lacks v2 grounded-evidence rules; upgrading creates a v2 draft for review and does not alter the source policy or historical results.
-- Optional deeper verification is off by default, is shown only for providers that implement the verification capability, makes a second paid provider call for otherwise automatic candidates, and fails back to **Needs review** on disagreement or error.
-- No real credential is included in this repository.
-
-## Data flow and privacy
-
-Public-page attribution storage is denied by default. Explicit WordPress Consent API opt-in decisions are authoritative; when that authority is unavailable, unconfigured, or opt-out by default, the collector uses the latest known Google Consent Mode state. If neither source proves an allowed category, storage is denied. Statistics permits GA/UTM/navigation attribution, marketing permits click IDs, and partial consent removes data outside the granted category. Consent changes are handled through `wp_listen_for_consent_change`; withdrawal deletes the plugin localStorage entry and cookie and clears its hidden CF7 fields. Complianz is compatible through its standard WordPress Consent API bridge. A CF7 enquiry checkbox is not treated as statistics or marketing consent.
-
-The capture hook persists a fingerprint, source reference, encrypted attribution/consent snapshots, and optional consent-gated normalized identity hashes. The asynchronous worker loads the original enquiry from Flamingo or CFDB7 on demand. Only explicitly whitelisted, non-identity fields are redacted and sent to AI. Dedicated name, email, phone, IP, click-ID, attribution, consent, file, hash, secret, and every case-insensitive `cf7aiv_` field is blocked. Free text can still contain self-disclosed sensitive information, so provider suitability remains an administrator responsibility; provider-authored prose is never stored as the result summary.
-
-The classifier never decides whether a particular destination may send. Classification-level gates require a published v2 policy, live automation, at least one currently published/enabled database mapping, an Ads-eligible tier, a **Strong match** grounded-evidence decision, and no unresolved ambiguity or missing required evidence. Model confidence is retained for diagnostics only. The delivery worker then evaluates each mapping independently for its required identifier or identity readiness, destination configuration, applicable consent keys, shadow/calibration/history state, audited manual approval where applicable, and persistent idempotency lease.
-
-Concurrency-sensitive transitions fail closed. Cross-source fingerprints are globally unique; classification writes use review revisions so they cannot overwrite a concurrent human decision; approve-and-dispatch records a unique, auditable approval atomically; calibration cancellation is serialized with queued work; and delivery claims use unique idempotency keys plus lease tokens.
-
-Read [Privacy and AI data flow](docs/PRIVACY-AND-AI.md) for details.
+| WordPress | 6.5 or newer (tested to 7.0) |
+| PHP | 8.1 or newer, with OpenSSL |
+| Forms | Contact Form 7 |
+| Enquiry storage | Flamingo (recommended) or Contact Form 7 Database Addon (CFDB7) |
+| Background jobs | Bundled Action Scheduler (an existing copy from another plugin is reused) |
+| AI | Your own DeepSeek or OpenAI API key |
+| Google | GA4 Measurement ID and Measurement Protocol API secret, or an existing server-side GTM container |
+| Microsoft | UET tag ID and Conversion API token |
 
 ## Installation and rollout
 
-1. Install and activate Contact Form 7 plus Flamingo (recommended) or CFDB7.
-2. Install this plugin and run `wp cf7aiv migrate`.
-3. Run `wp cf7aiv status`, `wp cf7aiv health`, and `wp cf7aiv dry_run`.
-4. Run `wp cf7aiv pilot` to inspect the starter policy, form profiles, and disabled draft mappings. Add `--create-policy-draft` only when you want to save the policy as a draft.
-5. Configure DeepSeek or OpenAI, keeping automation in shadow. The public scan and classification features call the selected provider, so review provider terms, data location, retention, notices, and legal basis first.
-6. Optionally schedule historical calibration from Setup or Tracking Health. Select source/forms/dates, review the whitelisted-field preview, explicitly opt in, and start with the suggested 25. Existing historical records are not reanalysed automatically.
-7. Review classifications and corrections. Corrections create draft suggestions only; no automatic learning occurs.
-8. Choose direct GA4 for the simplest Google setup, or enable Existing server-side GTM in Advanced mode when a tagging server already exists. Configure each destination in dry-run with its real credential available through a `CF7AIV_*` constant or write-only encrypted setting, validate it, save mappings as drafts, then use the separate publish and enable transitions. Separate controls disable mappings, return automation to shadow, and return GA4 to dry-run. Automation-live and GA4-live each have separately nonced administrator transitions; GA4-live remains unavailable until debug validation succeeds. Changing the GA measurement ID, credential, or enabled state clears validation/live state and forces a new dry-run validation cycle.
+1. **Install.** Install and activate Contact Form 7 and Flamingo (or CFDB7),
+   then this plugin. Activation creates the database tables. You can run
+   `wp cf7aiv migrate`, then `wp cf7aiv status` and `wp cf7aiv health`, to
+   confirm.
+2. **Connect AI.** Go to **AI Enquiry Validator → Integrations**, add a
+   DeepSeek or OpenAI key (or a `CF7AIV_*` constant), and click **Test
+   connection**.
+3. **Set up a policy.** Go to **Setup**: pick a starter pack, optionally scan
+   your site for suggestions, review them, and save a policy draft. Publish
+   it in **Policy Lab**.
+4. **Move to Testing.** Enquiries are classified in *shadow* mode: nothing is
+   sent. Review them in the **Review Queue**, and correct anything wrong.
+5. **Optionally calibrate on history.** Classify a bounded sample (25
+   suggested) of past enquiries to measure accuracy before going live.
+   Calibration items can never be sent.
+6. **Configure a destination in dry run.** For Google, direct GA4 is
+   simplest: add the Measurement ID and API secret and click **Validate**.
+   Server-side GTM is available in Advanced mode. Then create a mapping
+   ("tier X → event Y worth Z"), publish it and enable it.
+7. **Go live, one switch at a time.** Set the stage to Live, then switch
+   automation to live, then switch GA4 (or another destination) out of dry
+   run. Each is a separate, confirmed step.
+8. **Tell the ad platform.** For GA4, mark the event as a key event, link
+   GA4 to Google Ads and import it as a conversion. Make the valuable one
+   Primary.
 
-Full provider/destination and GA4-to-Google-Ads instructions are in [Setup](docs/SETUP.md).
+Full step-by-step instructions, including GA4 → Google Ads and Microsoft UET,
+are in [Setup and rollout](docs/SETUP.md).
+
+## Policies: telling the AI what a good enquiry is
+
+A policy describes your business and sorts enquiries into **tiers** (for
+example `residential_care`, `care_information`, `spam`). Each tier maps to
+one of six universal outcomes:
+
+| Outcome | Typical use |
+| --- | --- |
+| `primary_opportunity` | The lead you want more of |
+| `secondary_opportunity` | Worth something, but less |
+| `legitimate_non_conversion` | Real, but not a sale (support, existing customers) |
+| `excluded` | Recruitment, supplier pitches, and so on |
+| `spam` | Spam or automated content |
+| `insufficient_information` | Not enough to tell |
+
+For each tier the policy lists:
+
+- the **required evidence** and **supporting evidence**, as codes from its
+  evidence catalogue;
+- whether the tier is **Ads-eligible**;
+- which exclusion and ambiguity codes apply.
+
+The policy also says which form fields the AI may read (the *whitelist*).
+
+An enquiry is a **Strong match** only when:
+
+- the outcome is an opportunity;
+- every required evidence group is satisfied by a quote found in the enquiry;
+- there are enough supporting quotes;
+- no exclusion or ambiguity applies.
+
+Anything else is **Needs review** or **Not eligible**.
+
+Policy versions:
+
+- **Lifecycle.** Policies are versioned. A new version is a draft until
+  published, and publishing supersedes the previous version.
+- **Per form.** A form can have its own policy (`form:<id>`), overriding the
+  `global` one.
+- **Format.** Policies are `cf7aiv-policy/v2` JSON and can be imported and
+  exported in Advanced mode. Older v1 policies still work but always produce
+  Needs review.
+
+## Review, accuracy and learning from corrections
+
+- **Review Queue.** Shows the AI's tier and outcome, the evidence it cited,
+  and the enquiry *as the AI received it* (whitelisted and redacted). The raw
+  enquiry appears only in Advanced mode. You can confirm, change the tier,
+  approve without sending, approve and send, reject, or reanalyse.
+- **Overview.** Reports agreement with reviewers, Ads precision, false
+  positives and **missed leads**, split by provider, model and reasoning
+  level.
+- **Accuracy test** (Policy Lab). Re-runs up to 100 reviewed enquiries
+  against any saved policy, provider, model and reasoning level, and shows
+  the result next to production's. Use it before publishing a policy or
+  changing model.
+- **Learn from corrections** (Policy Lab). Each correction includes a short,
+  non-identifying description of the enquiry. Pick the useful ones and they
+  are added to a copy of the policy as examples, saved as a new draft to test
+  and publish. Nothing is learned or published automatically.
 
 ## Destinations
 
-| Destination | Typical use | Required matching data | Important behaviour |
+| Destination | Typical use | Needs | Notes |
 | --- | --- | --- | --- |
-| Direct GA4 | Simplest Google Ads route | GA client ID; recent session ID gives stronger session attribution | Send a GA4 key event, link GA4 to Google Ads, then import the selected event |
-| Existing server-side GTM | Advanced users with a tagging server | Google click/client/session context as configured in the container | Sends GA4-shaped requests to the existing first-party tagging endpoint; the container owns its Google Ads tag |
-| Microsoft UET CAPI | Microsoft Advertising conversion goals | Consent-permitted `msclkid`, or separately enabled consented hashes | Uses the UET tag Conversion API authentication key, preserves actual consent, and sends one stable event/transaction identity |
-| Signed webhook | CRM, Make, server-side GTM or custom receiver | Depends on the receiver | PII-free normalized envelope signed with HMAC-SHA256 |
+| **Direct GA4** | Simplest Google Ads route | Measurement ID and API secret; the visitor's GA client ID | Validate against the GA4 debug endpoint first. Mark the event as a key event and import it into Google Ads. Best attribution when sent within the visitor's session. |
+| **Existing server-side GTM** | You already run a tagging server | HTTPS endpoint, measurement ID and API secret; a GA client ID or Google click ID | Sends a GA4 Measurement Protocol request to your server. Your container owns the Google Ads tag. |
+| **Microsoft UET CAPI** | Microsoft Advertising conversion goals | Tag ID and CAPI token; `msclkid`, or consented hashed email/phone | Uses a stable event and transaction ID so Microsoft can de-duplicate. |
+| **Signed webhook** | CRM, Make/Zapier, custom receivers | HTTPS URL and secret | JSON event with no names, contact details or message text (hashed email/phone only with enhanced matching and consent), signed with HMAC-SHA256 (`X-CF7AIV-Signature`). |
 
-Mappings are versioned independently from policies. Each mapping defines its
-tier, destination, event/action name, value and ISO currency. Publishing a
-mapping does not enable automation, and enabling automation does not bypass a
-disabled destination, failed consent rule or missing identifier.
+**Mappings** connect a tier to a destination: "send `residential_care` to GA4
+as `qualified_lead` worth £250". Mappings are versioned drafts until you
+publish and enable them.
 
-For Maximize Conversions, Google Ads must ultimately see the valuable qualified
-action as Primary and the campaign must use its goal. Diagnostic tests and
-lower-value actions should normally remain Secondary. The plugin cannot create
-or select campaign goals for you.
+All destinations start disabled and in **dry run**: requests are built and
+logged, but not sent. Changing a GA4 credential or measurement ID clears its
+validation and returns it to dry run.
 
-## Administration
+## Safety model
 
-- **Overview:** queue status, classifications, attribution readiness and
-  destination state.
-- **Review Queue:** inspect the source message on demand, confirm/change the
-  outcome, approve without sending, approve and dispatch, reject or reanalyse.
-- **Policy Lab:** guided policy fields, per-form overrides, labelled examples,
-  versions and `cf7aiv-policy/v1` JSON import/export.
-- **Integrations:** provider credentials, destination configuration, mapping
-  drafts, validation, dry-run and separately confirmed live transitions.
-- **Tracking Health / Logs:** landing capture, navigation persistence, form
-  injection, saved attribution, paused integrations and delivery failures.
+New installs cannot send anything until an administrator deliberately goes
+live:
 
-Simple mode presents the guided workflow. Advanced mode exposes prompt-policy
-JSON, evidence diagnostics, provider usage, confidence and lower-level
-integration controls. Switching views does not discard settings.
+- **Shadow mode** is the default. Enquiries are classified but nothing is
+  sent, and an enquiry first classified in shadow mode can never be sent
+  later, even after going live.
+- **Draft first.** Policies and mappings are drafts until published.
+  Publishing does not switch anything on.
+- **Separate live switches.** Lifecycle stage, automation mode and GA4 live
+  mode are three separate, separately confirmed switches.
+- **Calibration and historical items can never be sent.**
+- **Every send is idempotent.** Each conversion has a stable key and is
+  claimed under a lease, so retries and duplicate jobs cannot double count.
+- **Concurrency is fail-closed.** A classifier cannot overwrite a reviewer's
+  decision, and approve-and-send writes an audited approval atomically.
+- **Auto-pause.** A destination with repeated permanent failures (default 3)
+  pauses itself until resumed from Tracking Health.
+- **Verification (optional).** A second, deeper AI pass for automatic
+  candidates. Disagreement goes to review.
 
-## WP-CLI
+## Privacy, consent and data retention
 
-```text
-wp cf7aiv status
-wp cf7aiv migrate
-wp cf7aiv health
-wp cf7aiv calibrate --source=flamingo --date-from=2026-01-01 --date-to=2026-07-22 --maximum=25 --explicit-opt-in=1 --form-ids=10,20
-wp cf7aiv backfill --source=cfdb7 --date-from=2026-01-01 --date-to=2026-07-22 --maximum=25 --explicit-opt-in=1 --form-ids=10,20
-wp cf7aiv dry_run
-wp cf7aiv pilot [--create-policy-draft]
-wp cf7aiv process_queue
-wp cf7aiv ga4_test --mode=validate
-wp cf7aiv ga4_test --mode=transport --confirm=SEND_ZERO_VALUE_TEST
-wp cf7aiv pipeline_test [--use-configured-ai]
-```
+- **No copy of the enquiry.** The plugin stores a reference to the
+  Flamingo/CFDB7 record, not the message.
+- **What the AI sees.** Only whitelisted fields, with emails, phone numbers,
+  URLs, IPs and click IDs redacted. Some fields are always blocked, whatever
+  the policy says: any field whose name contains name, email, phone,
+  address, postcode, IP, file or upload, a click ID, UTM, campaign, source or
+  referrer, consent, cookie, session, hash, secret, token or password.
+- **What is stored.** The model's own text is never stored; summaries are
+  fixed phrases.
+- **Attribution.** Stored in the browser only with consent: statistics
+  consent for GA IDs, UTMs and pages; marketing consent for click IDs.
+  - Sources, in order: the WordPress Consent API (opt-in), Complianz, then
+    Google Consent Mode.
+  - Withdrawing consent removes the stored data.
+  - A CF7 acceptance checkbox is not treated as tracking consent.
+- **Consent at send time.** Checked per destination from the snapshot taken
+  at submission. There are three modes:
+  - `respect` (default): requires a grant;
+  - `always_actual`: sends, with the real consent state;
+  - `legal_basis_override`: sends, but requires an administrator, a date and
+    a reason, and is audited.
+- **Enhanced matching** (hashed email/phone) is off by default and needs
+  `ad_user_data` consent.
+- **Retention.** Plugin records are deleted after 90 days by default
+  (configurable). WordPress personal-data export and erasure are supported.
+- **Uninstall.** Keeps data unless **Delete on uninstall** is enabled.
 
-`process_queue` refuses to run by default unless automation is shadow and every destination is dry-run. `--allow-live` is an explicit production override, not part of the pilot procedure.
+Your Flamingo/CFDB7 enquiries are never deleted by this plugin. Read
+[Privacy and AI data flow](docs/PRIVACY-AND-AI.md) before production use. You
+remain responsible for your AI provider's terms, data location and legal
+basis.
 
-## Secret constants
+## Administration screens
 
-Prefer constants in `wp-config.php`; never commit values or print them in diagnostics:
+Under **AI Enquiry Validator** in wp-admin:
+
+| Screen | What it is for |
+| --- | --- |
+| **Overview** | Stage, queue, accuracy and missed leads, token usage, destination state |
+| **Review Queue** | Review and correct classifications, approve and send |
+| **Policy Lab** | Edit and publish policies, run accuracy tests, learn from corrections, JSON import/export |
+| **Integrations** | AI provider, destinations, mappings, consent, live switches |
+| **Tracking Health & Logs** | Attribution capture checks, paused destinations, failures, activity log, calibration |
+| **Setup** | Guided setup, site scan suggestions, lifecycle stage |
+
+**Simple mode** keeps to the guided workflow. **Advanced mode** adds policy
+JSON, evidence diagnostics, model confidence, provider usage and lower-level
+controls.
+
+## Configuration and secret constants
+
+Settings are managed in the admin screens. API keys and secrets can be
+entered there (stored encrypted, write-only). It is better to define them in
+`wp-config.php`, where a constant always wins:
 
 ```php
 define('CF7AIV_DEEPSEEK_API_KEY', getenv('CF7AIV_DEEPSEEK_API_KEY'));
@@ -699,118 +329,143 @@ define('CF7AIV_GA4_API_SECRET', getenv('CF7AIV_GA4_API_SECRET'));
 define('CF7AIV_SERVER_GTM_API_SECRET', getenv('CF7AIV_SERVER_GTM_API_SECRET'));
 define('CF7AIV_MICROSOFT_UET_TOKEN', getenv('CF7AIV_MICROSOFT_UET_TOKEN'));
 define('CF7AIV_WEBHOOK_SECRET', getenv('CF7AIV_WEBHOOK_SECRET'));
+
+define('CF7AIV_DEBUG', true); // optional: also write delivery gates to the PHP error log
 ```
 
-The plugin also supports encrypted write-only secret settings. Request bodies and secrets are never logged.
+Stored secrets are encrypted with a key derived from `AUTH_KEY` and
+`SECURE_AUTH_KEY`. **Changing those salts makes stored secrets unreadable,**
+so re-enter them afterwards. Secrets and request bodies are never logged.
 
-## Consent, retention and uninstall
+AI request timeout defaults to 60 seconds (maximum 300). Standard reasoning
+raises it to at least 90 s, and Deep to at least 180 s.
 
-Consent conflicts resolve to the most restrictive captured state. `respect` requires the applicable captured grant. `always_actual` may deliver while preserving the actual captured state. `legal_basis_override` requires a separately saved administrator, timestamp, and reason, appends that decision to the dedicated audit history, and retains actual consent in every delivery envelope. Enhanced identity matching is disabled by default and requires granted `ad_user_data`.
+## WP-CLI
 
-Retention defaults to 90 days. Privacy export/erasure removes dependent review suggestions and deliveries before plugin items and never deletes source enquiries. Routine retention also removes expired calibration-run control records after their items. Uninstall deletion is opt-in and removes plugin mappings, review suggestions, deliveries, items, calibration runs, policies, secrets, paused-destination state, and consent-override audit history.
-
-## Extension interfaces
-
-Sources, providers, destinations, and consent resolvers can be registered with public filters. Lifecycle actions fire after capture, classification, review, and recorded delivery attempts. See [Extending](docs/EXTENDING.md).
-
-The optional assisted-setup scanner also exposes bounded filters for public
-custom post types, local post objects, builder-managed public copy and embedded
-CF7 form IDs. It never fetches rendered page URLs, and every extension result
-is rechecked for published/password-free/local-origin eligibility plus the
-scanner's page and character limits. Copy-paste CPT and builder examples are in
-[Extending](docs/EXTENDING.md#assisted-site-profile-scanning).
-
-## v1 boundaries and v2 compatibility
-
-Version 0.2.17 supports Contact Form 7 with Flamingo/CFDB7, v1 shadow/review compatibility, v2 grounded-evidence policies, text classification through DeepSeek Chat Completions or OpenAI Responses, direct GA4 Measurement Protocol, GA4-protocol delivery through an existing sGTM server, Microsoft UET CAPI, and signed HTTPS webhooks. It does not provision a tagging server, inspect uploads with AI, replace a CRM, infer/falsify consent, learn from reviews automatically, auto-publish policy/mappings, reanalyse historical records on upgrade, guarantee lead quality, import conversions through the Google Ads API, or provide real-time AI validation in the CF7 request.
+```text
+wp cf7aiv status                 Version, schema, automation mode, dry-run state, sources
+wp cf7aiv migrate                Create or upgrade the database tables
+wp cf7aiv health                 Source availability and counts, paused destinations
+wp cf7aiv doctor                 Full diagnostics: queue, configuration, mappings, consent
+wp cf7aiv diagnose --item=<id>   Why one enquiry was or was not sent
+wp cf7aiv dry_run                Read-only safety report; sends nothing
+wp cf7aiv pilot [--create-policy-draft]
+                                 Starter policy, form profiles and draft mappings (never publishes)
+wp cf7aiv calibrate --source=flamingo --date-from=2026-01-01 --date-to=2026-06-30 \
+    --maximum=25 --explicit-opt-in=1 [--form-ids=10,20]
+                                 Schedule a calibration-only historical sample (alias: backfill)
+wp cf7aiv process_queue [--allow-live]
+                                 Run one queue pass (refused unless shadow + dry run, without --allow-live)
+wp cf7aiv pipeline_test [--use-configured-ai]
+                                 Isolated end-to-end self-test; touches no real data
+wp cf7aiv ga4_test --mode=validate
+wp cf7aiv ga4_test --mode=transport --confirm=SEND_ZERO_VALUE_TEST
+wp cf7aiv microsoft_test --confirm=SEND_ZERO_VALUE_MICROSOFT_TEST
+```
 
 ## Troubleshooting
 
-### Enquiries are stored but not classified
+**Enquiries are stored but not classified.**
 
-Confirm Action Scheduler is available with `wp cf7aiv status`, inspect
-`wp cf7aiv health`, and run a safe queue pass while automation and destinations
-remain in their pilot state. Provider authentication, rate limiting and
-malformed output are recorded as bounded errors and never prevent CF7 mail or
-storage.
+- Run `wp cf7aiv status` to confirm Action Scheduler is available.
+- Look under Tools → Scheduled Actions (group `cf7aiv`).
+- Check that a policy is published.
+- Errors such as a bad key, a rate limit or a timeout appear on the item and
+  in the activity log. They never affect CF7 mail or storage.
 
-### Everything remains Needs review
+**Everything stays "Needs review".**
 
-Check that the active policy is published `cf7aiv-policy/v2`, the required and
-minimum supporting evidence rules match the form fields, and the relevant fields
-are explicitly AI-whitelisted. Version 1 policies intentionally cannot produce
-an automatic Strong match.
+- Check that the published policy is v2.
+- Check that the fields carrying the evidence are in the AI whitelist.
+- Check that each tier's required and minimum supporting evidence is
+  realistic for your forms.
+- Try Standard reasoning, and use the accuracy test to compare.
 
-### A Strong match was not dispatched
+**A Strong match was not sent.**
 
-This is normally a deterministic gate rather than an AI-confidence issue.
-Inspect lifecycle stage, automation mode, published/enabled mapping, destination
-state, dry-run state, consent, identifier/identity readiness, ambiguity,
-required evidence, verification state and the record's shadow/history/
-calibration flags.
+Run `wp cf7aiv diagnose --item=<id>`, or check the activity log for the gate
+reason. Common causes:
 
-### Google Ads does not show a conversion
+- shadow mode;
+- no published and enabled mapping;
+- destination in dry run, paused or missing a credential;
+- consent not granted;
+- missing click or client ID;
+- verification required but not passed;
+- the item was first classified in shadow mode.
 
-First verify the event in GA4 Realtime or DebugView and confirm the GA4 property
-is linked to the intended Ads account. Imported conversion reporting can be
-delayed, and a synthetic or fake click ID cannot prove attribution to a real
-campaign. Direct GA4 attribution is strongest when the captured client and
-session identifiers are dispatched within the original session window.
+**Google Ads shows nothing.**
 
-### Changing credentials invalidated live delivery
+- Confirm the event in GA4 Realtime or DebugView.
+- Confirm GA4 is linked to the right Ads account and the event is imported
+  as a conversion.
+- Note that imports can lag by a day.
+- Attribution is strongest when the GA client and session IDs were captured
+  and the conversion is sent soon after the visit.
 
-This is deliberate. Changing a measurement ID, credential or enabled state
-clears its validation/live state. Validate again in dry-run before performing
-the separate live transition.
+**Live delivery stopped after changing a credential.**
 
-## Development and testing
+This is deliberate. Validate again in dry run, then switch to live.
 
-The test suite is deliberately framework-free:
+## Scope and v1 boundaries
+
+This plugin supports:
+
+- Contact Form 7 with Flamingo or CFDB7;
+- text classification with DeepSeek or OpenAI;
+- direct GA4 Measurement Protocol, an *existing* server-side GTM container,
+  Microsoft UET CAPI and signed HTTPS webhooks;
+- `cf7aiv-policy/v1` policies in shadow/review-only compatibility mode.
+
+It does **not**:
+
+- provision a tagging server;
+- read uploaded files with AI;
+- replace a CRM;
+- infer or invent consent;
+- learn or publish policies automatically;
+- reanalyse history on upgrade;
+- call the Google Ads API;
+- guarantee lead quality;
+- validate enquiries in real time inside the form request.
+
+## Documentation
+
+| Document | For |
+| --- | --- |
+| [Setup and rollout](docs/SETUP.md) | Site owners: step-by-step configuration of providers, policies, calibration, each destination and consent |
+| [Privacy and AI data flow](docs/PRIVACY-AND-AI.md) | Exactly what data goes where, and what never leaves the site |
+| [Extending](docs/EXTENDING.md) | Other plugins: filters, interfaces and lifecycle actions |
+| [Developer guide](docs/developer/README.md) | Developers changing this plugin: architecture, each subsystem, data model, queue, testing, recipes |
+| [Changelog](CHANGELOG.md) | A summary of each release |
+| [Release notes](docs/RELEASE-NOTES.md) | The detailed notes for each release |
+
+## Development
 
 ```bash
-for test_file in tests/*Test.php; do php "$test_file"; done
-find . -path './vendor' -prune -o -name '*.php' -print0 \
-  | sort -z \
-  | xargs -0 -n1 php -l
-node tests/AttributionJsTest.js
-node --check assets/js/attribution.js
+for f in tests/*Test.php; do php "$f" || break; done     # PHP tests (no Composer/PHPUnit needed)
+node tests/AttributionJsTest.js                          # attribution script tests
+find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l   # lint
+php tools/build-release.php --tag=v0.2.35 --output-dir=dist                       # build the release ZIP
 ```
 
-Build a release locally with the same packager used by GitHub Actions:
+The tests are framework-free PHP scripts with fake WordPress functions, so
+they run anywhere with PHP 8.1 and Node.js. `tests/wordpress/` holds an
+optional Docker and Playwright matrix against real WordPress versions.
 
-```bash
-php tools/build-release.php --tag=v0.2.24 --output-dir=dist
-```
+**Releases.**
 
-The command refuses malformed tags, version disagreement and credential-like
-content. It verifies the one-root ZIP and creates a matching `.sha256` file.
-`VERIFICATION.md` records the current release evidence; it is intentionally
-excluded from distributable ZIPs.
+1. Update the version in four places: the plugin header, `CF7AIV\VERSION`,
+   `readme.txt` "Stable tag", and `tests/ReleasePackageTest.php`.
+2. Add a `CHANGELOG.md` entry.
+3. Push a `vX.Y.Z` tag. GitHub Actions runs every test, builds a verified ZIP
+   with a SHA-256 checksum and attaches both to a GitHub Release.
 
-## Creating a GitHub release
+Start with the [developer guide](docs/developer/README.md) before making
+changes. It explains the architecture, the rules the code follows, and
+checklists for common changes.
 
-The repository workflow at `.github/workflows/release.yml` runs when a semantic
-version tag is pushed. Before publishing, update all four release identities:
+## Licence
 
-1. plugin header `Version` in `cf7-ai-enquiry-validator.php`;
-2. `CF7AIV\VERSION` in the same file;
-3. `Stable tag` in `readme.txt`;
-4. the Git tag, with a required `v` prefix.
-
-For version `0.2.22`:
-
-```bash
-git tag v0.2.22
-git push origin v0.2.22
-```
-
-GitHub Actions checks out that tag, runs every PHP/JavaScript test and lint,
-scans distributable text for common credential patterns, builds
-`cf7-ai-enquiry-validator-0.2.21.zip`, generates its SHA-256 file and attaches
-both to the GitHub Release. The workflow may also be rerun manually for an
-existing tag from the Actions tab; existing assets with the same names are
-replaced only after the new build passes.
-
-Do not commit API credentials, local `.env` files or generated ZIPs. The
-repository ignore rules cover common local files, and the release packager
-performs an additional fail-closed scan.
+GPL-3.0-or-later. See [LICENSE](LICENSE). Bundles
+[Action Scheduler](https://actionscheduler.org/) (GPL-3.0).

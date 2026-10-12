@@ -97,13 +97,41 @@ Implement `CF7AIV\Contracts\DestinationInterface::send(ConversionEvent): Deliver
 
 Built-in destination keys are `ga4`, `server_gtm`, `microsoft_uet`, and `webhook`. `server_gtm` uses GA4 Measurement Protocol shape but replaces Google's collection hostname with the configured existing tagging-server base URL. Its event parameters expose the stable event ID as both `event_id` and `transaction_id`, available Google click identifiers, non-identifying form/source context, value/currency, client/session context, and actual consent. Extensions must preserve these privacy and deduplication boundaries.
 
+A third-party destination is not yet sendable on its own. The delivery
+worker checks `DestinationReadiness::configured()` and `signalsReady()`, and
+both answer `false` for a key they do not know. An unknown key is therefore
+gated as `destination_not_configured`. The worker also requires both
+`analytics_storage` and `ad_storage` for an unknown key. Until readiness is
+pluggable, a new destination has to be added to the plugin itself; see
+[Recipes](developer/recipes.md#add-a-destination).
+
+## Policy packs
+
+Starter packs come from `assets/policies/packs.json`. Add or replace packs
+with the `cf7aiv_policy_packs` filter, which receives the list of
+already-validated pack definitions keyed by pack key. Each returned definition
+is validated again as `cf7aiv-policy/v2`. An invalid definition, or one
+whose `pack.key` differs from its array key, throws, and the pack list fails
+to load, so test your filter. A
+pack only seeds new drafts: changing a pack never changes a saved or
+published policy.
+
+```php
+add_filter('cf7aiv_policy_packs', function (array $packs): array {
+    $packs['veterinary'] = $myValidatedV2Definition; // must include pack.key = 'veterinary'
+    return $packs;
+});
+```
+
 The delivery worker rechecks eligibility independently. Extensions must not treat an earlier queue decision as authorization. Shadow, calibration, and historical records are never deliverable. The only non-automatic path is an explicit administrator `approve_dispatch` review that locks the item, compares the exact monotonic `review_revision` rendered in the administrator's single or per-item bulk form, advances that revision, and atomically writes reviewer truth plus one immutable approval ID to both the item and its accepted audit record. Missing or malformed revisions are rejected. A concurrent reject, approve-without-send, correction, classifier result/failure, or other review-state mutation advances the durable revision and makes the stale form fail even when tier and outcome are unchanged. Classifier writes preserve existing administrator truth. Manual approval remains subject to origin, consent, configuration, signal, pause, claim, idempotency, and retry gates.
 
 Calibration scheduling persists an immutable run in `scheduling` state before it queues a stratum. The run becomes `active` only after every stratum is accepted. Any queue or activation failure durably changes it to `cancelled` before best-effort unscheduling. Local item, result, and failure writes use `CalibrationRunStoreInterface::whileActive()`: the implementation starts a transaction, locks the run row, requires `active`, performs the short local mutation, and commits. Cancellation locks the same row before changing state, so cancellation and worker persistence have one linear order rather than a check/write race. Source preparation and remote AI calls remain outside that database lock; final persistence, retry, hook, and enqueue authorization are guarded afterward. Extensions must preserve `calibration_run_id` and must not mutate missing, cancelled, or superseded runs. An action that observes `scheduling` is deferred with a bounded activation wait rather than consuming its stratum.
 
 ## Consent resolvers
 
-Implement `CF7AIV\Contracts\ConsentResolverInterface::resolve(ClientSignals): ConsentSnapshot` and register with `cf7aiv_consent_resolvers`. Conflicts must resolve to the most restrictive state; extensions must never synthesize a grant.
+`CF7AIV\Contracts\ConsentResolverInterface::resolve(ClientSignals): ConsentSnapshot` is the contract for turning captured consent signals into one consent snapshot. Conflicts must resolve to the most restrictive state, and a resolver must never synthesize a grant.
+
+The plugin registers its own resolver (`most_restrictive`) on the `cf7aiv_consent_resolvers` filter, but capture does not consult that filter yet: `CaptureService` always uses `CF7AIV\Intake\ConsentResolver` directly. A resolver added to the filter is currently ignored. To support another consent platform today, feed its decision in as a signal (see how WordPress Consent API and Complianz signals are added in `CaptureService::capture()`), or make the filter authoritative in the plugin.
 
 ## Lifecycle actions
 
