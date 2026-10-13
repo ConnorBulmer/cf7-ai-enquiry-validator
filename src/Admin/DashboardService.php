@@ -22,8 +22,8 @@ final class DashboardService {
 			'queue_age_seconds' => null,
 			'attribution_ready' => 0,
 			'attribution_total' => 0,
-			'api_errors' => 0,
-			'api_cost' => 'Unavailable',
+			'failed_deliveries' => 0,
+			'ai_usage' => ['calls' => 0, 'input_tokens' => 0, 'output_tokens' => 0, 'reasoning_tokens' => 0],
 			'paused_destinations' => function_exists('get_option') ? (array) get_option('cf7aiv_paused_destinations', []) : [],
 			'automation_mode' => $settings['automation']['mode'] ?? 'shadow',
 			'setup_complete' => ! empty($settings['setup_complete']),
@@ -40,13 +40,14 @@ final class DashboardService {
 		}
 
 		$qualityRows = $wpdb->get_results(
-			"SELECT item.predicted_tier_id,item.predicted_outcome_id,item.reviewed_tier_id,item.reviewed_outcome_id,item.reviewed_at,policy.definition_json AS policy_snapshot
+			"SELECT item.predicted_tier_id,item.predicted_outcome_id,item.reviewed_tier_id,item.reviewed_outcome_id,item.reviewed_at,item.provider_usage_json,policy.definition_json AS policy_snapshot
 			FROM {$items} item
 			LEFT JOIN {$wpdb->prefix}cf7aiv_policies policy ON policy.id=item.policy_id
 			WHERE item.reviewed_at IS NOT NULL",
 			ARRAY_A
 		);
 		$result['quality'] = CalibrationMetrics::fromRows(is_array($qualityRows) ? $qualityRows : []);
+		$result['quality_by_profile'] = CalibrationMetrics::byProfile(is_array($qualityRows) ? $qualityRows : []);
 		$result['reviewed'] = (int) $result['quality']['reviewed'];
 		$result['corrected'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$items} WHERE review_state='corrected'");
 
@@ -55,7 +56,15 @@ final class DashboardService {
 		$result['queue_age_seconds'] = $oldestTime === false ? null : max(0, time() - $oldestTime);
 		$result['attribution_ready'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$items} WHERE attribution_ready=1");
 		$result['attribution_total'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$items}");
-		$result['api_errors'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$deliveries} WHERE state='failed'");
+		$result['failed_deliveries'] = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$deliveries} WHERE state='failed'");
+		// Totalling usage reads every item, so the Overview reuses a total for
+		// ten minutes rather than scanning the table on each visit.
+		$usage = function_exists('get_transient') ? get_transient('cf7aiv_ai_usage_totals') : false;
+		if (! is_array($usage)) {
+			$usage = IntegrationsPage::usageTotals();
+			if (function_exists('set_transient')) { set_transient('cf7aiv_ai_usage_totals', $usage, 600); }
+		}
+		$result['ai_usage'] = $usage;
 		return $result;
 	}
 }

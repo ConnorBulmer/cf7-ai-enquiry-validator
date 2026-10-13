@@ -342,7 +342,7 @@ $openTransport = new CF7AIVGroundedTransport([new CF7AIV\Infrastructure\HttpResp
 ], JSON_THROW_ON_ERROR))]);
 $openResult = (new CF7AIV\Providers\OpenAIProvider($openTransport, 'openai-secret'))->classify($request);
 $openPayload = json_decode((string) $openTransport->requests[0]['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
-grounded_assert(($openPayload['max_output_tokens'] ?? null) === 900, 'OpenAI v2 output must allow 900 tokens for grounded evidence.');
+grounded_assert(($openPayload['max_output_tokens'] ?? null) === 1800, 'OpenAI v2 output must allow the same 1800-token answer as DeepSeek, since 900 cut quoted evidence off mid-object.');
 grounded_assert($openResult->providerUsage === ['input_tokens' => 87, 'output_tokens' => 44, 'reasoning_tokens' => 5, 'calls' => 1], 'OpenAI usage must be normalized onto the result.');
 foreach ([json_encode($deepPayload, JSON_THROW_ON_ERROR), json_encode($openPayload, JSON_THROW_ON_ERROR)] as $providerPayload) {
 	foreach (['email', 'phone', 'gclid', 'consent', 'attribution', 'deep-secret', 'openai-secret'] as $forbidden) {

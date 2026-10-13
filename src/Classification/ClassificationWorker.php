@@ -31,6 +31,7 @@ final class ClassificationWorker {
 	/** @var callable(string):array<int,mixed> */ private $mappingResolver;
 	/** @var callable(string):?string */ private $calibrationState;
 	/** @var callable(string,callable):bool */ private $calibrationGuard;
+	/** @var callable(int,array<string,mixed>):bool */ private $duplicateResolver;
 
 	public function __construct(
 		private readonly ClassificationItemStoreInterface $items,
@@ -41,7 +42,9 @@ final class ClassificationWorker {
 		?callable $enqueue = null,
 		?callable $mappingResolver = null,
 		CalibrationRunStoreInterface|callable|null $calibrationAuthority = null,
+		?callable $duplicateResolver = null,
 	) {
+		$this->duplicateResolver = $duplicateResolver ?? static fn (int $itemId, array $item): bool => self::recentEnquiryFromSamePerson($itemId, $item);
 		$this->sourceResolver = $sourceResolver ?? static fn (): array => function_exists('apply_filters') ? (array) apply_filters('cf7aiv_submission_sources', []) : [];
 		$this->providerResolver = $providerResolver ?? static fn (): array => function_exists('apply_filters') ? (array) apply_filters('cf7aiv_ai_providers', []) : [];
 		$this->settingsResolver = $settingsResolver ?? static fn (): array => function_exists('get_option') ? (array) get_option(Settings::OPTION, Settings::defaults()) : Settings::defaults();
@@ -82,37 +85,11 @@ final class ClassificationWorker {
 			$policy = $this->policies->publishedForForm((int) ($item['form_id'] ?? $record['form_id'] ?? 0));
 			if ($policy === null) { throw new PermanentProviderException('No published classification policy is available.'); }
 			$definition = $policy['definition'];
-			$tierIds = array_values(array_map(static fn (array $tier): string => (string) $tier['id'], $definition['tier_definitions']));
 			$whitelist = ContextBuilder::safeWhitelist((array) $definition['ai_whitelist']);
 			if (! empty($item['is_historical']) || ! empty($item['is_calibration']) || ! empty($record['is_historical']) || ! empty($record['is_calibration'])) {
 				$whitelist = array_values(array_intersect($whitelist, ContextBuilder::safeWhitelist($historicalWhitelistSnapshot)));
 			}
-			$baseRequest = ContextBuilder::request((string) $itemId, (string) $policy['version'], $record['fields'], $whitelist, (string) $policy['compiled_prompt']);
-			$outcomeIds = [];
-			$allowedEvidence = [];
-			$allowedExclusionCodes = [];
-			$allowedAmbiguityFlags = [];
-			if (($definition['schema'] ?? PolicyValidator::SCHEMA_V1) === PolicyValidator::SCHEMA_V2) {
-				$outcomeIds = array_values(array_unique(array_map(static fn (array $tier): string => (string) $tier['outcome_id'], $definition['tier_definitions'])));
-				foreach ($definition['evidence_catalog'] as $evidence) {
-					$allowedEvidence[(string) $evidence['code']] = (string) $evidence['dimension'];
-				}
-				$allowedExclusionCodes = array_values($definition['exclusion_catalog']);
-				$allowedAmbiguityFlags = array_values($definition['ambiguity_catalog']);
-			}
-			$request = new ClassificationRequest(
-				$baseRequest->itemId,
-				$baseRequest->policyVersion,
-				$baseRequest->redactedText,
-				$baseRequest->context,
-				$baseRequest->systemPrompt,
-				$tierIds,
-				$outcomeIds,
-				$allowedEvidence,
-				(string) ($definition['schema'] ?? PolicyValidator::SCHEMA_V1),
-				$allowedExclusionCodes,
-				$allowedAmbiguityFlags,
-			);
+			$request = RequestFactory::build((string) $itemId, (string) $policy['version'], $definition, (string) $policy['compiled_prompt'], $record['fields'], $whitelist);
 			$settings = ($this->settingsResolver)();
 			$isHistorical = ! empty($item['is_historical']) || ! empty($item['is_calibration']) || ! empty($record['is_historical']) || ! empty($record['is_calibration']);
 			$isShadow = $isHistorical || ($settings['automation']['mode'] ?? 'shadow') !== 'live';
@@ -137,6 +114,18 @@ final class ClassificationWorker {
 				&& empty($item['is_calibration']) && empty($record['is_calibration'])
 				&& empty($item['is_historical']) && empty($record['is_historical'])
 				&& $publishedMappings !== [];
+			/*
+			 * A second enquiry from the same person within 30 days would otherwise
+			 * be sent as a second conversion automatically. The model cannot know
+			 * this - it only ever sees one enquiry - so it is checked here and the
+			 * enquiry goes to a person instead. Only hashes already stored are
+			 * used; they exist when enhanced matching is on and consent allows it.
+			 */
+			if ($potentialAutoCandidate && ($this->duplicateResolver)($itemId, $item)) {
+				$potentialAutoCandidate = false;
+				$evidenceDecision = new EvidenceDecision('needs_review', ['possible_duplicate']);
+				$result = $result->withAmbiguityFlag('possible_duplicate');
+			}
 			if (Settings::verificationMode($settings) === Settings::VERIFICATION_AUTOMATIC_CANDIDATES && $potentialAutoCandidate) {
 				if (! $provider instanceof VerificationCapableProviderInterface) {
 					$verificationState = 'unsupported';
@@ -283,6 +272,30 @@ final class ClassificationWorker {
 			throw new PermanentProviderException('Selected AI provider is unavailable.');
 		}
 		return $providers[$key];
+	}
+
+	/**
+	 * Was an earlier enquiry from the same email or phone hash, in the 30 days
+	 * before this one, sent or due to be sent as a conversion?
+	 *
+	 * Only those count: an earlier support question or spam message from the
+	 * same person was never a conversion, so it cannot make this one a second.
+	 * "Earlier" is strict - by capture time, then id - so two enquiries captured
+	 * in the same second cannot each hold the other back.
+	 *
+	 * @param array<string,mixed> $item
+	 */
+	private static function recentEnquiryFromSamePerson(int $itemId, array $item): bool {
+		global $wpdb;
+		$email = (string) ($item['email_hash'] ?? '');
+		$phone = (string) ($item['phone_hash'] ?? '');
+		if (($email === '' && $phone === '') || ! isset($wpdb->prefix) || ! method_exists($wpdb, 'get_var')) { return false; }
+		$created = (string) ($item['created_at'] ?? '');
+		$created = strtotime($created) === false ? gmdate('Y-m-d H:i:s') : $created;
+		return (int) $wpdb->get_var($wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}cf7aiv_items item WHERE (item.created_at<%s OR (item.created_at=%s AND item.id<%d)) AND item.created_at>=DATE_SUB(%s, INTERVAL 30 DAY) AND item.is_calibration=0 AND item.is_historical=0 AND ((item.email_hash<>'' AND item.email_hash=%s) OR (item.phone_hash<>'' AND item.phone_hash=%s)) AND (item.review_state IN ('eligible','approved_dispatch') OR EXISTS (SELECT 1 FROM {$wpdb->prefix}cf7aiv_deliveries delivery WHERE delivery.item_id=item.id AND delivery.state IN ('delivered','sending','retrying','pending')))",
+			$created, $created, $itemId, $created, $email, $phone
+		)) > 0;
 	}
 
 	/** @return array{input_tokens:int,output_tokens:int,reasoning_tokens:int,calls:int} */

@@ -2,9 +2,11 @@
 declare(strict_types=1);
 namespace CF7AIV\Admin;
 
+use CF7AIV\Classification\ClassificationHooks;
 use CF7AIV\Classification\PolicyRepository;
 use CF7AIV\Contracts\VerificationCapableProviderInterface;
 use CF7AIV\Delivery\DeliveryMapping;
+use CF7AIV\Delivery\WpDeliveryStore;
 use CF7AIV\Delivery\WpMappingLifecycle;
 use CF7AIV\Destinations\GA4Destination;
 use CF7AIV\Domain\ConversionEvent;
@@ -14,11 +16,11 @@ use CF7AIV\Infrastructure\Queue;
 use CF7AIV\Infrastructure\WordPressHttpTransport;
 use CF7AIV\Integration\MicrosoftUetTestService;
 use CF7AIV\Providers\DeepSeekProvider;
-use CF7AIV\Providers\OpenAIProvider;
 use InvalidArgumentException;
 
 final class AdminHooks {
-	private const SCAN_DIAGNOSTIC_PREFIX = 'cf7aiv_scan_diagnostic_';
+	private const SCAN_OUTCOME_PREFIX = 'cf7aiv_scan_outcome_';
+	private const PROVIDER_TEST_PREFIX = 'cf7aiv_provider_test_';
 	/**
 	 * Every admin_post action this plugin answers, and the method that answers it.
 	 *
@@ -50,6 +52,11 @@ final class AdminHooks {
 		'cf7aiv_setup_scan' => 'setupScan',
 		'cf7aiv_setup_suggestion' => 'setupSuggestion',
 		'cf7aiv_backfill' => 'backfill',
+		'cf7aiv_resume_destination' => 'resumeDestination',
+		'cf7aiv_test_provider' => 'testProvider',
+		'cf7aiv_accuracy_test' => 'accuracyTest',
+		'cf7aiv_accuracy_cancel' => 'accuracyCancel',
+		'cf7aiv_corrections_to_examples' => 'correctionsToExamples',
 	];
 
 	private static bool $settingsSave = false;
@@ -63,7 +70,7 @@ final class AdminHooks {
 	public static function register():void{
 		EventLog::register();add_action('admin_menu',[self::class,'menu']);add_action('admin_init',[self::class,'settings']);add_action('admin_enqueue_scripts',[self::class,'enqueueAssets']);add_action('init',[self::class,'schedule']);
 		foreach(self::HANDLERS as $action=>$method){add_action('admin_post_'.$action,self::guarded([self::class,$method]));}
-		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_setup_scan_job',[self::class,'runSetupScan'],10,2);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);
+		add_action('cf7aiv_validate_ga4_job',[self::class,'runGa4Validation']);add_action('cf7aiv_setup_scan_job',[self::class,'runSetupScan'],10,2);add_action('cf7aiv_backfill_batch',[self::class,'backfillBatch'],10,3);add_action('cf7aiv_daily_maintenance',[self::class,'daily']);add_action(AccuracyTest::JOB,[AccuracyTest::class,'runJob']);
 	}
 	public static function schedule():void{if(function_exists('wp_next_scheduled')&&function_exists('wp_schedule_event')&&!wp_next_scheduled('cf7aiv_daily_maintenance')){wp_schedule_event(time()+3600,'daily','cf7aiv_daily_maintenance');}}
 	public static function menu():void{
@@ -133,7 +140,7 @@ final class AdminHooks {
 	public static function mappingPublish():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_publish');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->publish($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function mappingEnable():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_enable');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->enable($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
 	public static function mappingDisable():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_mapping_disable');$key=self::identifier((string)($post['mapping_key']??''),'');$version=self::identifier((string)($post['version']??''),'');if($key!==''&&$version!==''){(new WpMappingLifecycle())->disable($key,$version);}self::redirect('admin.php?page=cf7aiv-integrations');}
-	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);Ga4Validation::queued();EventLog::record('ga4_validation','info','Validation queued.',['measurement_id'=>(string)($ga['measurement_id']??'')]);if(Queue::enqueue('cf7aiv_validate_ga4_job')===false){self::runGa4Validation();}self::redirect('admin.php?page=cf7aiv-integrations');}
+	public static function validateGa4():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_validate_ga4');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$ga=(array)($settings['destinations']['ga4']??[]);Ga4Validation::queued();EventLog::record('ga4_validation','info','Validation queued.',['measurement_id'=>(string)($ga['measurement_id']??'')]);if(!Queue::accepted(Queue::enqueue('cf7aiv_validate_ga4_job'))){self::runGa4Validation();}self::redirect('admin.php?page=cf7aiv-integrations');}
 	/**
 	 * Run the GA4 check away from the administrator's request.
 	 *
@@ -164,7 +171,13 @@ final class AdminHooks {
 	}
 	public static function testMicrosoft():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_microsoft');$status='failed';try{$receipt=(new MicrosoftUetTestService())->transport((string)($post['confirmation']??''));$status=!empty($receipt['successful'])?'success':(!empty($receipt['retryable'])?'retryable':'failed');}catch(InvalidArgumentException){$status='refused';}self::redirect('admin.php?page=cf7aiv-integrations&microsoft_test='.$status);}
 	public static function completeSetup():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup');$settings=(array)get_option(Settings::OPTION,Settings::defaults());$settings['setup_complete']=true;$settings['setup']['stage']='testing';$settings['automation']['mode']='shadow';update_option(Settings::OPTION,$settings,false);self::redirect('admin.php?page=cf7aiv-setup');}
-	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');EventLog::record('setup_scan','info','Site scan queued.',['pack'=>$pack]);if(Queue::enqueue('cf7aiv_setup_scan_job',[$pack,function_exists('get_current_user_id')?get_current_user_id():0])===false){self::runSetupScan($pack,function_exists('get_current_user_id')?get_current_user_id():0);}self::redirect('admin.php?page=cf7aiv-setup&scan_queued=1');}
+	public static function setupScan():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_scan');$pack=self::identifier((string)($post['pack_key']??'general'),'general');$administratorId=function_exists('get_current_user_id')?get_current_user_id():0;self::rememberScanOutcome($administratorId,['state'=>'queued','queued_at'=>time()]);
+		// A refused job is reported, not run inline. With reasoning the call can
+		// take minutes, and inside this request it would hang the page until a
+		// proxy gave up - the failure the background job exists to prevent.
+		if(Queue::accepted(Queue::enqueue('cf7aiv_setup_scan_job',[$pack,$administratorId]))){EventLog::record('setup_scan','info','Site scan queued.',['pack'=>$pack]);}
+		else{$reason='The background queue refused the job, so the scan did not run. Check Tools > Scheduled Actions for errors, then try again.';EventLog::record('setup_scan','error','Site scan could not be queued. '.$reason,['pack'=>$pack]);self::rememberScanOutcome($administratorId,['state'=>'failed','diagnostic'=>$reason]);}
+		self::redirect('admin.php?page=cf7aiv-setup');}
 	/**
 	 * Run the site scan away from the administrator's request.
 	 *
@@ -181,31 +194,112 @@ final class AdminHooks {
 			$count=$service->generate($pack,$administratorId);
 			if($service->lastError()!==null){
 				EventLog::record('setup_scan','error','Site scan failed. '.(string)$service->lastDiagnostic());
+				self::rememberScanOutcome($administratorId,['state'=>'failed','diagnostic'=>(string)$service->lastDiagnostic()]);
 				return;
 			}
 			EventLog::record('setup_scan','info','Site scan complete.',['suggestions'=>(string)$count]);
-		}catch(\Throwable $error){EventLog::recordFailure('setup_scan',$error);}
+			self::rememberScanOutcome($administratorId,['state'=>'complete','suggestions'=>max(0,$count)]);
+		}catch(\Throwable $error){
+			EventLog::recordFailure('setup_scan',$error);
+			self::rememberScanOutcome($administratorId,['state'=>'failed','diagnostic'=>DiagnosticsService::describeFailure($error)]);
+		}
 	}
 	/**
-	 * Hand the redacted scan failure to the next page load.
+	 * Leave the scan's state for the administrator who started it.
 	 *
-	 * It travels in a short-lived per-administrator transient rather than the
-	 * query string: a URL is shoulder-surfed, logged by the server, and kept in
-	 * history, and this text names the provider and the status it returned. It is
-	 * read once and deleted, so a stale reason cannot be mistaken for a fresh one.
+	 * The scan runs in a background job, so the request that started it has
+	 * already redirected by the time there is a result. The state - queued, then
+	 * complete or failed - waits here for that administrator's next visit to
+	 * Setup, which is how a failure reason still reaches the page.
+	 *
+	 * It travels in a per-administrator transient rather than the query string: a
+	 * URL is shoulder-surfed, logged by the server, and kept in history, and the
+	 * reason names the provider and the status it returned. The reason is
+	 * redacted and length-capped before it gets here.
+	 *
+	 * @param array{state:string,diagnostic?:string,suggestions?:int,queued_at?:int} $outcome
 	 */
-	private static function rememberScanDiagnostic(?string $diagnostic):void{
-		if($diagnostic===null||$diagnostic===''||!function_exists('set_transient')||!function_exists('get_current_user_id')){return;}
-		set_transient(self::SCAN_DIAGNOSTIC_PREFIX.get_current_user_id(),$diagnostic,300);
+	private static function rememberScanOutcome(int $administratorId,array $outcome):void{
+		if($administratorId<=0||!function_exists('set_transient')){return;}
+		set_transient(self::SCAN_OUTCOME_PREFIX.$administratorId,$outcome,3600);
 	}
-	/** Read and clear the stored scan failure reason. */
-	public static function takeScanDiagnostic():string{
-		if(!function_exists('get_transient')||!function_exists('get_current_user_id')){return '';}
-		$key=self::SCAN_DIAGNOSTIC_PREFIX.get_current_user_id();
+	/**
+	 * Read the current administrator's scan state.
+	 *
+	 * A finished result is cleared once shown, so a stale reason cannot be
+	 * mistaken for a fresh one. A queued scan stays until the job replaces it.
+	 *
+	 * @return array{state?:string,diagnostic?:string,suggestions?:int,queued_at?:int}
+	 */
+	public static function takeScanOutcome():array{
+		if(!function_exists('get_transient')||!function_exists('get_current_user_id')){return [];}
+		$key=self::SCAN_OUTCOME_PREFIX.get_current_user_id();
+		$value=get_transient($key);
+		if(!is_array($value)||!in_array($value['state']??null,['queued','complete','failed'],true)){return [];}
+		if($value['state']!=='queued'&&function_exists('delete_transient')){delete_transient($key);}
+		return $value;
+	}
+	public static function accuracyTest():void{
+		$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_accuracy_test');
+		try{$run=(new AccuracyTest())->start((array)($post['accuracy']??[]),function_exists('get_current_user_id')?get_current_user_id():0);}
+		catch(\InvalidArgumentException $error){self::refuse($error->getMessage());return;}
+		EventLog::record('accuracy_test','info','Accuracy test started.',['enquiries'=>(string)count((array)$run['items'])]);
+		self::redirect('admin.php?page=cf7aiv-policy');
+	}
+	public static function correctionsToExamples():void{
+		$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_corrections_to_examples');
+		$ids=array_map('intval',(array)($post['correction_ids']??[]));
+		$version=self::identifier((string)($post['version']??''),gmdate('Ymd-His').'-examples');
+		$administratorId=function_exists('get_current_user_id')?get_current_user_id():0;
+		try{$result=CorrectionExamples::createDraft((int)($post['base_policy_id']??0),$ids,$version,$administratorId);}
+		catch(\InvalidArgumentException|\RuntimeException $error){self::refuse($error->getMessage());return;}
+		EventLog::record('policy','info','Draft created from reviewer corrections.',['version'=>$result['version'],'examples'=>(string)count($result['added'])]);
+		// The reasons for any corrections left out travel with the result, so
+		// the administrator learns why rather than seeing them reappear.
+		if($administratorId>0&&function_exists('set_transient')){set_transient('cf7aiv_examples_notice_'.$administratorId,['added'=>count($result['added']),'version'=>$result['version'],'skipped'=>array_slice($result['skipped'],0,10)],300);}
+		self::redirect('admin.php?page=cf7aiv-policy');
+	}
+	public static function accuracyCancel():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_accuracy_cancel');AccuracyTest::cancel();self::redirect('admin.php?page=cf7aiv-policy');}
+	/**
+	 * Check the saved AI provider settings with one tiny call.
+	 *
+	 * This runs in the request on purpose: it sends a one-word prompt with
+	 * reasoning off and a fixed 20-second limit, so the page cannot hang the way
+	 * a reasoning call could. It tests what is saved, so settings must be saved
+	 * first.
+	 */
+	public static function testProvider():void{
+		$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_test_provider');
+		$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));
+		$selected=(string)($settings['providers']['selected']??'deepseek');
+		$providers=function_exists('apply_filters')?(array)apply_filters('cf7aiv_ai_providers',[]):[];
+		$provider=$providers[$selected]??null;
+		$outcome=['ok'=>false,'message'=>'The selected provider is not available.'];
+		if(is_object($provider)&&method_exists($provider,'testConnection')){
+			try{$provider->testConnection();$outcome=['ok'=>true,'message'=>'Connected to '.($selected==='openai'?'OpenAI':'DeepSeek').'. The saved key, address and model work.'];}
+			catch(\Throwable $error){$outcome=['ok'=>false,'message'=>DiagnosticsService::describeFailure($error)];}
+		}
+		EventLog::record('provider_test',$outcome['ok']?'info':'error',$outcome['ok']?'Connection test passed.':'Connection test failed. '.$outcome['message'],['provider'=>$selected]);
+		$administratorId=function_exists('get_current_user_id')?get_current_user_id():0;
+		if($administratorId>0&&function_exists('set_transient')){set_transient(self::PROVIDER_TEST_PREFIX.$administratorId,$outcome,300);}
+		self::redirect('admin.php?page=cf7aiv-integrations&tab=provider');
+	}
+	/** Read and clear the current administrator's connection test result. @return array{ok?:bool,message?:string} */
+	public static function takeProviderTest():array{
+		if(!function_exists('get_transient')||!function_exists('get_current_user_id')){return [];}
+		$key=self::PROVIDER_TEST_PREFIX.get_current_user_id();
 		$value=get_transient($key);
 		if(function_exists('delete_transient')){delete_transient($key);}
-		return is_string($value)?$value:'';
+		return is_array($value)&&isset($value['ok'],$value['message'])?$value:[];
 	}
+	/**
+	 * Lift an automatic delivery pause.
+	 *
+	 * A destination pauses itself after repeated permanent failures, and nothing
+	 * could lift it: once paused it stayed paused until the option was deleted
+	 * by hand, while conversions quietly stopped.
+	 */
+	public static function resumeDestination():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_resume_destination');$key=(string)($post['destination']??'');if((new WpDeliveryStore())->resume($key)){EventLog::record('delivery','info','Destination resumed.',['destination'=>$key]);}self::redirect('admin.php?page=cf7aiv-health');}
 	public static function setupSuggestion():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_setup_suggestion');$action=(string)($post['suggestion_action']??'');$edited=$post['edited_value']??null;if(is_string($edited)&&str_starts_with(trim($edited),'{')){$decoded=json_decode($edited,true);if(is_array($decoded)){$edited=$decoded;}}self::setupService()->review((int)($post['suggestion_id']??0),$action,$edited);self::redirect('admin.php?page=cf7aiv-setup');}
 	public static function backfill():void{$post=self::post();AdminRequestGuard::authorize((string)($post['_wpnonce']??''),'cf7aiv_backfill');$source=substr(preg_replace('/[^a-zA-Z0-9_\-]/','',(string)($post['source']??''))??'',0,32);$rawForms=$post['form_ids']??[];if(!is_array($rawForms)){$rawForms=preg_split('/\s*,\s*/',(string)$rawForms,-1,PREG_SPLIT_NO_EMPTY)?:[];}$explicit=in_array($post['explicit_opt_in']??null,[true,1,'1','true','on','yes'],true);$snapshot=CalibrationPolicySnapshot::active();$submitted=(string)($post['whitelist_fingerprint']??'');if($submitted===''||!hash_equals($snapshot['fingerprint'],$submitted)){self::refuse('Published policy fields changed after preview. Review the current whitelist and opt in again.');}try{(new CalibrationService())->schedule($source,['explicit_opt_in'=>$explicit,'form_ids'=>$rawForms,'date_from'=>(string)($post['date_from']??gmdate('Y-m-d',strtotime('-1 year'))),'date_to'=>(string)($post['date_to']??gmdate('Y-m-d')),'maximum'=>(int)($post['maximum']??25),'ai_whitelist_snapshot'=>$snapshot['fields'],'whitelist_fingerprint'=>$snapshot['fingerprint']],function_exists('get_current_user_id')?get_current_user_id():0);}catch(\InvalidArgumentException $error){self::refuse($error->getMessage());}self::redirect('admin.php?page=cf7aiv-health');}
 	/** @param array<string,mixed> $arguments */ public static function backfillBatch(string $sourceKey,array $arguments=[],int $batchSize=25):void{(new CalibrationBatchWorker(new WpCalibrationRunStore()))->process($sourceKey,$arguments,$batchSize);}
@@ -325,7 +419,7 @@ final class AdminHooks {
 		foreach(self::secretsToClear($input) as $key){if(isset($remaining[$key])){return false;}}
 		return true;
 	}
-	private static function setupService():SetupSuggestionService{$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));$providerSettings=(array)$settings['providers'];$transport=new WordPressHttpTransport();$selected=(string)$providerSettings['selected'];$timeout=(int)$providerSettings['timeout'];$reasoningKey=$selected==='openai'?'openai_reasoning_effort':'deepseek_reasoning_effort';$reasoningEffort=(string)$providerSettings[$reasoningKey];$provider=$selected==='openai'?new OpenAIProvider($transport,Crypto::secret('openai_api_key'),(string)$providerSettings['openai_base_url'],(string)$providerSettings['openai_model'],$timeout,$reasoningEffort):new DeepSeekProvider($transport,Crypto::secret('deepseek_api_key'),(string)$providerSettings['deepseek_base_url'],(string)$providerSettings['deepseek_model'],$timeout,$reasoningEffort);return new SetupSuggestionService(new SiteProfileScanner(),$provider,new SetupSuggestionRepository());}
+	private static function setupService():SetupSuggestionService{$settings=Settings::withDefaults((array)get_option(Settings::OPTION,Settings::defaults()));$providerSettings=(array)$settings['providers'];$provider=ClassificationHooks::buildProvider((string)$providerSettings['selected'],$providerSettings);return new SetupSuggestionService(new SiteProfileScanner(),$provider,new SetupSuggestionRepository());}
 	/** @return list<array<string,mixed>> */ private static function acceptedSetupSuggestions():array{global $wpdb;if(!isset($wpdb->prefix)||!method_exists($wpdb,'get_results')){return [];}$rows=$wpdb->get_results("SELECT suggestion_type,value_json,provenance_json FROM {$wpdb->prefix}cf7aiv_setup_suggestions WHERE status='accepted' ORDER BY id ASC LIMIT 200",ARRAY_A);return is_array($rows)?$rows:[];}
 	private static function hasPublishedV2Policy():bool{global $wpdb;return isset($wpdb->prefix)&&method_exists($wpdb,'get_var')&&(int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cf7aiv_policies WHERE status='published' AND policy_format='cf7aiv-policy/v2'")>0;}
 	private static function verificationSupported(string $selected):bool{try{$providers=function_exists('apply_filters')?(array)apply_filters('cf7aiv_ai_providers',[]):[];if(isset($providers[$selected])){return $providers[$selected] instanceof VerificationCapableProviderInterface;}return $selected==='deepseek'&&is_a(DeepSeekProvider::class,VerificationCapableProviderInterface::class,true);}catch(\Throwable){return false;}}

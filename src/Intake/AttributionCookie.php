@@ -126,11 +126,25 @@ final class AttributionCookie {
 			if (empty($values['first_landing_page'])) { $values['first_landing_page'] = $current; }
 			$values['current_page'] = $current;
 		}
-		if (isset($server['HTTP_REFERER']) && is_scalar($server['HTTP_REFERER'])) {
+		if (empty($values['referrer']) && isset($server['HTTP_REFERER']) && is_scalar($server['HTTP_REFERER'])) {
 			$referrer = trim((string) $server['HTTP_REFERER']);
-			if ($referrer !== '') { $values['referrer'] = self::limit($referrer, 2048); }
+			if ($referrer !== '' && self::isExternal($referrer, $server)) { $values['referrer'] = self::limit($referrer, 2048); }
 		}
 		return $values;
+	}
+
+	/**
+	 * The referrer is where the visitor came from, so it is kept from the first
+	 * external one. Every navigation used to overwrite it, so by the contact page
+	 * it named the previous page on this site instead of the search engine or ad
+	 * that brought the visitor in.
+	 *
+	 * @param array<string, mixed> $server
+	 */
+	private static function isExternal(string $referrer, array $server): bool {
+		$referrerHost = strtolower((string) parse_url($referrer, PHP_URL_HOST));
+		$siteHost = strtolower((string) preg_replace('/:\d+$/', '', is_scalar($server['HTTP_HOST'] ?? null) ? (string) $server['HTTP_HOST'] : ''));
+		return $referrerHost !== '' && $referrerHost !== $siteHost;
 	}
 
 	/** @param array<string, mixed> $server */

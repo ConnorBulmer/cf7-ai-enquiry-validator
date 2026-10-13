@@ -454,7 +454,8 @@
 		'cf7aiv_validate_ga4',
 		'cf7aiv_test_microsoft',
 		'cf7aiv_setup_suggestion',
-		'cf7aiv_backfill'
+		'cf7aiv_backfill',
+		'cf7aiv_test_provider'
 	];
 
 	var BUSY_LABEL = {
@@ -462,7 +463,8 @@
 		cf7aiv_validate_ga4: 'Validating with GA4',
 		cf7aiv_test_microsoft: 'Sending the test event',
 		cf7aiv_setup_suggestion: 'Applying',
-		cf7aiv_backfill: 'Scheduling'
+		cf7aiv_backfill: 'Scheduling',
+		cf7aiv_test_provider: 'Contacting the AI provider'
 	};
 
 	document.addEventListener('submit', function (event) {
@@ -471,7 +473,11 @@
 		var action = form.querySelector('input[name="action"]');
 		if (!action || SLOW_ACTIONS.indexOf(action.value) === -1) { return; }
 
-		var button = form.querySelector('button[type="submit"], input[type="submit"]');
+		// A button can sit outside the form it submits (form="…"), as the AI
+		// connection test's does, so look for it by that too.
+		var button = event.submitter
+			|| form.querySelector('button[type="submit"], input[type="submit"]')
+			|| (form.id ? document.querySelector('[form="' + form.id + '"]') : null);
 		if (!button || button.getAttribute('data-cf7aiv-busy') === 'true') { return; }
 
 		// The label is replaced rather than the button disabled before submit,
@@ -492,4 +498,34 @@
 
 		window.setTimeout(function () { button.disabled = true; }, 0);
 	}, true);
+
+	/*
+	 * Switching provider in the accuracy test switches to that provider's saved
+	 * model, unless the model has been typed in by hand.
+	 */
+	document.addEventListener('change', function (event) {
+		var provider = event.target;
+		if (!provider || !provider.hasAttribute || !provider.hasAttribute('data-cf7aiv-accuracy-provider')) { return; }
+		var model = provider.form ? provider.form.querySelector('[data-cf7aiv-accuracy-model]') : null;
+		if (!model) { return; }
+		var saved = Array.prototype.map.call(provider.options, function (option) { return option.getAttribute('data-model') || ''; });
+		var chosen = provider.options[provider.selectedIndex];
+		if (chosen && (model.value === '' || saved.indexOf(model.value) !== -1)) {
+			model.value = chosen.getAttribute('data-model') || '';
+		}
+	});
+
+	/*
+	 * Each tier names its outcome, so choosing a corrected tier selects that
+	 * outcome. The outcome list stays editable afterwards.
+	 */
+	document.addEventListener('change', function (event) {
+		var tier = event.target;
+		if (!tier || !tier.hasAttribute || !tier.hasAttribute('data-cf7aiv-tier-select')) { return; }
+		var form = tier.form;
+		var outcome = form ? form.querySelector('[data-cf7aiv-outcome-select]') : null;
+		var chosen = tier.options[tier.selectedIndex];
+		var value = chosen ? chosen.getAttribute('data-outcome') : '';
+		if (outcome && value) { outcome.value = value; }
+	});
 }());

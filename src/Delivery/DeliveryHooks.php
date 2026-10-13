@@ -23,7 +23,7 @@ final class DeliveryHooks {
 		$ga = (array) ($config['ga4'] ?? []);
 		if (! empty($ga['enabled']) && ! empty($ga['dry_run'])) {
 			$destinations['ga4'] = new GA4Destination($transport, (string) ($ga['measurement_id'] ?? ''), Crypto::secret('ga4_api_secret'), false, $enhanced, true);
-		} elseif (! empty($ga['enabled']) && ! empty($ga['live_enabled']) && ! empty($ga['debug_validated'])) {
+		} elseif (! empty($ga['enabled']) && DestinationReadiness::ga4Live($ga)) {
 			$destinations['ga4'] = new GA4Destination($transport, (string) ($ga['measurement_id'] ?? ''), Crypto::secret('ga4_api_secret'), false, $enhanced, false);
 		}
 		$serverGtm = (array) ($config['server_gtm'] ?? []);

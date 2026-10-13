@@ -14,6 +14,7 @@ final class ClassificationResult {
 	 * @param list<string> $missingEvidence
 	 * @param list<string> $exclusionCodes
 	 * @param array<string,int> $providerUsage
+	 * @param array<string,string> $providerProfile Which provider, model and reasoning level answered.
 	 */
 	public function __construct(
 		public readonly string $tierId,
@@ -26,6 +27,7 @@ final class ClassificationResult {
 		public readonly array $missingEvidence = [],
 		public readonly array $exclusionCodes = [],
 		public readonly array $providerUsage = [],
+		public readonly array $providerProfile = [],
 	) {
 		if ($confidence < 0.0 || $confidence > 1.0) {
 			throw new InvalidArgumentException('Classification confidence must be between 0 and 1.');
@@ -54,6 +56,54 @@ final class ClassificationResult {
 			$this->missingEvidence,
 			$this->exclusionCodes,
 			$normalized,
+			$this->providerProfile,
+		);
+	}
+
+	/** Add a flag the system raised itself, such as a likely duplicate, for reviewers to see. */
+	public function withAmbiguityFlag(string $flag): self {
+		if (in_array($flag, $this->ambiguityFlags, true)) { return $this; }
+		return new self(
+			$this->tierId,
+			$this->reasonCode,
+			$this->confidence,
+			$this->summary,
+			array_merge($this->ambiguityFlags, [$flag]),
+			$this->outcomeId,
+			$this->evidence,
+			$this->missingEvidence,
+			$this->exclusionCodes,
+			$this->providerUsage,
+			$this->providerProfile,
+		);
+	}
+
+	/**
+	 * Record which provider, model and reasoning level produced this result.
+	 *
+	 * Without it the accuracy figures could not be split by setup, so there was
+	 * no way to tell whether a change of model or reasoning level helped.
+	 *
+	 * @param array<string,mixed> $profile
+	 */
+	public function withProviderProfile(array $profile): self {
+		$clean = [];
+		foreach (['provider', 'model', 'reasoning'] as $key) {
+			$value = $profile[$key] ?? '';
+			if (is_scalar($value) && trim((string) $value) !== '') { $clean[$key] = substr(trim((string) $value), 0, 100); }
+		}
+		return new self(
+			$this->tierId,
+			$this->reasonCode,
+			$this->confidence,
+			$this->summary,
+			$this->ambiguityFlags,
+			$this->outcomeId,
+			$this->evidence,
+			$this->missingEvidence,
+			$this->exclusionCodes,
+			$this->providerUsage,
+			$clean,
 		);
 	}
 }

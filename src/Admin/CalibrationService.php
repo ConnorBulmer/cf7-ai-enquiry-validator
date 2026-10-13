@@ -91,7 +91,7 @@ final class CalibrationService {
 			];
 			$queueArguments = [$sourceKey, $arguments, $quota];
 			$queueResult = ($this->enqueue)('cf7aiv_backfill_batch', $queueArguments);
-			if (! self::queued($queueResult)) {
+			if (! Queue::accepted($queueResult)) {
 				$this->runs->cancel($runId);
 				foreach (array_reverse($queued) as $queuedAction) {
 					try { ($this->cancel)($queuedAction['hook'], $queuedAction['arguments']); } catch (\Throwable) {}
@@ -112,8 +112,6 @@ final class CalibrationService {
 		if (function_exists('do_action')) { try { do_action(Hooks::AFTER_CALIBRATION_SCHEDULED, $runId, $sourceKey, $scheduled, $administratorId, $criteria); } catch (\Throwable) {} }
 		return $scheduled;
 	}
-
-	private static function queued(mixed $result): bool { return $result === true || (is_int($result) && $result > 0); }
 
 	/** @return list<int> */
 	private static function formIds(mixed $values): array {

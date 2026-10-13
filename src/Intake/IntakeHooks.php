@@ -29,13 +29,18 @@ final class IntakeHooks {
 		try {
 			$settings = (array) get_option(Settings::OPTION, []);
 			$days = max(1, min(365, (int) ($settings['attribution']['retention_days'] ?? 90)));
-			$measurementIds = [];
+			// IDs from enabled destinations win. A disabled destination's leftover
+			// ID made the choice look ambiguous and blanked it, so GA ids stopped
+			// being captured. Before anything is enabled, any configured ID will do.
+			$configured = ['enabled' => [], 'all' => []];
 			foreach (['ga4', 'server_gtm'] as $destination) {
 				$config = (array) ($settings['destinations'][$destination] ?? []);
 				$candidate = strtoupper(trim((string) ($config['measurement_id'] ?? '')));
-				if (preg_match('/\AG-[A-Z0-9]+\z/', $candidate) === 1) { $measurementIds[] = $candidate; }
+				if (preg_match('/\AG-[A-Z0-9]+\z/', $candidate) !== 1) { continue; }
+				$configured['all'][] = $candidate;
+				if (! empty($config['enabled'])) { $configured['enabled'][] = $candidate; }
 			}
-			$measurementIds = array_values(array_unique($measurementIds));
+			$measurementIds = array_values(array_unique($configured['enabled'] !== [] ? $configured['enabled'] : $configured['all']));
 			$measurementId = count($measurementIds) === 1 ? $measurementIds[0] : '';
 			wp_enqueue_script('cf7aiv-attribution', \CF7AIV\URL . 'assets/js/attribution.js', [], \CF7AIV\VERSION, true);
 			wp_add_inline_script('cf7aiv-attribution', 'window.cf7aivAttribution=' . wp_json_encode(['cookieName' => AttributionCookie::NAME, 'retentionDays' => $days, 'measurementId' => $measurementId, 'fields' => FieldNames::map()]) . ';', 'before');

@@ -22,7 +22,7 @@ final class IntegrationsPage {
 		$consent = (array) ($settings['consent'] ?? []);
 		$advanced = ! empty($settings['ui']['advanced_mode']);
 		$selectedProvider = in_array((string) ($providers['selected'] ?? 'deepseek'), ['deepseek', 'openai'], true) ? (string) $providers['selected'] : 'deepseek';
-		$deepSeekModel = (string) ($providers['deepseek_model'] ?? 'deepseek-v4-flash');
+		$deepSeekModel = (string) ($providers['deepseek_model'] ?? DeepSeekProvider::DEFAULT_MODEL);
 		$openAiModel = (string) ($providers['openai_model'] ?? 'gpt-5.4-mini');
 		$selectedModel = $selectedProvider === 'openai' ? $openAiModel : $deepSeekModel;
 		$verificationSupported = self::verificationSupported($selectedProvider);
@@ -67,6 +67,11 @@ final class IntegrationsPage {
 			echo '<div class="notice"><p>' . self::e($testNotices[$testStatus]) . '</p></div>';
 		}
 
+		$providerTest = AdminHooks::takeProviderTest();
+		if ($providerTest !== []) {
+			echo '<div class="notice ' . (! empty($providerTest['ok']) ? 'notice-success cf7aiv-provider-test-passed' : 'notice-error cf7aiv-provider-test-failed') . '" role="status" aria-live="polite"><p>' . self::e((string) $providerTest['message']) . '</p></div>';
+		}
+
 		self::tabNavigation($activeTab);
 		echo '<form id="cf7aiv-integrations-form" class="cf7aiv-integration-settings-form" method="post" action="' . self::e(admin_url('admin-post.php')) . '" data-settings-form>';
 		echo '<input type="hidden" name="action" value="cf7aiv_save_settings">';
@@ -79,7 +84,10 @@ final class IntegrationsPage {
 		echo '<section class="card cf7aiv-integration-panel"><h2>AI provider</h2>' . self::inlineError($saveStatus, $activeTab, 'provider') . '<p class="description">Selected provider: ' . self::e($selectedProvider) . '; model: ' . self::e($selectedModel) . '.</p><div class="cf7aiv-form-grid"><label>Provider <select name="cf7aiv[providers][selected]" data-provider-selector>' . self::option('deepseek', $selectedProvider) . self::option('openai', $selectedProvider) . '</select></label></div>';
 		self::providerFields('deepseek', $selectedProvider === 'deepseek', $deepSeekModel, (string) ($providers['deepseek_reasoning_effort'] ?? 'off'), (array) $providers);
 		self::providerFields('openai', $selectedProvider === 'openai', $openAiModel, (string) ($providers['openai_reasoning_effort'] ?? 'unsupported'), (array) $providers);
-		echo '<div class="cf7aiv-form-grid"><label>Timeout <input type="number" min="3" max="300" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? 15) . '"></label></div>';
+		echo '<div class="cf7aiv-form-grid"><label>Timeout (seconds) <input type="number" min="3" max="' . Settings::MAX_PROVIDER_TIMEOUT . '" name="cf7aiv[providers][timeout]" value="' . (int) ($providers['timeout'] ?? Settings::DEFAULT_PROVIDER_TIMEOUT) . '"></label><p class="description">How long one provider call may run. Standard reasoning is always given at least ' . DeepSeekProvider::REASONING_TIMEOUT_FLOOR['standard'] . ' seconds and deep reasoning at least ' . DeepSeekProvider::REASONING_TIMEOUT_FLOOR['deep'] . ', because a reasoning reply cannot arrive sooner and a call that times out is retried from the start.</p></div>';
+		// The test form sits outside the settings form, which cannot contain
+		// another form; the form attribute ties this button to it.
+		echo '<p class="cf7aiv-actions"><button type="submit" class="button" form="cf7aiv-provider-test-form">Test connection</button></p><p class="description">Tests the saved settings with one tiny request. Save changes first.</p>';
 		echo '<p class="description">Higher reasoning effort can increase token use and cost. Optional automatic-candidate verification is a separate second provider call and does not override policy, consent, attribution, mapping, lifecycle, or delivery gates.</p>';
 		echo '<fieldset><legend>Optional verification</legend><div class="cf7aiv-form-grid">';
 		if ($verificationSupported) {
@@ -137,6 +145,9 @@ final class IntegrationsPage {
 
 		echo '</div>';
 		self::saveBar($saveStatus, false);
+		echo '</form>';
+		echo '<form id="cf7aiv-provider-test-form" method="post" action="' . self::e(admin_url('admin-post.php')) . '"><input type="hidden" name="action" value="cf7aiv_test_provider">';
+		wp_nonce_field('cf7aiv_test_provider');
 		echo '</form>';
 
 		self::renderGoogleHighRisk($activeTab);
@@ -473,7 +484,7 @@ final class IntegrationsPage {
 	}
 
 	/** @return array{calls:int,input_tokens:int,output_tokens:int,reasoning_tokens:int} */
-	private static function usageTotals(): array {
+	public static function usageTotals(): array {
 		$totals = ['calls' => 0, 'input_tokens' => 0, 'output_tokens' => 0, 'reasoning_tokens' => 0];
 		global $wpdb;
 		if (! isset($wpdb->prefix) || ! method_exists($wpdb, 'get_results')) {

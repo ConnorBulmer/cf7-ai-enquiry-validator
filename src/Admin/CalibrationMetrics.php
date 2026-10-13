@@ -15,6 +15,8 @@ final class CalibrationMetrics {
 	 *   ads_true_positives:int,
 	 *   ads_predicted_positives:int,
 	 *   false_positives:int,
+	 *   missed_leads:int,
+	 *   ads_recall:?float,
 	 *   confusion_matrix:array<string,array<string,int>>,
 	 *   per_tier:array<string,array{predicted:int,reviewed:int}>
 	 * }
@@ -25,6 +27,8 @@ final class CalibrationMetrics {
 		$adsPredicted = 0;
 		$adsTrue = 0;
 		$falsePositives = 0;
+		$missedLeads = 0;
+		$adsReviewed = 0;
 		$confusion = [];
 		$perTier = [];
 
@@ -62,6 +66,12 @@ final class CalibrationMetrics {
 					$falsePositives++;
 				}
 			}
+			// A real lead the AI turned away is lost to bidding as surely as a
+			// false one is wrongly counted, and nothing measured it.
+			if ($reviewedAds) {
+				$adsReviewed++;
+				if (! $predictedAds) { $missedLeads++; }
+			}
 		}
 
 		ksort($confusion);
@@ -79,9 +89,38 @@ final class CalibrationMetrics {
 			'ads_true_positives' => $adsTrue,
 			'ads_predicted_positives' => $adsPredicted,
 			'false_positives' => $falsePositives,
+			'missed_leads' => $missedLeads,
+			'ads_recall' => $adsReviewed > 0 ? ($adsReviewed - $missedLeads) / $adsReviewed : null,
 			'confusion_matrix' => $confusion,
 			'per_tier' => $perTier,
 		];
+	}
+
+	/**
+	 * The same figures, split by the provider, model and reasoning level that
+	 * produced each prediction, so a change of setup can be judged.
+	 *
+	 * @param list<array<string, mixed>> $rows Rows carrying provider_usage_json.
+	 * @return array<string, array<string, mixed>> Keyed by a readable setup label.
+	 */
+	public static function byProfile(array $rows): array {
+		$groups = [];
+		foreach ($rows as $row) {
+			if (! is_array($row)) { continue; }
+			$groups[self::profileLabel($row['provider_usage_json'] ?? null)][] = $row;
+		}
+		ksort($groups);
+		return array_map([self::class, 'fromRows'], $groups);
+	}
+
+	public static function profileLabel(mixed $usageJson): string {
+		$usage = is_string($usageJson) ? json_decode($usageJson, true) : $usageJson;
+		$profile = is_array($usage) && is_array($usage['profile'] ?? null) ? $usage['profile'] : [];
+		if (($profile['provider'] ?? '') === '') { return 'Not recorded'; }
+		$provider = $profile['provider'] === 'openai' ? 'OpenAI' : ($profile['provider'] === 'deepseek' ? 'DeepSeek' : (string) $profile['provider']);
+		$reasoning = (string) ($profile['reasoning'] ?? '');
+		$reasoningLabel = match ($reasoning) { 'off' => 'reasoning off', 'standard' => 'standard reasoning', 'deep' => 'deep reasoning', '', 'unsupported' => 'no reasoning control', default => $reasoning };
+		return $provider . ' · ' . (string) ($profile['model'] ?? '') . ' · ' . $reasoningLabel;
 	}
 
 	/** @param array<string, mixed> $row @return array<string, mixed> */

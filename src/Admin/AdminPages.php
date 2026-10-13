@@ -20,6 +20,9 @@ final class AdminPages {
 			? number_format((float) $quality['ads_precision'] * 100, 1) . "% ({$adsTrue} of {$adsPredicted} predicted Ads-eligible positives)"
 			: 'Unavailable (0 predicted Ads-eligible positives)';
 		$falsePositives = (int) ($quality['false_positives'] ?? 0);
+		$missedText = isset($quality['ads_recall'])
+			? (int) ($quality['missed_leads'] ?? 0) . ' (' . number_format((float) $quality['ads_recall'] * 100, 1) . '% of reviewed Ads-eligible leads were found)'
+			: 'Unavailable (0 reviewed Ads-eligible leads)';
 		$automationMode = (string) ($metrics['automation_mode'] ?? 'shadow');
 		$queueAge = is_numeric($metrics['queue_age_seconds'] ?? null) ? (int) $metrics['queue_age_seconds'] : null;
 		$distributionPanels = '';
@@ -39,6 +42,7 @@ final class AdminPages {
 			['label' => 'Exact agreement', 'value' => $exactText],
 			['label' => 'Ads precision', 'value' => $adsText],
 			['label' => 'False positives', 'value' => (string) $falsePositives],
+			['label' => 'Missed leads', 'value' => $missedText],
 		];
 		$perTierRows = [];
 		foreach ((array) ($quality['per_tier'] ?? []) as $tier => $counts) {
@@ -52,6 +56,7 @@ final class AdminPages {
 		$qualityBody = $reviewed === 0
 			? AdminUi::emptyState('No human-reviewed enquiries yet.') . AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
 			: AdminUi::keyValueTable('Human-reviewed quality', $qualityRows)
+				. self::profileTable((array) ($metrics['quality_by_profile'] ?? []))
 				. self::confusionMatrix((array) ($quality['confusion_matrix'] ?? []))
 				. ($perTierRows === [] ? AdminUi::emptyState('No reviewed tiers yet.') : AdminUi::labelCountTable('Reviewed per-tier counts', $perTierRows));
 		$pausedRows = [];
@@ -80,11 +85,36 @@ final class AdminPages {
 					? ['href' => 'admin.php?page=cf7aiv-review&review_state=', 'text' => 'See which enquiries are not ready']
 					: null
 			)
-			. AdminUi::metric('API errors', (string) (int) ($metrics['api_errors'] ?? 0), 'Failed delivery attempts.')
+			// This counts deliveries a destination rejected, not AI provider errors;
+			// it was labelled "API errors", which sent people to the wrong place.
+			. AdminUi::metric('Failed deliveries', (string) (int) ($metrics['failed_deliveries'] ?? 0), 'Conversions a destination rejected permanently.')
+			. AdminUi::metric('AI usage', self::usage((array) ($metrics['ai_usage'] ?? [])), 'Provider calls and tokens across all classifications. No currency estimate is inferred.')
 			. AdminUi::metric('Reviewed count', (string) $reviewed, 'Human-reviewed enquiries.')
 			. '</div>';
 		echo '<div class="cf7aiv-panel-grid">' . $distributionPanels . AdminUi::panel('Human-reviewed quality', $qualityBody, 'cf7aiv-quality-panel') . AdminUi::panel('Paused destinations', $pausedBody, 'cf7aiv-paused-destinations-panel') . '</div>';
 		echo self::nav() . '</div>';
+	}
+
+	/**
+	 * Accuracy for each provider, model and reasoning level that has reviewed
+	 * predictions, so a change of setup can be judged on the same terms.
+	 *
+	 * @param array<string,array<string,mixed>> $byProfile
+	 */
+	private static function profileTable(array $byProfile): string {
+		if (count($byProfile) < 1) { return ''; }
+		$percent = static fn (mixed $value): string => is_numeric($value) ? number_format((float) $value * 100, 1) . '%' : '—';
+		$html = '<h3>By AI setup</h3><table class="widefat striped cf7aiv-profile-table">' . AdminUi::caption('Human-reviewed quality by AI setup') . '<thead><tr><th scope="col">AI setup</th><th scope="col">Reviewed</th><th scope="col">Exact agreement</th><th scope="col">Ads precision</th><th scope="col">Missed leads</th></tr></thead><tbody>';
+		foreach ($byProfile as $label => $quality) {
+			$html .= '<tr><th scope="row">' . self::e((string) $label) . '</th><td>' . (int) ($quality['reviewed'] ?? 0) . '</td><td>' . self::e($percent($quality['exact_agreement'] ?? null)) . '</td><td>' . self::e($percent($quality['ads_precision'] ?? null)) . '</td><td>' . (int) ($quality['missed_leads'] ?? 0) . '</td></tr>';
+		}
+		return $html . '</tbody></table><p class="description">"Not recorded" covers classifications made before the setup was recorded with each one.</p>';
+	}
+
+	/** @param array<string,int> $usage */
+	private static function usage(array $usage): string {
+		$tokens = (int) ($usage['input_tokens'] ?? 0) + (int) ($usage['output_tokens'] ?? 0);
+		return number_format((int) ($usage['calls'] ?? 0)) . ' calls, ' . number_format($tokens) . ' tokens';
 	}
 
 	public static function reviewQueue(): void {
@@ -184,7 +214,7 @@ final class AdminPages {
 			: '<button type="submit" class="button">Schedule calibration</button>';
 		$calibrationForm .= '<label><input type="checkbox" name="explicit_opt_in" value="1" required> I explicitly authorize this calibration-only historical sample.</label><p class="cf7aiv-actions">' . $scheduleButton . '</p></form>';
 		$sourceBody = $sourceRows === [] ? AdminUi::emptyState('No submission sources were detected.') : AdminUi::keyValueTable('Submission source health', $sourceRows);
-		$pausedBody = $pausedRows === [] ? AdminUi::emptyState('No destinations are paused.') : AdminUi::keyValueTable('Paused destinations', $pausedRows);
+		$pausedBody = $pausedRows === [] ? AdminUi::emptyState('No destinations are paused.') : AdminUi::keyValueTable('Paused destinations', $pausedRows) . self::resumeForms((array) ($health['paused_destinations'] ?? []));
 		$deliveryBody = $deliveryTable === '' ? AdminUi::emptyState('No delivery errors were recorded.') : AdminUi::tableRegion('Sanitized delivery errors', $deliveryTable);
 		echo '<div class="wrap cf7aiv-admin"><div class="cf7aiv-page-header"><h1>Tracking Health &amp; Logs</h1><p>Health tests are read-only and never create Ads conversions.</p></div>';
 		echo '<div class="cf7aiv-panel-grid">' . AdminUi::panel('Submission source health', $sourceBody, 'cf7aiv-health-sources-panel') . AdminUi::panel('Read-only checks', AdminUi::keyValueTable('Read-only checks', $checkRows), 'cf7aiv-health-checks-panel') . AdminUi::panel('Paused destinations', $pausedBody, 'cf7aiv-health-paused-panel') . AdminUi::panel('Historical stratified calibration', $calibrationForm, 'cf7aiv-health-calibration-panel') . '</div>';
@@ -235,6 +265,33 @@ final class AdminPages {
 		}
 	}
 
+	/**
+	 * Why each destination paused, and a way to resume it.
+	 *
+	 * The panel only said "Paused": the stored reason was never shown and there
+	 * was no way back, so an automatic pause was permanent in practice.
+	 *
+	 * @param array<int|string,mixed> $paused
+	 */
+	private static function resumeForms(array $paused): string {
+		$html = '';
+		foreach ($paused as $key => $value) {
+			// Any paused key can be resumed, including a destination registered
+			// through the cf7aiv_destinations filter, since the worker pauses those too.
+			if (! is_string($key) || $key === '') { continue; }
+			$destination = $key;
+			// The reason is the destination's own error text, so it is redacted as
+			// the delivery log beside it is.
+			$reason = is_array($value) && is_scalar($value['reason'] ?? null) ? trim(AdminSafe::log((string) $value['reason'])) : '';
+			ob_start();
+			wp_nonce_field('cf7aiv_resume_destination');
+			$nonce = (string) ob_get_clean();
+			$html .= '<form method="post" action="' . self::e(admin_url('admin-post.php')) . '" class="cf7aiv-resume-destination"><input type="hidden" name="action" value="cf7aiv_resume_destination"><input type="hidden" name="destination" value="' . self::e($destination) . '">' . $nonce
+				. '<p>' . ($reason !== '' ? '<strong>' . self::e($destination) . ':</strong> ' . self::e($reason) . ' ' : '')
+				. '<button type="submit" class="button">Resume ' . self::e($destination) . '</button></p></form>';
+		}
+		return $html;
+	}
 	private static function e(string $value): string {
 		return function_exists('esc_html') ? esc_html($value) : htmlspecialchars($value, ENT_QUOTES);
 	}

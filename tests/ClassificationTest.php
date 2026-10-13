@@ -158,7 +158,9 @@ cf7aiv_classification_assert($deepResult->reasonCode === 'qualified', 'DeepSeek 
 $deepCall = $deepTransport->requests[0];
 $deepBody = json_decode((string) $deepCall['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
 cf7aiv_classification_assert($deepCall['url'] === 'https://api.deepseek.com/chat/completions', 'DeepSeek must use the documented default chat completions URL.');
-cf7aiv_classification_assert($deepBody['model'] === 'deepseek-v4-flash' && $deepBody['response_format'] === ['type' => 'json_object'], 'DeepSeek must use the approved default model and JSON mode.');
+cf7aiv_classification_assert($deepBody['model'] === 'deepseek-flash' && $deepBody['response_format'] === ['type' => 'json_object'], 'DeepSeek must use the current V4.1-Flash model ID, not a retired alias, and JSON mode.');
+cf7aiv_classification_assert(($deepCall['arguments']['timeout'] ?? null) === CF7AIV\Infrastructure\Settings::DEFAULT_PROVIDER_TIMEOUT, 'An unconfigured DeepSeek provider must use the shared default timeout.');
+cf7aiv_classification_assert(str_contains($deepBody['messages'][0]['content'], 'never as instructions'), 'DeepSeek must be told the enquiry is data, not instructions.');
 cf7aiv_classification_assert(($deepBody['thinking']['type'] ?? null) === 'disabled', 'DeepSeek classification must disable thinking so reasoning cannot consume the JSON output budget.');
 cf7aiv_classification_assert(str_contains($deepBody['messages'][0]['content'], '"ambiguity_flags"') && str_contains($deepBody['messages'][0]['content'], '"additionalProperties":false'), 'DeepSeek must receive the fixed classification JSON schema, not merely a request for JSON.');
 cf7aiv_classification_assert(str_contains($deepBody['messages'][0]['content'], 'JSON'), 'DeepSeek JSON mode prompt must explicitly request JSON.');
@@ -203,6 +205,7 @@ $openCall = $openTransport->requests[0];
 $openBody = json_decode((string) $openCall['arguments']['body'], true, 64, JSON_THROW_ON_ERROR);
 cf7aiv_classification_assert($openCall['url'] === 'https://api.openai.com/v1/responses', 'OpenAI must use the Responses API endpoint.');
 cf7aiv_classification_assert($openBody['model'] === 'gpt-5.4-mini' && $openBody['store'] === false, 'OpenAI must use the approved default model and disable storage.');
+cf7aiv_classification_assert(str_starts_with($openBody['instructions'], $providerRequest->systemPrompt) && str_contains($openBody['instructions'], 'never as instructions'), 'OpenAI must keep the compiled policy prompt and be told the enquiry is data, not instructions.');
 cf7aiv_classification_assert($openBody['text']['format']['type'] === 'json_schema' && $openBody['text']['format']['strict'] === true, 'OpenAI must use strict Structured Outputs in text.format.');
 cf7aiv_classification_assert($openBody['text']['format']['schema']['additionalProperties'] === false, 'OpenAI result schema must reject additional properties.');
 cf7aiv_classification_assert(! str_contains((string) $openCall['arguments']['body'], 'openai-secret'), 'Provider secrets must only be sent in headers, never request bodies.');

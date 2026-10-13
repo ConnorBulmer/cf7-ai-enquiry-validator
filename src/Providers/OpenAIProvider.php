@@ -11,6 +11,7 @@ use CF7AIV\Domain\PolicySuggestionRequest;
 use CF7AIV\Domain\PolicySuggestionResult;
 use CF7AIV\Infrastructure\HttpResponse;
 use CF7AIV\Infrastructure\HttpTransportInterface;
+use CF7AIV\Infrastructure\Settings;
 
 final class OpenAIProvider extends JsonProvider implements PolicySuggestionProviderInterface {
 	private const REASONING_MODELS = [
@@ -45,15 +46,15 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		'gpt-5.4-nano' => true,
 		'gpt-5.4-nano-2026-03-17' => true,
 	];
-	private const STANDARD_MAX_OUTPUT_TOKENS = 3000;
-	private const DEEP_MAX_OUTPUT_TOKENS = 6000;
+	/** A v1 answer has no quoted evidence, so it needs far less room than a v2 one. */
+	private const V1_CLASSIFICATION_ANSWER_TOKENS = 500;
 
 	public function __construct(
 		private readonly HttpTransportInterface $transport,
 		private readonly string $apiKey,
 		private readonly string $baseUrl = 'https://api.openai.com/v1/responses',
 		private readonly string $model = 'gpt-5.4-mini',
-		private readonly int $timeout = 30,
+		private readonly int $timeout = Settings::DEFAULT_PROVIDER_TIMEOUT,
 		private readonly string $reasoningEffort = 'unsupported',
 	) {}
 
@@ -80,35 +81,52 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 
 	public function key(): string { return 'openai'; }
 
+	protected function profile(bool $reasoning): array {
+		return ['provider' => 'openai', 'model' => $this->model, 'reasoning' => $this->effectiveReasoningEffort() ?? 'unsupported'];
+	}
+
 	public function suggestPolicy(PolicySuggestionRequest $request): PolicySuggestionResult {
+		$effort = $this->effectiveReasoningEffort();
 		$payload = [
 			'model' => $this->model,
 			'store' => false,
-			'instructions' => 'Suggest compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.',
+			'instructions' => 'Suggest compact policy setup facts from only the supplied public local-page and non-identifying form structure. Never infer identities, attribution, secrets, or a publishable policy.' . "\n" . self::UNTRUSTED_PROFILE_RULE,
 			'input' => [['role' => 'user', 'content' => [['type' => 'input_text', 'text' => $request->providerProfileJson()]]]],
 			'text' => ['format' => ['type' => 'json_schema', 'name' => 'cf7aiv_policy_suggestions', 'strict' => true, 'schema' => PolicySuggestionResult::jsonSchema($request->allowedSourceRefs())]],
-			'max_output_tokens' => $this->maxOutputTokens(1500),
+			'max_output_tokens' => $this->tokenBudget((string) $effort, self::SUGGESTION_ANSWER_TOKENS),
 		];
-		$reasoning = $this->reasoningPayload();
+		$reasoning = $this->reasoningPayload($effort);
 		if ($reasoning !== null) {
 			$payload['reasoning'] = $reasoning;
 		}
 		$response = $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(300, $this->timeout)),
+			'timeout' => $this->requestTimeout($this->timeout, $effort),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 		$this->assertSuggestionStatus($response);
 		$body = json_decode($response->body, true, 64, JSON_THROW_ON_ERROR);
 		if (! is_array($body)) { throw new PermanentProviderException('OpenAI returned a malformed suggestion response.'); }
+		$this->assertComplete($body);
 		return PolicySuggestionResult::fromJson(trim($this->extractText($body)));
 	}
 
+	protected function transportForTest(): HttpResponse {
+		$payload = ['model' => $this->model, 'store' => false, 'input' => 'Reply with the single word ok.', 'max_output_tokens' => 16];
+		if (self::supportsNone($this->model)) { $payload['reasoning'] = ['effort' => 'none']; }
+		return $this->transport->post($this->baseUrl, [
+			'headers' => $this->headers($this->apiKey),
+			'timeout' => 20,
+			'body' => json_encode($payload, JSON_THROW_ON_ERROR),
+		]);
+	}
+
 	protected function send(ClassificationRequest $request, bool $reasoning): HttpResponse {
+		$effort = $this->effectiveReasoningEffort();
 		$payload = [
 			'model' => $this->model,
 			'store' => false,
-			'instructions' => $request->systemPrompt,
+			'instructions' => $request->systemPrompt . "\n" . self::UNTRUSTED_INPUT_RULE,
 			'input' => [['role' => 'user', 'content' => [['type' => 'input_text', 'text' => json_encode($this->userInput($request), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]]]],
 			'text' => ['format' => [
 				'type' => 'json_schema',
@@ -116,15 +134,18 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 				'strict' => true,
 				'schema' => ResultValidator::jsonSchema($request),
 			]],
-			'max_output_tokens' => $this->maxOutputTokens($request->policySchema === \CF7AIV\Classification\PolicyValidator::SCHEMA_V2 ? 900 : 500),
+			'max_output_tokens' => $this->tokenBudget(
+				(string) $effort,
+				$request->policySchema === \CF7AIV\Classification\PolicyValidator::SCHEMA_V2 ? self::CLASSIFICATION_ANSWER_TOKENS : self::V1_CLASSIFICATION_ANSWER_TOKENS,
+			),
 		];
-		$reasoningPayload = $this->reasoningPayload();
+		$reasoningPayload = $this->reasoningPayload($effort);
 		if ($reasoningPayload !== null) {
 			$payload['reasoning'] = $reasoningPayload;
 		}
 		return $this->transport->post($this->baseUrl, [
 			'headers' => $this->headers($this->apiKey),
-			'timeout' => max(5, min(300, $this->timeout)),
+			'timeout' => $this->requestTimeout($this->timeout, $effort),
 			'body' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
 		]);
 	}
@@ -159,6 +180,21 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 		];
 	}
 
+	/**
+	 * Refuse a reply the model did not finish writing.
+	 *
+	 * The Responses API marks a reply cut short by max_output_tokens, or by a
+	 * content filter, as incomplete and may still return partial text. Parsed as
+	 * an answer it fails as malformed JSON, and is retried for the same result.
+	 *
+	 * @param array<string,mixed> $body
+	 */
+	protected function assertComplete(array $body): void {
+		if (($body['status'] ?? '') !== 'incomplete') { return; }
+		$reason = preg_replace('/[^a-z_]/', '', strtolower((string) ($body['incomplete_details']['reason'] ?? ''))) ?: 'unknown';
+		throw new PermanentProviderException('OpenAI stopped before finishing the response (incomplete: ' . $reason . ').');
+	}
+
 	private function assertSuggestionStatus(HttpResponse $response): void {
 		if ($response->status >= 200 && $response->status < 300) { return; }
 		if ($response->status === 0 || $response->status === 408 || $response->status === 429 || $response->status >= 500) { throw new TransientProviderException('OpenAI suggestion request failed temporarily.'); }
@@ -174,8 +210,8 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 	}
 
 	/** @return array{effort:string}|null */
-	private function reasoningPayload(): ?array {
-		return match ($this->effectiveReasoningEffort()) {
+	private function reasoningPayload(?string $effort): ?array {
+		return match ($effort) {
 			'off' => ['effort' => 'none'],
 			'standard' => ['effort' => 'medium'],
 			'deep' => ['effort' => 'high'],
@@ -192,13 +228,5 @@ final class OpenAIProvider extends JsonProvider implements PolicySuggestionProvi
 			return $this->reasoningEffort;
 		}
 		return $options[0] ?? null;
-	}
-
-	private function maxOutputTokens(int $base): int {
-		return match ($this->effectiveReasoningEffort()) {
-			'standard' => self::STANDARD_MAX_OUTPUT_TOKENS,
-			'deep' => self::DEEP_MAX_OUTPUT_TOKENS,
-			default => $base,
-		};
 	}
 }

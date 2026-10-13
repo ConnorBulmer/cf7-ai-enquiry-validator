@@ -18,11 +18,17 @@ final class PolicyCompiler {
 		$contract = $definition['schema'] === PolicyValidator::SCHEMA_V2
 			? "Use the policy's universal outcomes and evidence rules exactly. Each evidence assertion must quote an exact 2-160 character span from its named supplied context field and use the catalog dimension for its code. Each required_evidence group requires at least one grounded code; supporting evidence must meet its stated minimum.\n"
 			: '';
+		// Only said when there are examples, so a policy without them compiles to
+		// exactly the prompt it always did.
+		$examples = ! empty($definition['examples'])
+			? "Policy examples are enquiries a reviewer classified, with the tier each belongs to (and the tier the model wrongly chose, where given). Follow them where an enquiry is similar.\n"
+			: '';
 		$prompt = "You classify business enquiries using only the supplied privacy-redacted context.\n"
 			. "Return exactly one JSON object matching the supplied schema. Do not infer or reproduce identity, contact details, attribution, consent, files, click IDs, hashes, URLs, or secrets.\n"
 			. 'Allowed reason_code values: ' . implode(', ', self::REASON_CODES) . ".\n"
 			. "If evidence is incomplete, use reason_code insufficient_information and add an ambiguity flag. Never make dispatch decisions.\n"
 			. $contract
+			. $examples
 			. 'Business policy: ' . $policyJson;
 		return ['definition' => $definition, 'prompt' => $prompt, 'hash' => hash('sha256', $prompt)];
 	}

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace CF7AIV\Admin;
 
 use CF7AIV\Classification\Redactor;
+use CF7AIV\Contracts\DestinationInterface;
 use CF7AIV\Delivery\ConsentPolicy;
+use CF7AIV\Delivery\DestinationReadiness;
 use CF7AIV\Delivery\WpMappingRepository;
 use CF7AIV\Infrastructure\Crypto;
 use CF7AIV\Infrastructure\Migration;
@@ -85,7 +87,7 @@ final class DiagnosticsService {
 		}
 		$settings = $this->settings();
 		[$attribution, $consent, $storedIssues] = $this->signals($row);
-		$currentDiagnostics = AttributionDiagnostics::inspect($attribution, $consent);
+		$currentDiagnostics = AttributionDiagnostics::inspect($attribution, $consent, AttributionDiagnostics::gaIdentityNeeded($settings));
 		$issues = array_values(array_unique(array_merge($storedIssues, $currentDiagnostics['issues'])));
 		$gates = [];
 		$this->gate($gates, 'item', true, 'item_found');
@@ -103,12 +105,9 @@ final class DiagnosticsService {
 		if ($tier !== '') {
 			foreach ((new WpMappingRepository())->publishedForTier($tier) as $mapping) {
 				$destinationKey = $mapping->destinationKey;
-				$ready = $this->destinationReady($destinationKey, $settings);
-				$required = match ($destinationKey) {
-					'ga4' => ['analytics_storage'],
-					'microsoft_uet' => ['ad_storage'],
-					default => ['analytics_storage', 'ad_storage'],
-				};
+				$destination = in_array($destinationKey, DestinationReadiness::KEYS, true) ? null : $this->registeredDestination($destinationKey);
+				$ready = $this->destinationReady($destinationKey, $settings, $destination);
+				$required = DestinationReadiness::requiredConsent($destinationKey, $destination);
 				$consentDecision = null;
 				try {
 					$consentDecision = ConsentPolicy::evaluate((string) ($settings['consent']['mode'] ?? 'respect'), $consent, (array) ($settings['consent']['override'] ?? []), $required);
@@ -116,7 +115,7 @@ final class DiagnosticsService {
 					$consentDecision = null;
 				}
 				$permitted = $consentDecision !== null && $consentDecision->permitted;
-				$signalsReady = $this->signalsReady($destinationKey, $attribution, $row, $settings, $consent);
+				$signalsReady = $this->signalsReady($destinationKey, $attribution, $row, $settings, $consent, $destination);
 				$mappings[] = [
 					'key' => $mapping->key,
 					'version' => $mapping->version,
@@ -203,11 +202,13 @@ final class DiagnosticsService {
 	/** @return list<string> */
 	private function consentIntegrations(): array { $integrations = []; if (function_exists('wp_get_consent_type') || function_exists('wp_has_consent')) { $integrations[] = 'wordpress_consent_api'; } if (function_exists('cmplz_has_consent')) { $integrations[] = 'complianz'; } return $integrations === [] ? ['none_detected'] : $integrations; }
 	/** @param array<string,mixed> $settings @return array<string,array<string,mixed>> */
-	private function destinationReadiness(array $settings): array { $result = []; foreach (['ga4', 'server_gtm', 'microsoft_uet', 'webhook'] as $key) { $config = (array) ($settings['destinations'][$key] ?? []); $result[$key] = ['enabled' => ! empty($config['enabled']), 'dry_run' => ! empty($config['dry_run']), 'configured' => $this->destinationReady($key, $settings), 'paused' => $this->isPaused($key)]; } return $result; }
+	private function destinationReadiness(array $settings): array { $result = []; foreach (DestinationReadiness::KEYS as $key) { $config = (array) ($settings['destinations'][$key] ?? []); $result[$key] = ['enabled' => ! empty($config['enabled']), 'dry_run' => ! empty($config['dry_run']), 'configured' => $this->destinationReady($key, $settings), 'paused' => $this->isPaused($key)]; } return $result; }
 	/** @return list<array<string,mixed>> */
 	private function mappingReadiness(object $wpdb): array { $table = $wpdb->prefix . 'cf7aiv_mappings'; $rows = $wpdb->get_results("SELECT tier_id,destination_key,COUNT(*) AS total FROM {$table} WHERE status='published' AND enabled=1 GROUP BY tier_id,destination_key", $this->arrayConstant()); $result = []; foreach (is_array($rows) ? $rows : [] as $row) { $result[] = ['tier_id' => (string) ($row['tier_id'] ?? ''), 'destination' => (string) ($row['destination_key'] ?? ''), 'published_enabled' => (int) ($row['total'] ?? 0)]; } return $result; }
 	/** @param array<string,mixed> $settings */
-	private function destinationReady(string $key, array $settings): bool { $config = (array) ($settings['destinations'][$key] ?? []); if (empty($config['enabled'])) { return false; } if ($key === 'ga4') { return trim((string) ($config['measurement_id'] ?? '')) !== '' && $this->secret('ga4_api_secret') !== '' && (! empty($config['dry_run']) || (! empty($config['live_enabled']) && Ga4Validation::isPassed())); } if ($key === 'server_gtm') { return filter_var((string) ($config['endpoint_url'] ?? ''), FILTER_VALIDATE_URL) !== false && $this->secret('server_gtm_api_secret') !== ''; } if ($key === 'microsoft_uet') { return trim((string) ($config['tag_id'] ?? '')) !== '' && $this->secret('microsoft_uet_token') !== ''; } if ($key === 'webhook') { $url = trim((string) ($config['url'] ?? '')); return filter_var($url, FILTER_VALIDATE_URL) !== false && (str_starts_with(strtolower($url), 'https://') || ! empty($config['allow_insecure'])) && $this->secret('webhook_secret') !== ''; } return false; }
+	private function destinationReady(string $key, array $settings, ?DestinationInterface $destination = null): bool { return DestinationReadiness::configured($key, $settings, fn (string $name): string => $this->secret($name), $destination); }
+	/** A destination another plugin registered under this key, looked up only for keys that are not built in. */
+	private function registeredDestination(string $key): ?DestinationInterface { try { $destinations = function_exists('apply_filters') ? (array) apply_filters('cf7aiv_destinations', []) : []; } catch (Throwable) { return null; } $destination = $destinations[$key] ?? null; return $destination instanceof DestinationInterface ? $destination : null; }
 	private function secret(string $name): string { try { return trim(Crypto::secret($name)); } catch (Throwable) { return ''; } }
 	private function isPaused(string $key): bool { $paused = function_exists('get_option') ? (array) get_option('cf7aiv_paused_destinations', []) : []; return isset($paused[$key]); }
 	/** @return array{0:array<string,mixed>,1:array<string,scalar>,2:list<string>} */
@@ -223,8 +224,5 @@ final class DiagnosticsService {
 	/** @param array<string,mixed> $consent @return array<string,string> */
 	private function safeStates(array $consent): array { $result = []; foreach ($consent as $key => $value) { if (is_scalar($value) && preg_match('/^[a-z_]{1,40}$/', (string) $key) === 1) { $result[(string) $key] = substr((string) $value, 0, 40); } } return $result; }
 	/** @param array<string,mixed> $attribution @param array<string,mixed> $item @param array<string,mixed> $settings @param array<string,scalar> $consent */
-	private function signalsReady(string $key, array $attribution, array $item, array $settings, array $consent): bool { if ($key === 'ga4') { return $this->firstSignal($attribution, ['client_id', 'ga_client_id']) !== ''; } if ($key === 'microsoft_uet') { return $this->firstSignal($attribution, ['msclkid']) !== '' || (! empty($settings['privacy']['enhanced_matching']) && ($consent['ad_user_data'] ?? 'unknown') === 'granted' && ($this->validHash($item['email_hash'] ?? null) || $this->validHash($item['phone_hash'] ?? null))); } return $key === 'webhook' || $key === 'server_gtm'; }
-	/** @param array<string,mixed> $values @param list<string> $keys */
-	private function firstSignal(array $values, array $keys): string { foreach ($keys as $key) { if (is_scalar($values[$key] ?? null) && trim((string) $values[$key]) !== '') { return trim((string) $values[$key]); } } return ''; }
-	private function validHash(mixed $value): bool { return is_string($value) && preg_match('/^[a-f0-9]{64}$/', strtolower($value)) === 1; }
+	private function signalsReady(string $key, array $attribution, array $item, array $settings, array $consent, ?DestinationInterface $destination = null): bool { return DestinationReadiness::signalsReady($key, $attribution, $item, $settings, $consent, $destination); }
 }

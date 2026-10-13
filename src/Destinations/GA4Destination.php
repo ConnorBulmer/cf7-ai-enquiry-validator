@@ -18,8 +18,8 @@ final class GA4Destination implements DestinationInterface {
 		$warnings = []; $now = $this->now ?? time(); $occurred = strtotime($event->occurredAt);
 		$params = ['event_id' => $event->eventId, 'value' => $event->value, 'currency' => $event->currency, 'engagement_time_msec' => 1];
 		if (($event->attribution['session_id'] ?? '') !== '') { $params['session_id'] = (string) $event->attribution['session_id']; }
-		$sessionStarted = strtotime((string) ($event->attribution['session_started_at'] ?? ''));
-		if (($event->attribution['session_id'] ?? '') === '' || $sessionStarted === false || $now - $sessionStarted > 86400) { $warnings[] = 'GA4 session attribution requires session_id and dispatch within 24 hours of session start.'; }
+		$sessionStarted = $event->sessionStartedAt();
+		if (($event->attribution['session_id'] ?? '') === '' || $sessionStarted === null || $now - $sessionStarted > 86400) { $warnings[] = 'GA4 session attribution requires session_id and dispatch within 24 hours of session start.'; }
 		$body = ['client_id' => (string) ($event->attribution['client_id'] ?? $event->eventId), 'events' => [['name' => $event->eventName, 'params' => $params]], 'consent' => ['ad_user_data' => self::consent($event->consent['ad_user_data'] ?? 'unknown'), 'ad_personalization' => self::consent($event->consent['ad_personalization'] ?? 'unknown')]];
 		if ($this->debug) { $body['validation_behavior'] = 'ENFORCE_RECOMMENDATIONS'; }
 		if ($occurred !== false && $occurred <= $now && $now - $occurred <= 72 * 3600) { $body['timestamp_micros'] = $occurred * 1000000; }

@@ -4,7 +4,7 @@ Tags: contact form 7, flamingo, conversion tracking, ga4, privacy
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.2.32
+Stable tag: 0.2.36
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -58,6 +58,51 @@ No. Corrections create draft suggestions only. Historical calibration is separat
 The plugin stores source references and encrypted attribution/consent snapshots, not a second raw enquiry copy. Optional enhanced matching stores normalized hashes only when `ad_user_data` is granted. See `docs/PRIVACY-AND-AI.md`.
 
 == Changelog ==
+
+= 0.2.36 =
+* Consent resolvers registered by other plugins on `cf7aiv_consent_resolvers` now take part in capture. Each counts as one more consent source, combined most-restrictively with the built-in ones: its denial wins, its grant counts only where nothing else refused, and a resolver that fails records consent as unknown. Previously the filter was never read.
+* Destinations registered by other plugins can now send. A destination that implements the new `DestinationReadinessInterface` declares whether it is configured, whether an enquiry carries the identifiers it needs, and which consent it requires. Previously every such destination was gated as not configured. Built-in destinations are unchanged.
+* Uninstall with "Delete on uninstall" now also removes the activity log, the GA4 validation result and the plugin's cached and per-administrator transients.
+* Adds a developer guide (`docs/developer/`) and a rewritten README; detailed release notes move to `docs/RELEASE-NOTES.md`.
+* Keeps schema version 10 unchanged; no migration is required.
+
+= 0.2.35 =
+* Fixes retries never running. A classification that hit a timeout or rate limit, or a delivery a destination asked to retry, scheduled its retry from inside the job that failed, and the queue counted that running job as the retry and dropped it.
+* Adds an accuracy test on Policy Lab: re-run up to 100 reviewed enquiries against a draft or published policy and any provider, model and reasoning level, and see the result beside production's predictions for the same enquiries. Only fields the AI was already given are sent again.
+* Adds "learn from corrections": the descriptions reviewers write when correcting a classification can be added, as examples, to a new draft policy. Nothing changes until the draft is published.
+* Records the provider, model and reasoning level with each classification, and shows accuracy split by them on Overview, with a new missed-leads figure.
+* The review page shows what the AI was given (approved fields, personal details redacted) and the AI's own classification beside any correction. Corrections are chosen from the policy's tiers and outcomes instead of typed, and the review list uses readable labels with fewer columns.
+* Adds a "Test connection" button for the AI provider.
+* A second enquiry from the same person within 30 days, while the first was sent as a conversion, goes to review instead of being sent again automatically. This uses only email or phone hashes already stored.
+* Overview labels failed deliveries correctly and shows AI usage in calls and tokens.
+* Keeps schema version 10 unchanged; no migration is required.
+
+= 0.2.34 =
+* Fixes live GA4 never sending for a property validated since 0.2.30. Delivery still read the validation flag 0.2.30 stopped writing, while Tracking Health showed the destination ready.
+* Fixes the existing server-side GTM destination never sending. The delivery worker had no rule for it and gated every item as not configured.
+* Delivery and Tracking Health now share one readiness check, so they cannot disagree again.
+* Fixes the standard Consent Mode setup (default denied in the head, update from the consent manager after load) deleting the stored click id on the second page view, before the granted update arrived. A pending Complianz banner no longer deletes it either.
+* Reads the GA session id from the older GS1 cookie format as well as GS2.
+* Keeps the first external referrer instead of replacing it with the previous page on the site.
+* A resend after a mail failure now updates the same enquiry instead of creating a second one, which was classified and sent as a second conversion.
+* Hashes phone numbers in E.164 form only. A number without a country code can never match at Google or Microsoft, so it is no longer hashed; "tel" inside words such as "hotel" no longer marks a phone field.
+* Auto-pause counts only failures since the last successful delivery or resume, instead of every failure ever. Tracking Health now shows why a destination paused and adds a Resume button; before, a pause could not be lifted.
+* A new mapping version no longer re-sends an item already delivered under the previous version.
+* Microsoft-only sites no longer report every enquiry as missing GA identity.
+* Keeps schema version 10 unchanged; no migration is required.
+
+= 0.2.33 =
+* Moves DeepSeek to its current model, `deepseek-flash` (V4.1-Flash). `deepseek-v4-flash` was retired on 10 September 2026 and survives only as a temporary alias. Saved settings on a retired DeepSeek model ID move to the new one once; `deepseek-v4-pro` and custom models are left alone.
+* Deep reasoning on DeepSeek now asks for maximum effort, and standard asks for high effort explicitly. Before this, both used DeepSeek's default effort and differed only in token allowance.
+* Classification now uses the configured provider timeout. It was fixed at 30 seconds, so the setting only affected the site scan.
+* Raises the default provider timeout from 15 to 60 seconds, and gives reasoning calls a minimum of 90 seconds (standard) or 180 seconds (deep), capped at 300. Saved settings still on the old 15-second default move to 60 once.
+* A site scan the background queue refuses is reported with its reason. It no longer runs a long provider call inside the administrator's request.
+* Reports a reply cut off at the token limit, blocked by a content filter, or ended for lack of provider capacity as exactly that, without paying for an identical retry. Classification previously reported these as malformed content.
+* Tells both providers that enquiry text, and the public site profile used by the site scan, are data and never instructions, so a message cannot steer its own classification.
+* Gives OpenAI the same answer and reasoning allowances as DeepSeek. Its v2 answer allowance was still 900 tokens, and its reasoning budget was shared with the answer.
+* Fixes a failed Action Scheduler enqueue (returned as 0) being treated as queued, which left a site scan or GA4 check that never ran.
+* The Setup page again shows a site scan's result and failure reason, to the administrator who started it. The queued notice no longer reappears after the scan has finished.
+* Keeps schema version 10 unchanged; no migration is required.
 
 = 0.2.32 =
 * Raises the provider timeout ceiling to 300 seconds now that every provider call runs in a background job.

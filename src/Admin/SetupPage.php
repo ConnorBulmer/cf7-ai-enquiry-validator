@@ -46,29 +46,36 @@ final class SetupPage {
 		}
 		echo '</ol>';
 
-		// The scan now runs in the background, so the page reports that it started
-		// rather than pretending to know the outcome. The result lands in the
-		// activity log and in the pending suggestions below.
-		if (! empty($_GET['scan_queued'])) {
-			echo '<div class="notice notice-info cf7aiv-scan-queued" role="status" aria-live="polite"><p>Site scan queued. It runs in the background and can take a minute; reload this page for pending suggestions, or check Tracking Health &amp; Logs for the result.</p></div>';
+		// The scan runs in the background, so the page reports the state the job
+		// left for this administrator: still queued, or finished with a result.
+		$scanOutcome = AdminHooks::takeScanOutcome();
+		$scanState = (string) ($scanOutcome['state'] ?? '');
+		// A job killed by the host never reports back, so a scan still queued
+		// long after the slowest possible run is called out rather than left
+		// promising a result that will not come.
+		$scanStale = $scanState === 'queued' && time() - (int) ($scanOutcome['queued_at'] ?? time()) > 900;
+		if ($scanState === 'queued' && ! $scanStale) {
+			echo '<div class="notice notice-info cf7aiv-scan-queued" role="status" aria-live="polite"><p>Site scan queued. It runs in the background and can take a few minutes with reasoning enabled; reload this page for the result, or check Tracking Health &amp; Logs.</p></div>';
 		}
-		$suggestionError = ! empty($_GET['suggestion_error']);
-		if ($suggestionError) {
+		if ($scanStale) {
+			echo '<div class="notice notice-warning cf7aiv-scan-stale" role="status" aria-live="polite"><p>The site scan was queued over 15 minutes ago and has not reported a result. Check Tracking Health &amp; Logs and Tools &gt; Scheduled Actions, then run the scan again.</p></div>';
+		}
+		if ($scanState === 'failed') {
 			echo '<div class="notice notice-error cf7aiv-setup-error" role="alert" aria-live="assertive"><p>The site scan could not complete. Review the selected context and try again.</p>';
 			// The reason is what makes this actionable. HTTP 401 means the provider
 			// rejected the credential, so the key is wrong or was never stored; a
 			// transport failure means the host would not let the request out at all.
 			// Those need opposite fixes, and without this line they looked identical.
-			$diagnostic = AdminHooks::takeScanDiagnostic();
+			$diagnostic = (string) ($scanOutcome['diagnostic'] ?? '');
 			if ($diagnostic !== '') {
 				echo '<p class="cf7aiv-setup-diagnostic"><strong>Reason:</strong> <code>' . self::e($diagnostic) . '</code></p>';
 			}
 			echo '</div>';
 		}
-		if (! $suggestionError && is_scalar($_GET['suggestions'] ?? null)) {
-			$suggestionCount = max(0, (int) $_GET['suggestions']);
-			$suggestionLabel = $suggestionCount === 1 ? 'suggestion' : 'suggestions';
-			echo '<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite"><p>Site scan complete. ' . $suggestionCount . ' pending ' . self::e($suggestionLabel) . ' are ready for review.</p></div>';
+		if ($scanState === 'complete') {
+			$suggestionCount = max(0, (int) ($scanOutcome['suggestions'] ?? 0));
+			$suggestionLabel = $suggestionCount === 1 ? 'suggestion is' : 'suggestions are';
+			echo '<div class="notice notice-success cf7aiv-setup-status" role="status" aria-live="polite"><p>Site scan complete. ' . $suggestionCount . ' pending ' . self::e($suggestionLabel) . ' ready for review.</p></div>';
 		}
 
 		echo '<section id="cf7aiv-setup-step-context" class="card cf7aiv-setup-step is-active" data-step="context"><h2 tabindex="-1">1. Choose context</h2><p>Select the closest starter pack and confirm the current safety stage before answering qualification questions.</p>';
